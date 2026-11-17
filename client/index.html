@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ComicStrike</title>
+    <title>COMIC STRIKE WEB</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%92%A5%3C/text%3E%3C/svg%3E" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -27,11 +27,23 @@
         <div class="panel menu">
           <label class="field">NAME<input id="inp-name" maxlength="16" placeholder="Takma adın" autocomplete="off" /></label>
           <button class="btn big" data-action="play">PLAY</button>
+          <button class="btn" data-action="create">CREATE ROOM</button>
+          <button class="btn" data-action="join">JOIN ROOM</button>
           <button class="btn alt" data-action="settings">SETTINGS</button>
           <p id="main-msg" class="msg"></p>
-          <p id="server-status" class="server-status">● Sunucu kontrol ediliyor...</p>
         </div>
         <p class="controls-hint">WASD hareket · SHIFT koş · SPACE zıpla · SOL TIK ateş · R şarjör · TAB skor · ESC menü</p>
+      </section>
+
+      <!-- ODAYA KATIL -->
+      <section id="screen-join" class="screen hidden">
+        <div class="panel menu">
+          <h2>JOIN ROOM</h2>
+          <label class="field">ROOM CODE<input id="inp-code" maxlength="5" placeholder="ABCDE" autocomplete="off" /></label>
+          <button class="btn big" data-action="join-confirm">JOIN</button>
+          <button class="btn alt" data-action="back">BACK</button>
+          <p id="join-msg" class="msg"></p>
+        </div>
       </section>
 
       <!-- AYARLAR -->
@@ -51,13 +63,46 @@
         </div>
       </section>
 
-      <!-- DURAKLAT -->
+      <!-- LOBİ -->
+      <section id="screen-lobby" class="screen hidden">
+        <div class="panel lobby">
+          <div class="lobby-head">
+            <div>
+              <span id="lobby-type" class="small">ROOM</span>
+              <div class="code-row"><b id="lobby-code">-----</b><button class="btn small" data-action="copy">COPY</button></div>
+            </div>
+            <p class="small">Arkadaşların bu kodla <b>JOIN ROOM</b>'dan katılabilir</p>
+          </div>
+          <div class="teams">
+            <div class="team red">
+              <h3>RED TEAM</h3>
+              <ul id="list-red"></ul>
+              <button id="btn-red" class="btn small" data-action="team-red">JOIN RED</button>
+            </div>
+            <div class="vs">VS</div>
+            <div class="team blue">
+              <h3>BLUE TEAM</h3>
+              <ul id="list-blue"></ul>
+              <button id="btn-blue" class="btn small" data-action="team-blue">JOIN BLUE</button>
+            </div>
+          </div>
+          <p id="lobby-status" class="status"></p>
+          <div class="lobby-actions">
+            <button id="btn-ready" class="btn" data-action="ready">READY</button>
+            <button id="btn-start" class="btn big" data-action="start">START MATCH</button>
+            <button class="btn alt" data-action="leave">LEAVE</button>
+          </div>
+          <p id="lobby-msg" class="msg"></p>
+        </div>
+      </section>
+
+      <!-- DURAKLAT / MAÇA HAZIRLAN -->
       <section id="screen-pause" class="screen overlay hidden">
         <div class="panel menu">
           <h2 id="pause-title">PAUSED</h2>
           <button id="btn-resume" class="btn big" data-action="resume">RESUME</button>
           <button class="btn alt" data-action="settings">SETTINGS</button>
-          <button class="btn alt" data-action="quit">MAIN MENU</button>
+          <button class="btn alt" data-action="leave-match">LEAVE MATCH</button>
         </div>
       </section>
 
