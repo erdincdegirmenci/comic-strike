@@ -1,24 +1,16 @@
 {
-  "name": "comic-strike-web",
-  "version": "0.1.0",
+  "name": "comicstrike",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "workspaces": [
-    "shared",
-    "server",
-    "client"
-  ],
-  "engines": {
-    "node": ">=20"
-  },
+  "workspaces": ["shared", "client"],
   "scripts": {
-    "dev": "concurrently -n server,client -c yellow,cyan \"npm run dev -w server\" \"npm run dev -w client\"",
+    "dev": "concurrently -k -n server,client -c yellow,cyan \"dotnet watch --project server/ComicStrike.Server run -- --no-browser\" \"npm run dev -w client\"",
     "build": "npm run build -w client",
-    "start": "npm run start -w server",
-    "bots": "node tools/bots.js"
+    "server": "dotnet run --project server/ComicStrike.Server -c Release",
+    "publish": "npm run build && dotnet publish server/ComicStrike.Server -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o publish"
   },
   "devDependencies": {
-    "concurrently": "^9.0.0",
-    "socket.io-client": "^4.8.0"
+    "concurrently": "^9.0.0"
   }
 }

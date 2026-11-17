@@ -1,7 +1,9 @@
-# COMIC STRIKE WEB
+# ComicStrike
 
-Tarayıcıda oynanan, çizgi roman görünümlü multiplayer FPS. 4v4 Team Deathmatch, oda kodu ile lobi, sunucu doğrulamalı hasar ve skor.
+Çizgi roman görünümlü, tarayıcıda oynanan LAN FPS.
+Sunucu senin Windows bilgisayarında tek bir EXE olarak çalışır. Arkadaşların aynı Wi-Fi'dan tarayıcıyla bağlanır, hiçbir şey kurmaz.
 
+> **Şu anki durum (v0.2, Aşama 1):** C# sunucu ve tek EXE altyapısı hazır. Oyun şimdilik **tek kişilik test modunda**. Multiplayer Aşama 5'te SignalR ile gelecek.
 Oyna
 
 https://comic-strike.onrender.com/
@@ -16,83 +18,57 @@ Sunucunun ayakta olup olmadığını şuradan görebilirsin: https://comic-strik
 - Node.js 20 veya üstü (`node -v`)
 - Chrome / Edge / Opera
 
-## Hızlı başlangıç (PowerShell, proje klasöründe)
+## Senin bilgisayarında gerekenler (sadece geliştirme için)
+- **.NET SDK 10**: `dotnet --version`
+- **Node.js 20+**: `node -v`. Sadece oyunu derlemek için gerekir, oyun çalışırken kullanılmaz.
 
-```powershell
-npm install
-npm run dev
-```
-Tarayıcıda **http://localhost:5173** aç → isim yaz → **CREATE ROOM** → **START MATCH** → **CLICK TO FIGHT**.
+Oyuncuların bilgisayarında sadece güncel Chrome, Edge veya Opera yeterli.
 
-### Tek başına test (botlarla)
-Lobideyken ikinci bir PowerShell penceresi aç:
-```powershell
-npm run bots -- ODAKODU 3
-```
-3 bot odaya katılıp hazır olur. Botlar spawn çevresinde gezinir ve görüş hattındaki rakiplere ateş eder.
+## Komutlar (PowerShell, proje klasöründe)
 
-### Aynı ağdaki arkadaşlarla oynamak
-```powershell
-npm run build
-npm start
-```
-Sen **http://localhost:3000**, arkadaşların **http://BILGISAYAR_IP:3000** adresini açar (`ipconfig` → IPv4). Windows Güvenlik Duvarı izin isterse “Özel ağlar”a izin ver.
-
-İnternet üzerinden yayınlamak için: [docs/DEPLOY.md](docs/DEPLOY.md)
-
-## Komutlar
 | Komut | Ne yapar |
 |---|---|
-| `npm install` | Tüm paketleri kurar |
-| `npm run dev` | Geliştirme: sunucu (3000) + Vite (5173), dosya değişince yenilenir |
-| `npm run build` | İstemciyi `client/dist` içine derler |
-| `npm start` | Production: oyun ve sunucu tek adreste (3000) |
-| `npm run bots -- KOD [sayı] [adres]` | Test botları |
+| `npm install` | İlk seferde bir kez: JavaScript paketlerini kurar |
+| `npm run dev` | Geliştirme modu: C# sunucu (5000) + Vite (5173). **http://localhost:5173** aç. Kod değişince yenilenir. |
+| `npm run build` | Oyunu derler, C# projesinin `game` klasörüne koyar |
+| `npm run server` | Derlenmiş oyunu C# sunucuyla çalıştırır → **http://localhost:5000** |
+| `npm run publish` | **Tek EXE üretir:** `publish\ComicStrike.exe` |
+
+## Arkadaşlarla oynamak (aynı Wi-Fi)
+1. `npm run publish` → `publish\ComicStrike.exe` oluşur. Bu dosyayı istediğin yere taşıyabilirsin, tek başına çalışır.
+2. `ComicStrike.exe`'ye çift tıkla. Konsolda şöyle bir adres görürsün:
+   ```
+   Arkadaşların tarayıcısına bunu yazsın:
+       http://192.168.1.25:5000
+   ```
+3. Windows Güvenlik Duvarı sorarsa **Özel ağlar** için izin ver.
+4. Arkadaşların bu adresi tarayıcıya yazar.
+
+Sorun çıkarsa: [docs/LAN.md](docs/LAN.md)
+
+EXE seçenekleri: `ComicStrike.exe --port 5050` farklı port açar, `--no-browser` tarayıcıyı otomatik açmaz.
 
 ## Kontroller
-| Tuş | Eylem |
-|---|---|
-| WASD | Hareket |
-| Fare | Bakış |
-| Shift | Koş |
-| Space | Zıpla |
-| Sol tık | Ateş |
-| R | Şarjör değiştir |
-| Tab | Skor tablosu |
-| Esc | Menü (duraklat) |
-
-## Ayarlanabilir değerler
-Oyun dengesi `shared/constants.js` içinde: can, hız, silah hasarı, ateş hızı, şarjör, skor limiti, maç süresi, spawn koruması.
-Harita `shared/map.js` içinde: kutu listesi + spawn noktaları.
-
-Sunucu ortam değişkenleri:
-- `PORT`: varsayılan 3000
-- `MIN_PLAYERS`: maçı başlatmak için en az oyuncu (varsayılan 1; gerçek maçlar için 4)
+WASD hareket · Fare bakış · Shift koş · Space zıpla · Sol tık ateş · R şarjör · Tab skor · Esc menü
 
 ## Yapı
 ```
-shared/   ortak sabitler, mesaj isimleri, harita (istemci + sunucu)
-server/   Express + Socket.IO, authoritative oyun sunucusu
-client/   Vite + Three.js + Rapier istemcisi
-tools/    test botları
-docs/     mimari, ağ protokolü, yayına alma
+server/ComicStrike.Server/   C# ASP.NET Core sunucu (EXE)
+  Program.cs                 başlangıç, port, tarayıcıyı açma
+  EmbeddedGameFiles.cs       oyun dosyalarını EXE'nin içinden sunar
+  Banner.cs                  konsola yerel IP adreslerini yazar
+  game/                      (npm run build çıktısı, EXE'ye gömülür)
+client/                      Three.js + Rapier tarayıcı oyunu
+shared/                      oyun ayarları ve harita
+docs/                        dokümanlar
 ```
-Ayrıntılar: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/PROTOCOL.md](docs/PROTOCOL.md)
 
-## İlerleme
-- [x] Phase 1: Proje kurulumu ve klasör yapısı
-- [x] Phase 2: Three.js sahne ve FPS kamera (Pointer Lock)
-- [x] Phase 3: Hareket (Rapier karakter kontrolcüsü: yürü, koş, zıpla, çarpışma, basamak)
-- [x] Phase 4: Silah (hitscan, şarjör, reload, geri tepme, dağılma, sesler)
-- [x] Phase 5: Socket.IO multiplayer altyapısı
-- [x] Phase 6: Senkronizasyon (client prediction + interpolation + sunucu düzeltmesi)
-- [x] Phase 7: Hasar, ölüm, respawn (sunucuda, lag compensation ile)
-- [x] Phase 8: Team Deathmatch (skor limiti, süre, maç sonu ekranı)
-- [x] Phase 9: Ana menü, oda kodu, lobi, takım seçimi, hazır durumu
-- [x] Phase 10: Çizgi roman grafikleri (toon shading, kontur, halftone, KAPOW efektleri)
-- [x] Phase 11: Production build, chunk ayırma, yayına alma rehberi
-
-## Bilinen sınırlamalar (ilk sürüm)
-- Oyuncular birbirinin içinden geçebilir (oyuncu-oyuncu çarpışması yok).
-- Sunucu hareket hızını ve harita sınırlarını kontrol eder, ama duvar içinden geçmeyi kontrol etmez.
-- Tek silah, tek harita.
+## Yol haritası
+- [x] **Aşama 1** — Analiz + C# sunucu iskeleti + tek EXE + sade menü
+- [ ] Aşama 2 — Hareket: eğilme (Ctrl), stamina ve koşma
+- [ ] Aşama 3 — Pool Day esintili fun map: merdivenler, platformlar, tüneller
+- [ ] Aşama 4 — Silahlar: Keleş, el bombası, bıçak; mermi sistemi; sekme
+- [ ] Aşama 5 — Multiplayer: SignalR, FFA, sunucu doğrulaması
+- [ ] Aşama 6 — Ölüm, skor, kill feed, TAB tablosu, mermi ödülü
+- [ ] Aşama 7 — Görsel kalite ve ses
+- [ ] Aşama 8 — 2/4/8 oyuncu testleri, performans, final EXE
