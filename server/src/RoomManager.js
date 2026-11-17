@@ -95,6 +95,7 @@ export class RoomManager {
       });
     forward(MSG.SET_TEAM, 'onSetTeam');
     forward(MSG.SET_READY, 'onSetReady');
+    forward(MSG.SET_MAP, 'onSetMap');
     forward(MSG.START_MATCH, 'onStartMatch');
     forward(MSG.INPUT, 'onInput');
     forward(MSG.SHOOT, 'onShoot');

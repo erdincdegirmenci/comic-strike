@@ -1,5 +1,6 @@
 import { MSG } from '@comic-strike/shared/protocol.js';
 import { TEAM_INFO, CHARACTERS, CHARACTER_IDS } from '@comic-strike/shared/constants.js';
+import { MAPS, MAP_IDS } from '@comic-strike/shared/maps.js';
 import { saveSettings } from './settings.js';
 import { drawSpray } from '../fx/Sprays.js';
 
@@ -35,6 +36,21 @@ export class Menu {
     this.input.onLockChange = (locked) => this.onLockChange(locked);
     $('inp-name').value = this.settings.name;
     this.buildCharacters();
+    this.buildMaps();
+  }
+
+  /** Lobide harita seçimi (sadece host değiştirebilir) */
+  buildMaps() {
+    const box = $('map-pick');
+    for (const id of MAP_IDS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = `map-card map-${id}`;
+      b.dataset.action = `map-${id}`;
+      b.dataset.map = id;
+      b.textContent = MAPS[id].name;
+      box.append(b);
+    }
   }
 
   /** Karakter seçimi: her karakterin sticker'ı önizleme olarak gösterilir */
@@ -136,6 +152,7 @@ export class Menu {
       case 'resume':
         return this.resume();
       default:
+        if (a.startsWith('map-')) this.net.emit(MSG.SET_MAP, a.slice(4));
     }
   }
 
@@ -201,6 +218,13 @@ export class Menu {
     const isHost = rs.hostId === myId;
 
     $('lobby-code').textContent = rs.code;
+    // Harita seçimi ve menü arkasında harita önizlemesi
+    for (const b of $('map-pick').children) {
+      b.classList.toggle('active', b.dataset.map === rs.map);
+      b.disabled = !isHost || rs.state !== 'lobby';
+    }
+    $('map-hint').textContent = isHost ? 'Haritayı seç' : 'Haritayı host seçer';
+    if (!this.game.active && rs.map) this.game.world.load(rs.map);
     $('lobby-type').textContent = rs.isPublic ? 'PUBLIC ROOM' : 'PRIVATE ROOM';
     for (const team of ['red', 'blue']) {
       const list = $(`list-${team}`);

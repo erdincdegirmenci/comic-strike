@@ -1,10 +1,10 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import { CITY_ARENA } from '@comic-strike/shared/map.js';
+import { MAPS, DEFAULT_MAP } from '@comic-strike/shared/maps.js';
 import { Renderer } from './core/Renderer.js';
 import { Input } from './core/Input.js';
 import { Sfx } from './core/Audio.js';
 import { Physics } from './world/Physics.js';
-import { buildMap } from './world/MapBuilder.js';
+import { buildMap, disposeMap } from './world/MapBuilder.js';
 import { Network } from './net/Network.js';
 import { HUD } from './ui/HUD.js';
 import { Menu } from './ui/Menu.js';
@@ -18,8 +18,24 @@ async function boot() {
 
   await RAPIER.init();
   const physics = new Physics();
-  buildMap(CITY_ARENA, view.scene, physics);
-  physics.step();
+  // Harita yükleyici: maç/lobi haritası değişince eskisini kaldırıp yenisini kurar
+  const world = {
+    id: null,
+    group: null,
+    get map() {
+      return MAPS[this.id];
+    },
+    load(id) {
+      if (!MAPS[id]) id = DEFAULT_MAP;
+      if (id === this.id) return;
+      if (this.group) disposeMap(this.group, view.scene, physics);
+      this.id = id;
+      this.group = buildMap(MAPS[id], view.scene, physics);
+      view.setSky(MAPS[id].sky);
+      physics.step();
+    },
+  };
+  world.load(DEFAULT_MAP);
 
   // Çizgi roman fontu canvas yazılarında da kullanılsın diye yüklenmesini bekle (en fazla 1.5 sn)
   try {
@@ -33,7 +49,7 @@ async function boot() {
   sfx.setVolume(settings.volume);
   const hud = new HUD();
   const net = new Network();
-  const game = new Game({ view, physics, input, sfx, hud, net, settings });
+  const game = new Game({ view, physics, input, sfx, hud, net, settings, world });
   const menu = new Menu({ net, game, input, sfx, settings, view });
   menu.show('main');
   window.__comic = { game, menu, view }; // tarayıcı konsolundan hata ayıklamak için
@@ -50,7 +66,8 @@ async function boot() {
     } else {
       // Menü arkasında haritanın üzerinde yavaşça dönen kamera
       orbit += dt * 0.06;
-      view.camera.position.set(Math.sin(orbit) * 24, 19, Math.cos(orbit) * 34);
+      const b = world.map.bounds;
+      view.camera.position.set(Math.sin(orbit) * b.x * 0.9, 19, Math.cos(orbit) * b.z * 0.85);
       view.camera.rotation.set(0, 0, 0);
       view.camera.lookAt(0, 2, 0);
     }
