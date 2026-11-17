@@ -4,6 +4,19 @@
 Sunucu senin Windows bilgisayarında tek bir EXE olarak çalışır. Arkadaşların aynı Wi-Fi'dan tarayıcıyla bağlanır, hiçbir şey kurmaz.
 
 > **Şu anki durum (v0.2, Aşama 1):** C# sunucu ve tek EXE altyapısı hazır. Oyun şimdilik **tek kişilik test modunda**. Multiplayer Aşama 5'te SignalR ile gelecek.
+Oyna
+
+https://comic-strike.onrender.com/
+
+Linke tıkla, tarayıcıdan oyuna gir. Kurulum gerekmez.
+
+Sunucu bir süre kullanılmazsa uyku moduna geçebilir. İlk açılışta sayfa yüklenirken biraz bekleyebilirsin (yaklaşık 30-50 saniye).
+
+Sunucunun ayakta olup olmadığını şuradan görebilirsin: https://comic-strike.onrender.com/api/health
+
+## Gereksinimler
+- Node.js 20 veya üstü (`node -v`)
+- Chrome / Edge / Opera
 
 ## Senin bilgisayarında gerekenler (sadece geliştirme için)
 - **.NET SDK 10**: `dotnet --version`
