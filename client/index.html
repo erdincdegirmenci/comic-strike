@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>COMIC STRIKE WEB</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%92%A5%3C/text%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Bangers&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/ui/style.css" />
+  </head>
+  <body class="in-menu">
+    <canvas id="game"></canvas>
+    <div id="halftone"></div>
+
+    <div id="ui">
+      <!-- YÜKLENİYOR -->
+      <section id="screen-loading" class="screen">
+        <h1 class="logo">COMIC<br />STRIKE</h1>
+        <p id="loading-msg" class="blink">LOADING...</p>
+      </section>
+
+      <!-- ANA MENÜ -->
+      <section id="screen-main" class="screen hidden">
+        <h1 class="logo">COMIC<br />STRIKE</h1>
+        <div class="panel menu">
+          <label class="field">NAME<input id="inp-name" maxlength="16" placeholder="Takma adın" autocomplete="off" /></label>
+          <button class="btn big" data-action="play">PLAY</button>
+          <button class="btn" data-action="create">CREATE ROOM</button>
+          <button class="btn" data-action="join">JOIN ROOM</button>
+          <button class="btn alt" data-action="settings">SETTINGS</button>
+          <p id="main-msg" class="msg"></p>
+        </div>
+        <p class="controls-hint">WASD hareket · SHIFT koş · SPACE zıpla · SOL TIK ateş · R şarjör · TAB skor · ESC menü</p>
+      </section>
+
+      <!-- ODAYA KATIL -->
+      <section id="screen-join" class="screen hidden">
+        <div class="panel menu">
+          <h2>JOIN ROOM</h2>
+          <label class="field">ROOM CODE<input id="inp-code" maxlength="5" placeholder="ABCDE" autocomplete="off" /></label>
+          <button class="btn big" data-action="join-confirm">JOIN</button>
+          <button class="btn alt" data-action="back">BACK</button>
+          <p id="join-msg" class="msg"></p>
+        </div>
+      </section>
+
+      <!-- AYARLAR -->
+      <section id="screen-settings" class="screen hidden">
+        <div class="panel menu settings">
+          <h2>SETTINGS</h2>
+          <label class="field">MOUSE SENSITIVITY <b id="set-sens-val"></b><input id="set-sens" type="range" min="0.2" max="3" step="0.05" /></label>
+          <label class="field">FOV <b id="set-fov-val"></b><input id="set-fov" type="range" min="60" max="100" step="1" /></label>
+          <label class="field">VOLUME <b id="set-vol-val"></b><input id="set-vol" type="range" min="0" max="1" step="0.05" /></label>
+          <label class="field">GRAPHICS
+            <select id="set-quality">
+              <option value="high">HIGH (gölgeler açık)</option>
+              <option value="low">LOW (daha hızlı)</option>
+            </select>
+          </label>
+          <button class="btn alt" data-action="back">BACK</button>
+        </div>
+      </section>
+
+      <!-- LOBİ -->
+      <section id="screen-lobby" class="screen hidden">
+        <div class="panel lobby">
+          <div class="lobby-head">
+            <div>
+              <span id="lobby-type" class="small">ROOM</span>
+              <div class="code-row"><b id="lobby-code">-----</b><button class="btn small" data-action="copy">COPY</button></div>
+            </div>
+            <p class="small">Arkadaşların bu kodla <b>JOIN ROOM</b>'dan katılabilir</p>
+          </div>
+          <div class="teams">
+            <div class="team red">
+              <h3>RED TEAM</h3>
+              <ul id="list-red"></ul>
+              <button id="btn-red" class="btn small" data-action="team-red">JOIN RED</button>
+            </div>
+            <div class="vs">VS</div>
+            <div class="team blue">
+              <h3>BLUE TEAM</h3>
+              <ul id="list-blue"></ul>
+              <button id="btn-blue" class="btn small" data-action="team-blue">JOIN BLUE</button>
+            </div>
+          </div>
+          <p id="lobby-status" class="status"></p>
+          <div class="lobby-actions">
+            <button id="btn-ready" class="btn" data-action="ready">READY</button>
+            <button id="btn-start" class="btn big" data-action="start">START MATCH</button>
+            <button class="btn alt" data-action="leave">LEAVE</button>
+          </div>
+          <p id="lobby-msg" class="msg"></p>
+        </div>
+      </section>
+
+      <!-- DURAKLAT / MAÇA HAZIRLAN -->
+      <section id="screen-pause" class="screen overlay hidden">
+        <div class="panel menu">
+          <h2 id="pause-title">PAUSED</h2>
+          <button id="btn-resume" class="btn big" data-action="resume">RESUME</button>
+          <button class="btn alt" data-action="settings">SETTINGS</button>
+          <button class="btn alt" data-action="leave-match">LEAVE MATCH</button>
+        </div>
+      </section>
+
+      <section id="screen-none" class="screen hidden"></section>
+    </div>
+
+    <!-- OYUN İÇİ ARAYÜZ -->
+    <div id="hud" class="hidden">
+      <div id="crosshair"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i></div>
+      <div id="hitmarker"></div>
+      <div id="damage-flash"></div>
+      <div id="damage-dir"></div>
+
+      <div id="topbar">
+        <div id="score-red" class="score red">0</div>
+        <div class="mid"><div id="timer">8:00</div><div id="score-limit">FIRST TO 30</div></div>
+        <div id="score-blue" class="score blue">0</div>
+      </div>
+
+      <div id="killfeed"></div>
+      <div id="ping"></div>
+
+      <div id="health" class="hud-box">
+        <span class="label">HP</span><b id="hp-val">100</b>
+        <div class="bar"><div id="hp-bar"></div></div>
+      </div>
+      <div id="ammo" class="hud-box">
+        <b id="ammo-val">30</b><span id="ammo-max">/ 30</span>
+        <div id="reload-msg" class="hidden">RELOADING...</div>
+      </div>
+
+      <div id="center-msg"></div>
+      <div id="comic-pop"></div>
+      <div id="respawn" class="hidden">
+        <p id="respawn-by"></p>
+        <p>RESPAWN <b id="respawn-time">3</b></p>
+      </div>
+      <div id="scoreboard" class="hidden"></div>
+      <div id="end-screen" class="hidden"></div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
