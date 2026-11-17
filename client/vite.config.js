@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 
-// Geliştirmede Vite 5173'te çalışır; API ve Socket.IO istekleri 3000'deki sunucuya yönlenir.
+// Geliştirme: Vite 5173'te çalışır; /api ve /socket.io istekleri 3000'deki Node sunucuya yönlenir.
 export default defineConfig({
   server: {
     port: 5173,
@@ -12,7 +12,6 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     target: 'es2022',
-    // Rapier (WASM içerir) ve Three.js ayrı dosyalarda: oyun kodu değişse bile tarayıcı önbelleğinde kalırlar
     chunkSizeWarningLimit: 2000,
     rollupOptions: {
       output: {

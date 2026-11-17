@@ -1,59 +1,33 @@
-# Mimari
+# Mimari (v0.3)
 
-## Genel bakış
 ```
- Tarayıcı (client)                         Node.js (server)
- ┌──────────────────────────┐   Socket.IO   ┌──────────────────────────┐
- │ Menu / Lobby (DOM)       │ ◄───────────► │ RoomManager              │
- │ Game                     │   websocket   │  └─ Room (oda başına)     │
- │  ├─ LocalPlayer (Rapier) │               │      ├─ Player            │
- │  ├─ RemotePlayer (interp)│               │      ├─ 20 Hz tick        │
- │  ├─ Weapon (viewmodel)   │               │      └─ HitScan           │
- │  ├─ Effects              │               └──────────────────────────┘
- │  └─ HUD (DOM)            │                         ▲
- │ Renderer (Three.js)      │                         │
- └──────────────────────────┘                         │
-              ▲            shared/ (constants, protocol, map)
-              └───────────────────────────────────────┘
+ Oyuncunun tarayıcısı                      Senin bilgisayarın
+ ┌────────────────────────────┐   HTTP    ┌──────────────────────────────┐
+ │ Three.js (çizim)           │ ◄──────── │ Node.js sunucu (:3000)       │
+ │ Rapier (hareket/çarpışma)  │           │  ├─ client/dist dosyaları    │
+ │ Menü + HUD (HTML/CSS)      │ Socket.IO │  ├─ /api/health              │
+ │                            │ ◄ ─ ─ ─ ► │  └─ oyun mantığı (Aşama 5)   │
+ └────────────────────────────┘ (Aşama 5) └──────────────────────────────┘
 ```
 
-## Kim neye karar verir?
-| Konu | Karar veren |
-|---|---|
-| Kendi hareketin | İstemci hesaplar; sunucu hız/sınır kontrolü yapar, şüpheliyse `correction` ile geri çeker |
-| Atış yönü | İstemci gönderir |
-| İsabet, hasar, ölüm, skor | **Sunucu** |
-| Mühimmat, reload süresi, ateş hızı | **Sunucu** (istemci sadece tahmin eder) |
-| Doğma yeri ve zamanı | **Sunucu** |
-| Maç süresi ve bitişi | **Sunucu** |
+## Nasıl çalışıyor?
+1. `npm run build`: Vite, `client/` klasöründeki JavaScript'i paketleyip `client/dist` klasörüne yazar.
+2. `npm start`: Node.js sunucu `client/dist` dosyalarını sunar ve konsola yerel ağ adreslerini yazar. Windows'ta tarayıcıyı da açar.
+3. `ComicStrike.bat`: bu iki adımı (gerekirse `npm install` ile birlikte) tek çift tıklamada yapar.
 
-## Akıcılık teknikleri
-- **Client prediction:** Yerel oyuncu Rapier ile anında hareket eder, sunucuyu beklemez.
-- **Interpolation:** Diğer oyuncular `INTERP_DELAY` (100 ms) geriden, iki snapshot arasında yumuşatılarak gösterilir.
-- **Lag compensation:** Sunucu her oyuncunun son 1 saniyelik pozisyon geçmişini tutar. Atış gelince hedefleri `şimdi − (ping + 100 ms)` anına geri sarar ve ışını orada test eder. Böylece ekranda vurduğun yere isabet edersin.
+## Geliştirme modu
+`npm run dev` iki programı birlikte başlatır:
+- `node --watch`: sunucu, kod değişince yeniden başlar (port 3000).
+- `vite`: tarayıcı oyunu, kod değişince sayfa anında güncellenir (port 5173). `/api` ve `/socket.io` isteklerini 3000'e yönlendirir.
 
-## Grafik
-- `MeshToonMaterial` + 3 tonlu gradient → çizgi film gölgelendirme.
-- Kontur: her nesnenin biraz büyütülmüş, arka yüzü çizilen siyah kopyası ("inverted hull").
-- Harita kutuları üç mesh'e birleştirilir (renk, kontur, kenar çizgileri) → haritanın tamamı 3 draw call.
-- Halftone nokta deseni ve vinyet tek bir CSS katmanı (GPU maliyeti yok).
-- Silah ayrı bir sahnede, derinlik temizlenerek çizilir (duvara girmez).
-- Efekt dokuları (yıldız, mürekkep, duman, "KAPOW!") canvas ile çizilir; harici görsel dosya yok.
-- Sesler WebAudio ile anlık üretilir; harici ses dosyası yok.
+## Planlanan oyun mimarisi (Aşama 2–6)
+- **Sunucu otoritesi:** hasar, ölüm, skor, mermi, stamina, koşma hızı ve ateş hızı sunucuda hesaplanır.
+- **Sekme ve dağılma sunucuda:** tarayıcı sadece nişan yönünü yollar. Sunucu oyuncunun durumuna göre (koşuyor, eğiliyor, havada, art arda ateş) dağılmayı ekler. Böylece sekme herkes için aynı olur.
+- **Ortak harita ve ayarlar:** `shared/` klasörü hem tarayıcıda hem sunucuda kullanılır. Haritayı ve denge değerlerini tek yerden değiştirirsin.
+- **LAN ayarları:** sunucu saniyede 30 güncelleme yapacak, diğer oyuncular 50 ms geriden gösterilecek.
 
-## Dosyalar
-| Dosya | Görev |
-|---|---|
-| `shared/constants.js` | Tüm denge değerleri |
-| `shared/protocol.js` | Mesaj isimleri |
-| `shared/map.js` | City Arena: kutular + spawn noktaları (Z eksenine göre aynalı) |
-| `server/src/RoomManager.js` | Oda oluşturma/katılma, olay yönlendirme |
-| `server/src/Room.js` | Lobi, maç durumu, girdi doğrulama, hasar, skor, snapshot |
-| `server/src/HitScan.js` | Işın-kutu / ışın-küre testleri |
-| `client/src/main.js` | Açılış, ana döngü |
-| `client/src/Game.js` | Maç içi istemci mantığı ve ağ olayları |
-| `client/src/ui/Menu.js` | Menüler, lobi, uygulama akışı |
-| `client/src/ui/HUD.js` | Can, mühimmat, skor, süre, kill feed, skor tablosu |
-| `client/src/world/MapBuilder.js` | Haritayı görsel + fizik olarak kurar |
-| `client/src/player/*` | Yerel oyuncu, uzak oyuncular, silah |
-| `client/src/fx/*` | Toon materyaller, efektler |
+## v0.1 → v0.3 değişiklikleri
+- Oda kodu, lobi ve takım seçimi kaldırıldı: tek sunucu, herkes herkese (FFA).
+- İnternette yayınlama (Render) kaldırıldı: sadece yerel ağ.
+- Test botları kaldırıldı. Aşama 8'de 8 oyuncu testleri için yeniden eklenecek.
+- (v0.2'de denenen C# sunucu, isteğin üzerine kaldırıldı.)

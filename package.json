@@ -1,24 +1,16 @@
 {
-  "name": "comic-strike-web",
-  "version": "0.1.0",
+  "name": "comicstrike",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
-  "workspaces": [
-    "shared",
-    "server",
-    "client"
-  ],
-  "engines": {
-    "node": ">=20"
-  },
+  "workspaces": ["shared", "server", "client"],
+  "engines": { "node": ">=20" },
   "scripts": {
-    "dev": "concurrently -n server,client -c yellow,cyan \"npm run dev -w server\" \"npm run dev -w client\"",
+    "dev": "concurrently -k -n server,client -c yellow,cyan \"node --watch server/src/index.js --no-browser\" \"npm run dev -w client\"",
     "build": "npm run build -w client",
-    "start": "npm run start -w server",
-    "bots": "node tools/bots.js"
+    "start": "node server/src/index.js"
   },
   "devDependencies": {
-    "concurrently": "^9.0.0",
-    "socket.io-client": "^4.8.0"
+    "concurrently": "^9.0.0"
   }
 }
