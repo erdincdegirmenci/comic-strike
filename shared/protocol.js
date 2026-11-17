@@ -10,8 +10,11 @@ export const MSG = {
   SET_READY: 'set_ready', // boolean
   START_MATCH: 'start_match',
   INPUT: 'input', // {l, p:[x,y,z], y, pi, f}
-  SHOOT: 'shoot', // {d:[x,y,z]}
+  SHOOT: 'shoot', // {d:[x,y,z], h?:1 (bıçak ağır saldırı)}
   RELOAD: 'reload',
+  SWITCH: 'switch', // 'rifle' | 'awp' | 'knife' | 'he' | 'smoke'
+  THROW: 'throw', // {d:[x,y,z]} elindeki bombayı at
+  SPRAY: 'spray', // {p:[x,y,z], n:[x,y,z]} duvara sticker
 
   // sunucu → istemci
   ROOM_STATE: 'room_state',
@@ -24,7 +27,10 @@ export const MSG = {
   HIT: 'hit',
   DAMAGED: 'damaged',
   KILL: 'kill',
-  AMMO: 'ammo',
+  AMMO: 'ammo', // {w, ammo}
+  GRENADE: 'grenade', // {g, t, id, o, v}: bomba atıldı
+  BOOM: 'boom', // {g, t, p}: bomba patladı / sis açıldı
+  SPRAYED: 'sprayed', // {id, c, p, n}
   MATCH_END: 'match_end',
   SPING: 'sping', // sunucunun ping ölçümü (ack ile)
 };

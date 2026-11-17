@@ -241,3 +241,43 @@ body.in-menu #halftone {
 .end-sub, .end-score, .end-mvp { font-size: 36px; color: var(--paper); -webkit-text-stroke: 1.5px var(--ink); }
 .end-score { font-size: 64px; }
 .end-note { font-size: 22px; color: var(--yellow); animation: blink 1s steps(2) infinite; }
+
+/* ---------------- Silahlar, dürbün, sis, karakter ---------------- */
+#weapon-name { font-size: 18px; color: #555; letter-spacing: 2px; }
+#weapons {
+  position: absolute; bottom: 130px; right: 22px;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 5px;
+}
+#weapons .slot {
+  background: var(--paper); border: 3px solid var(--ink); border-radius: 6px; padding: 4px 10px;
+  display: flex; align-items: baseline; gap: 6px; font-size: 16px; opacity: 0.75;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+#weapons .slot b { font-size: 14px; color: #888; }
+#weapons .slot i { font-style: normal; font-size: 13px; color: #555; }
+#weapons .slot.active { background: var(--yellow); opacity: 1; transform: translateX(-6px) rotate(-1deg); }
+#weapons .slot.empty { opacity: 0.3; text-decoration: line-through; }
+
+#scope {
+  position: absolute; inset: 0;
+  background: radial-gradient(circle at center, transparent 0, transparent 38vmin, var(--ink) 38.3vmin, var(--ink) 39.5vmin, rgba(10, 10, 10, 0.97) 39.6vmin);
+}
+#scope i { position: absolute; background: var(--ink); }
+#scope .h { left: 0; right: 0; top: 50%; height: 2px; margin-top: -1px; }
+#scope .v { top: 0; bottom: 0; left: 50%; width: 2px; margin-left: -1px; }
+
+#smoke-veil {
+  position: absolute; inset: 0; opacity: 0; transition: opacity 0.15s linear;
+  background: radial-gradient(ellipse at center, #cfcfcf 0%, #b9b9b9 70%, #9a9a9a 100%);
+}
+
+#char-pick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 6px; }
+#char-pick button {
+  font-family: var(--font); font-size: 13px; letter-spacing: 1px; cursor: pointer;
+  background: var(--paper); border: 3px solid var(--ink); border-radius: 8px; padding: 4px 2px 6px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--ink);
+}
+#char-pick button canvas { width: 64px; height: 64px; }
+#char-pick button.active { background: var(--yellow); box-shadow: 3px 3px 0 var(--ink); transform: rotate(-2deg); }
+.field small { font-size: 12px; color: #666; letter-spacing: 0; }
+.controls-hint { text-align: center; line-height: 1.5; }

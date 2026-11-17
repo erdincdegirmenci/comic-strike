@@ -1,6 +1,7 @@
 import { MSG } from '@comic-strike/shared/protocol.js';
-import { TEAM_INFO } from '@comic-strike/shared/constants.js';
+import { TEAM_INFO, CHARACTERS, CHARACTER_IDS } from '@comic-strike/shared/constants.js';
 import { saveSettings } from './settings.js';
+import { drawSpray } from '../fx/Sprays.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -33,6 +34,32 @@ export class Menu {
     this.bindNet();
     this.input.onLockChange = (locked) => this.onLockChange(locked);
     $('inp-name').value = this.settings.name;
+    this.buildCharacters();
+  }
+
+  /** Karakter seçimi: her karakterin sticker'ı önizleme olarak gösterilir */
+  buildCharacters() {
+    if (!CHARACTERS[this.settings.char]) this.settings.char = CHARACTER_IDS[0];
+    const box = $('char-pick');
+    for (const id of CHARACTER_IDS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.char = id;
+      b.title = CHARACTERS[id].name;
+      b.append(drawSpray(id, 128), document.createTextNode(CHARACTERS[id].name));
+      b.addEventListener('click', () => {
+        this.sfx.ensure();
+        this.settings.char = id;
+        saveSettings(this.settings);
+        this.renderCharacters();
+      });
+      box.append(b);
+    }
+    this.renderCharacters();
+  }
+
+  renderCharacters() {
+    for (const b of $('char-pick').children) b.classList.toggle('active', b.dataset.char === this.settings.char);
   }
 
   show(name) {
@@ -69,9 +96,9 @@ export class Menu {
   action(a) {
     switch (a) {
       case 'play':
-        return this.request(MSG.QUICK_PLAY, { name: this.playerName() }, 'main-msg');
+        return this.request(MSG.QUICK_PLAY, { name: this.playerName(), char: this.settings.char }, 'main-msg');
       case 'create':
-        return this.request(MSG.CREATE_ROOM, { name: this.playerName() }, 'main-msg');
+        return this.request(MSG.CREATE_ROOM, { name: this.playerName(), char: this.settings.char }, 'main-msg');
       case 'join':
         this.playerName();
         this.show('join');
@@ -80,7 +107,7 @@ export class Menu {
       case 'join-confirm': {
         const code = $('inp-code').value.trim().toUpperCase();
         if (code.length < 4) return this.msg('join-msg', 'Oda kodunu gir.');
-        return this.request(MSG.JOIN_ROOM, { name: this.settings.name, code }, 'join-msg');
+        return this.request(MSG.JOIN_ROOM, { name: this.settings.name, char: this.settings.char, code }, 'join-msg');
       }
       case 'settings':
         this.settingsBack = this.current;

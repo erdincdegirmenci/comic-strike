@@ -6,6 +6,9 @@ export class Input {
     this.pressedKeys = new Set();
     this.mouseDown = false;
     this.mouseClicked = false;
+    this.rightDown = false;
+    this.rightClicked = false;
+    this.wheel = 0;
     this.dx = 0;
     this.dy = 0;
     this.locked = false;
@@ -16,7 +19,9 @@ export class Input {
 
     window.addEventListener('keydown', (e) => {
       if (isTyping(e)) return;
-      if (this.gameActive && (e.code === 'Tab' || e.code === 'Space')) e.preventDefault();
+      // Ctrl: çömelme. Tarayıcı kısayollarını (Ctrl+S, Ctrl+D...) oyun sırasında engelle.
+      // Not: Ctrl+W gibi bazı kısayollar tarayıcı tarafından engellenemez; C tuşu da çömeltir.
+      if (this.gameActive && (e.code === 'Tab' || e.code === 'Space' || e.ctrlKey)) e.preventDefault();
       if (!e.repeat) this.pressedKeys.add(e.code);
       this.keys.add(e.code);
     });
@@ -24,14 +29,25 @@ export class Input {
     window.addEventListener('blur', () => this.clear());
 
     document.addEventListener('mousedown', (e) => {
-      if (this.locked && e.button === 0) {
+      if (!this.locked) return;
+      if (e.button === 0) {
         this.mouseDown = true;
         this.mouseClicked = true;
+      } else if (e.button === 2) {
+        this.rightDown = true;
+        this.rightClicked = true;
       }
     });
     document.addEventListener('mouseup', (e) => {
       if (e.button === 0) this.mouseDown = false;
+      if (e.button === 2) this.rightDown = false;
     });
+    document.addEventListener('contextmenu', (e) => {
+      if (this.gameActive) e.preventDefault();
+    });
+    document.addEventListener('wheel', (e) => {
+      if (this.locked) this.wheel += Math.sign(e.deltaY);
+    }, { passive: true });
     document.addEventListener('mousemove', (e) => {
       if (!this.locked) return;
       // Bazı tarayıcılarda nadiren gelen ani sıçramaları yok say
@@ -49,6 +65,7 @@ export class Input {
   clear() {
     this.keys.clear();
     this.mouseDown = false;
+    this.rightDown = false;
   }
 
   down(code) {
@@ -69,6 +86,8 @@ export class Input {
   endFrame() {
     this.pressedKeys.clear();
     this.mouseClicked = false;
+    this.rightClicked = false;
+    this.wheel = 0;
   }
 
   /** Pointer Lock ister. Kullanıcı tıklaması içinde çağrılmalı. */
