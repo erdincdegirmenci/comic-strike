@@ -1,10 +1,8 @@
+@"
 node_modules
 dist
-bin
-obj
-publish
-.vs
 .env
 .env.*
 *.log
-*.user
+.DS_Store
+"@ | Out-File -Encoding utf8 .gitignore

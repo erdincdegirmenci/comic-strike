@@ -1,34 +1,39 @@
-/**
- * Sunucu bağlantısı.
- * Aşama 1: Henüz multiplayer yok, oyun tek kişilik test modunda çalışır.
- * Bu sınıf şimdilik mesajları yok sayar. Aşama 5'te Socket.IO bağlantısı buraya gelecek.
- */
+import { io } from 'socket.io-client';
+import { MSG } from '@comic-strike/shared/protocol.js';
+
+/** Socket.IO bağlantısı. Aynı adresteki sunucuya bağlanır (geliştirmede Vite proxy üzerinden). */
 export class Network {
   constructor() {
-    this.handlers = new Map();
-    this.connected = false;
+    this.socket = io({ transports: ['websocket'] });
+    // Sunucunun ping ölçümüne hemen cevap ver
+    this.socket.on(MSG.SPING, (cb) => {
+      if (typeof cb === 'function') cb();
+    });
   }
 
   get id() {
-    return 'local';
+    return this.socket.id;
+  }
+
+  get connected() {
+    return this.socket.connected;
   }
 
   on(event, fn) {
-    if (!this.handlers.has(event)) this.handlers.set(event, []);
-    this.handlers.get(event).push(fn);
+    this.socket.on(event, fn);
   }
 
-  emit() {
-    // Aşama 5'e kadar sunucuya bir şey gönderilmiyor
+  emit(event, data) {
+    this.socket.emit(event, data);
   }
 
-  /** Sunucunun çalıştığını ve sürümünü kontrol eder. */
-  async health() {
-    try {
-      const res = await fetch('/api/health', { cache: 'no-store' });
-      return res.ok ? await res.json() : null;
-    } catch {
-      return null;
-    }
+  /** Cevap bekleyen istek (ack). */
+  request(event, data, timeout = 5000) {
+    return new Promise((resolve) => {
+      if (!this.socket.connected) return resolve({ ok: false, error: 'Sunucuya bağlı değil.' });
+      this.socket.timeout(timeout).emit(event, data, (err, res) => {
+        resolve(err ? { ok: false, error: 'Sunucu yanıt vermedi.' } : res);
+      });
+    });
   }
 }
