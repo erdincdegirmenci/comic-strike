@@ -3,6 +3,8 @@ const KEY = 'comic-strike-settings';
 export const DEFAULTS = {
   name: '',
   char: 'max',
+  hand: 'right', // viewmodel: sağ / sol el
+  loadout: { primary: 'rifle', pistol: 'cannon', nade: 'he' },
   sensitivity: 1,
   fov: 80,
   volume: 0.6,

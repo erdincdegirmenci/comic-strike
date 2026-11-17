@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WEAPONS, WEAPON_ORDER, TEAM_INFO } from '@comic-strike/shared/constants.js';
+import { WEAPONS, TEAM_INFO, DEFAULT_LOADOUT, SLOT_OF_CAT } from '@comic-strike/shared/constants.js';
 import { part, toon } from '../fx/Toon.js';
 import { starTexture } from '../fx/Effects.js';
 
@@ -9,7 +9,8 @@ const DEPLOY_TIME = 260; // ms: silah çekme süresi
 
 /**
  * Birinci şahıs silah görünümü (viewmodel) ve silah durumu.
- * Silahlar: INK-47 (otomatik), AWP (dürbünlü, tek atış), bıçak, patlayıcı ve sis bombası.
+ * Oyuncunun seçtiği ana silah + tabanca + bomba ve herkeste olan bıçak.
+ * HAND CANNON çekilirken parmakta döner. Ayarlardan sol/sağ el seçilebilir.
  * Duvarların içine girmemesi için ayrı bir sahnede, derinlik temizlenerek çizilir.
  */
 export class Weapon {
@@ -34,14 +35,21 @@ export class Weapon {
     this.buildKnife();
     this.buildGrenade('he', '#52b788');
     this.buildGrenade('smoke', '#adb5bd');
+    this.buildCarbine();
+    this.buildSmg();
+    this.buildLmg();
+    this.buildPopper();
+    this.buildCannon();
+    this.hand = 1; // 1 sağ el, -1 sol el
 
     this.flashLight = new THREE.PointLight('#ffd23f', 0, 2);
 
     this.visible = false;
-    this.current = 'rifle';
+    this.loadout = { ...DEFAULT_LOADOUT };
+    this.current = this.loadout.primary;
     this.previous = 'knife';
-    this.ammo = { rifle: WEAPONS.rifle.MAG_SIZE, awp: WEAPONS.awp.MAG_SIZE };
-    this.nades = { he: WEAPONS.he.COUNT, smoke: WEAPONS.smoke.COUNT };
+    this.ammo = {};
+    this.nades = {};
     this.reloading = false;
     this.reloadStart = 0;
     this.lastShot = 0;
@@ -56,23 +64,33 @@ export class Weapon {
     this.bobT = 0;
     this.sway = new THREE.Vector2();
     this.sprint = 0;
-    this.show('rifle');
+    this.reset();
   }
 
   // ---------------- Modeller ----------------
 
-  model(id) {
+  /** pivot verilirse silah parçaları o noktanın etrafında dönebilen bir gruba eklenir (tabanca çevirme) */
+  model(id, pivot = null) {
     const g = new THREE.Group();
     g.visible = false;
     this.root.add(g);
-    const m = { group: g, muzzle: null, mag: null };
-    m.add = (geo, color, x, y, z, rx = 0, ry = 0, rz = 0, t = 0.006) => {
+    const m = { group: g, muzzle: null, mag: null, spin: null };
+    if (pivot) {
+      m.spin = new THREE.Group();
+      m.spin.position.set(...pivot);
+      g.add(m.spin);
+    }
+    const put = (parent, off, geo, color, x, y, z, rx, ry, rz, t) => {
       const mesh = part(geo, color, t);
-      mesh.position.set(x, y, z);
+      mesh.position.set(x - off[0], y - off[1], z - off[2]);
       mesh.rotation.set(rx, ry, rz);
-      g.add(mesh);
+      parent.add(mesh);
       return mesh;
     };
+    // add: silah parçası (varsa dönen gruba) · fixed: el/kol (dönmez)
+    m.add = (geo, color, x, y, z, rx = 0, ry = 0, rz = 0, t = 0.006) =>
+      put(m.spin ?? g, pivot ?? [0, 0, 0], geo, color, x, y, z, rx, ry, rz, t);
+    m.fixed = (geo, color, x, y, z, rx = 0, ry = 0, rz = 0, t = 0.006) => put(g, [0, 0, 0], geo, color, x, y, z, rx, ry, rz, t);
     this.models[id] = m;
     return m;
   }
@@ -82,7 +100,8 @@ export class Weapon {
     s.position.set(0, y, z);
     s.scale.setScalar(0.22);
     s.visible = false;
-    m.group.add(s);
+    if (m.spin) s.position.sub(m.spin.position);
+    (m.spin ?? m.group).add(s);
     m.muzzle = s;
   }
 
@@ -147,6 +166,83 @@ export class Weapon {
     m.group.position.set(-0.02, 0.06, 0);
   }
 
+  /** Uzun tüfek iskeleti: gövde, namlu, dipçik, eller, kol */
+  longGun(m, o) {
+    m.add(B(0.07, 0.09, o.body), o.color, 0, 0, 0);
+    m.add(new THREE.CylinderGeometry(0.015, 0.015, o.barrel, 10), '#1b1b1b', 0, 0.012, -o.body / 2 - o.barrel / 2 + 0.02, Math.PI / 2);
+    m.add(B(0.045, 0.11, 0.05), o.color, 0, -0.09, 0.1, 0.3); // kabza
+    m.fixed(B(0.08, 0.08, 0.1), SKIN, 0, -0.085, 0.11);
+    m.fixed(B(0.085, 0.06, 0.1), SKIN, -0.01, -0.055, -0.2);
+    this.sleeves.push(m.fixed(B(0.1, 0.1, 0.26), TEAM_INFO.red.color, 0.03, -0.12, 0.27, 0.2));
+    this.muzzleFlash(m, -o.body / 2 - o.barrel + 0.02);
+  }
+
+  buildCarbine() {
+    const m = this.model('carbine');
+    this.longGun(m, { body: 0.38, barrel: 0.28, color: '#22223b' });
+    m.add(B(0.075, 0.07, 0.17), '#4a4e69', 0, 0, -0.25); // el kundağı
+    m.add(B(0.02, 0.05, 0.16), '#22223b', 0, 0.075, 0.0); // taşıma kolu
+    m.add(B(0.02, 0.03, 0.02), '#22223b', 0, 0.05, -0.08);
+    m.add(B(0.02, 0.03, 0.02), '#22223b', 0, 0.05, 0.07);
+    m.add(B(0.012, 0.05, 0.012), '#141414', 0, 0.06, -0.31); // arpacık
+    m.mag = m.add(B(0.045, 0.15, 0.07), '#2b2d42', 0, -0.11, -0.06, -0.12);
+    m.add(B(0.05, 0.09, 0.2), '#4a4e69', 0, -0.02, 0.27); // dipçik
+  }
+
+  buildSmg() {
+    const m = this.model('smg');
+    this.longGun(m, { body: 0.3, barrel: 0.1, color: '#353535' });
+    m.add(B(0.07, 0.06, 0.14), '#4f5d75', 0, -0.005, -0.18); // ön kundak
+    m.mag = m.add(B(0.035, 0.18, 0.05), '#141414', 0, -0.12, -0.11, -0.3); // eğik şarjör
+    m.add(B(0.015, 0.015, 0.2), '#555', 0, 0.0, 0.25); // tel dipçik
+    m.add(B(0.015, 0.07, 0.015), '#555', 0, -0.03, 0.34);
+    m.add(B(0.012, 0.04, 0.012), '#141414', 0, 0.06, -0.15);
+    m.add(B(0.03, 0.03, 0.05), '#141414', 0, 0.06, 0.1);
+  }
+
+  buildLmg() {
+    const m = this.model('lmg');
+    this.longGun(m, { body: 0.46, barrel: 0.32, color: '#2b2d42' });
+    m.add(B(0.085, 0.05, 0.36), '#3d405b', 0, 0.065, -0.02); // üst kapak
+    m.add(B(0.09, 0.09, 0.18), '#4a4e69', 0, -0.005, -0.3); // ön kundak
+    m.mag = m.add(B(0.1, 0.14, 0.13), '#5c6b3a', 0.02, -0.12, -0.06); // mermi kutusu
+    for (let i = 0; i < 5; i++) {
+      m.add(new THREE.CylinderGeometry(0.009, 0.009, 0.05, 6), '#ffbe0b', 0.06, -0.06 + i * 0.022, -0.06 - i * 0.012, 0, 0, Math.PI / 2, 0.003);
+    }
+    m.add(B(0.06, 0.1, 0.2), '#2b2d42', 0, -0.02, 0.32); // dipçik
+    m.add(B(0.012, 0.16, 0.012), '#555', 0.03, -0.09, -0.48, 0.5); // çatal ayak
+    m.add(B(0.012, 0.16, 0.012), '#555', -0.03, -0.09, -0.48, 0.5);
+    m.add(B(0.02, 0.05, 0.02), '#141414', 0, 0.11, -0.12);
+  }
+
+  /** Tabanca: el sabit, silah tetik noktası etrafında döner */
+  pistol(id, o) {
+    const m = this.model(id, [0, -0.03, 0.04]);
+    m.add(B(0.05, 0.05, o.len), o.slide, 0, 0.02, -o.len / 2 + 0.06); // sürgü
+    m.add(B(0.045, 0.035, o.len - 0.04), o.frame, 0, -0.02, -o.len / 2 + 0.07); // gövde
+    m.add(B(0.042, 0.11, 0.055), o.grip, 0, -0.08, 0.06, 0.25); // kabza
+    m.add(B(0.012, 0.025, 0.012), '#141414', 0, 0.055, -o.len + 0.08); // arpacık
+    m.add(B(0.03, 0.02, 0.015), '#141414', 0, 0.05, 0.05); // gez
+    m.add(B(0.006, 0.03, 0.03), '#141414', 0, -0.035, 0.01); // tetik
+    if (o.port) m.add(B(0.052, 0.02, 0.06), '#141414', 0, 0.04, -0.05); // kovan çıkışı
+    m.mag = m.add(B(0.036, 0.04, 0.045), '#141414', 0, -0.14, 0.075, 0.25);
+    m.fixed(B(0.075, 0.08, 0.09), SKIN, 0, -0.075, 0.08);
+    m.fixed(B(0.06, 0.06, 0.08), SKIN, -0.045, -0.09, 0.05); // destek eli
+    this.sleeves.push(m.fixed(B(0.1, 0.1, 0.26), TEAM_INFO.red.color, 0.02, -0.11, 0.26, 0.25));
+    this.muzzleFlash(m, -o.len + 0.03, 0.02);
+    m.group.position.set(-0.09, 0.14, -0.04);
+    return m;
+  }
+
+  buildPopper() {
+    this.pistol('popper', { len: 0.2, slide: '#3d405b', frame: '#2b2d42', grip: '#5a3a22' });
+  }
+
+  buildCannon() {
+    const m = this.pistol('cannon', { len: 0.28, slide: '#c0c6cf', frame: '#9aa1ab', grip: '#2b2d42', port: true });
+    m.add(B(0.056, 0.03, 0.2), '#dfe7ef', 0, 0.05, -0.12); // geniş üst rampa
+  }
+
   show(id) {
     for (const [k, m] of Object.entries(this.models)) m.group.visible = k === id;
     const m = this.models[id];
@@ -171,6 +267,20 @@ export class Weapon {
     return WEAPONS[this.current];
   }
 
+  /** Eldeki silahlar, yuva sırasıyla */
+  get owned() {
+    const l = this.loadout;
+    return [l.primary, l.pistol, 'knife', l.nade];
+  }
+
+  slotWeapon(slot) {
+    return this.owned.find((id) => SLOT_OF_CAT[WEAPONS[id].cat] === slot);
+  }
+
+  setHand(h) {
+    this.hand = h === 'left' ? -1 : 1;
+  }
+
   /** HUD için: elindeki silahın mermisi / bomba sayısı (bıçakta null) */
   get count() {
     if (this.def.kind === 'gun') return this.ammo[this.current];
@@ -179,12 +289,19 @@ export class Weapon {
   }
 
   has(id) {
+    if (!WEAPONS[id] || !this.owned.includes(id)) return false;
     return WEAPONS[id].kind !== 'grenade' || this.nades[id] > 0;
   }
 
-  reset(ammo, nades) {
-    this.ammo = { rifle: ammo?.rifle ?? WEAPONS.rifle.MAG_SIZE, awp: ammo?.awp ?? WEAPONS.awp.MAG_SIZE };
-    this.nades = { he: nades?.he ?? WEAPONS.he.COUNT, smoke: nades?.smoke ?? WEAPONS.smoke.COUNT };
+  /** Doğuşta / silah seçimi uygulanınca: sunucunun verdiği mermi ve bombalarla */
+  reset(ammo, nades, loadout) {
+    if (loadout) this.loadout = { ...loadout };
+    const l = this.loadout;
+    this.ammo = {
+      [l.primary]: ammo?.[l.primary] ?? WEAPONS[l.primary].MAG_SIZE,
+      [l.pistol]: ammo?.[l.pistol] ?? WEAPONS[l.pistol].MAG_SIZE,
+    };
+    this.nades = { [l.nade]: nades?.[l.nade] ?? WEAPONS[l.nade].COUNT };
     this.reloading = false;
     this.kick = 0;
     this.swing = 0;
@@ -193,10 +310,10 @@ export class Weapon {
     this.nextFire = 0;
     this.scope = 0;
     this.resumeScope = 0;
-    this.current = 'rifle';
-    this.previous = 'knife';
+    this.current = l.primary;
+    this.previous = l.pistol;
     this.drawStart = performance.now();
-    this.show('rifle');
+    this.show(this.current);
   }
 
   /** Silah değiştir. Değiştiyse true döner. */
@@ -210,17 +327,18 @@ export class Weapon {
     this.throwT = 0;
     this.swing = 0;
     this.drawStart = now;
-    this.nextFire = Math.max(this.nextFire, now + DEPLOY_TIME);
+    this.nextFire = Math.max(this.nextFire, now + (WEAPONS[id].DEPLOY ?? DEPLOY_TIME));
     this.show(id);
     return true;
   }
 
   /** Tekerlek ile sıradaki/önceki silah */
   cycle(dir) {
-    let i = WEAPON_ORDER.indexOf(this.current);
-    for (let n = 0; n < WEAPON_ORDER.length; n++) {
-      i = (i + dir + WEAPON_ORDER.length) % WEAPON_ORDER.length;
-      if (this.has(WEAPON_ORDER[i])) return WEAPON_ORDER[i];
+    const list = this.owned;
+    let i = list.indexOf(this.current);
+    for (let n = 0; n < list.length; n++) {
+      i = (i + dir + list.length) % list.length;
+      if (this.has(list[i])) return list[i];
     }
     return this.current;
   }
@@ -233,6 +351,11 @@ export class Weapon {
     return true;
   }
 
+  /** Bu silahın viewmodel'inde sağ/sol (ateş izi başlangıcı için) */
+  get side() {
+    return this.hand;
+  }
+
   fire(now, heavy = false) {
     const d = this.def;
     this.lastShot = now;
@@ -243,7 +366,7 @@ export class Weapon {
       return;
     }
     this.ammo[this.current]--;
-    this.kick = this.current === 'awp' ? 1.6 : 1;
+    this.kick = this.current === 'awp' ? 1.6 : this.current === 'cannon' ? 1.8 : 1;
     if (this.current === 'awp' && this.scope > 0) {
       // Atıştan sonra dürbün kapanır, kurma bitince geri açılır
       this.resumeScope = this.ammo.awp > 0 ? this.scope : 0;
@@ -252,7 +375,7 @@ export class Weapon {
     const m = this.models[this.current];
     m.muzzle.visible = true;
     m.muzzle.material.rotation = Math.random() * Math.PI;
-    m.muzzle.scale.setScalar((this.current === 'awp' ? 0.3 : 0.18) + Math.random() * 0.1);
+    m.muzzle.scale.setScalar((this.current === 'awp' || this.current === 'cannon' ? 0.3 : 0.18) + Math.random() * 0.1);
     this.flashLight.intensity = 4;
   }
 
@@ -314,7 +437,15 @@ export class Weapon {
 
     let reloadDip = 0;
     if (this.reloading) reloadDip = Math.sin(Math.min(1, (now - this.reloadStart) / d.RELOAD_TIME) * Math.PI);
-    const draw = 1 - Math.min(1, (now - this.drawStart) / DEPLOY_TIME); // silah çekilirken aşağıdan gelir
+    const deploy = d.DEPLOY ?? DEPLOY_TIME;
+    const drawK = Math.min(1, (now - this.drawStart) / deploy);
+    // Çevirmeli tabanca aşağıdan gelmez, yerinde parmakta döner
+    const draw = d.TWIRL ? Math.max(0, 1 - drawK * 4) * 0.4 : 1 - drawK;
+    if (m.spin) {
+      // Tetik etrafında 1 tam tur (yavaşlayarak durur)
+      const e = 1 - (1 - drawK) ** 3;
+      m.spin.rotation.x = d.TWIRL && drawK < 1 ? -Math.PI * 2 * e : 0;
+    }
 
     // Bıçak savuruşu: sağdan sola kesik; ağır saldırıda ileri saplama
     const sw = Math.sin(this.swing * Math.PI);
@@ -328,16 +459,20 @@ export class Weapon {
     m.group.visible = !(this.def.kind === 'grenade' && this.nades[this.current] <= 0 && this.throwT < 0.6);
 
     const air = player.grounded ? 0 : 0.015;
+    const h = this.hand;
     this.root.position.set(
-      this.base.x + bobX + this.sway.x - this.sprint * 0.06 + swingX,
+      (this.base.x + bobX - this.sprint * 0.06 + swingX) * h + this.sway.x,
       this.base.y + bobY + this.sway.y - reloadDip * 0.12 - this.sprint * 0.04 + air - draw * 0.25 + th * 0.08,
       this.base.z + this.kick * 0.06 + swingZ - th * 0.15,
     );
     this.root.rotation.set(
       this.kick * 0.09 - reloadDip * 0.5 - this.sprint * 0.25 + swingRotX - draw * 0.6 - th * 0.6,
-      this.sprint * 0.5 + swingRotY,
-      reloadDip * 0.6,
+      (this.sprint * 0.5 + swingRotY) * h,
+      reloadDip * 0.6 * h,
     );
-    if (m.mag) m.mag.position.y = (this.current === 'awp' ? -0.08 : -0.11) - reloadDip * 0.12;
+    if (m.mag) {
+      if (m.magY === undefined) m.magY = m.mag.position.y;
+      m.mag.position.y = m.magY - reloadDip * 0.12;
+    }
   }
 }

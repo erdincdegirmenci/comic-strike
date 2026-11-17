@@ -59,7 +59,8 @@ Sen **http://localhost:3000**, arkadaşların **http://BILGISAYAR_IP:3000** adre
 | Ctrl / C | Çömel |
 | Sol tık | Ateş / bomba at |
 | Sağ tık | AWP dürbünü (2 seviye) · bıçakta ağır saldırı |
-| 1 / 2 / 3 / 4 / 5 | INK-47 / AWP / bıçak / patlayıcı bomba / sis bombası |
+| 1 / 2 / 3 / 4 | Ana silah / tabanca / bıçak / bomba |
+| B | Silah seçimi (ana silah + tabanca + bomba) |
 | Fare tekeri, Q | Silah değiştir / son silah |
 | T | Karakterine özel sticker'ı duvara yapıştır |
 | R | Şarjör değiştir |

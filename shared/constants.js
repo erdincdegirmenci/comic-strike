@@ -56,16 +56,18 @@ export const HITBOX = {
 export const FLAG = { MOVING: 1, RUNNING: 2, AIR: 4, CROUCH: 8, SCOPED: 16 };
 
 // ---- Silahlar ----
-// Tuşlar: 1 INK-47 · 2 AWP · 3 bıçak · 4 patlayıcı bomba · 5 sis bombası (fare tekeri / Q ile de değişir)
+// Her oyuncu bir ana silah, bir tabanca ve bir bomba seçer (B tuşu / maç başı). Bıçak herkeste var.
+// Tuşlar: 1 ana silah · 2 tabanca · 3 bıçak · 4 bomba (fare tekeri / Q ile de değişir)
+// cat: primary | pistol | melee | grenade
 export const WEAPONS = {
   rifle: {
-    id: 'rifle', slot: 1, NAME: 'INK-47', kind: 'gun',
+    id: 'rifle', cat: 'primary', NAME: 'INK-47', kind: 'gun', DESC: 'Güçlü otomatik tüfek',
     DAMAGE: 25, HEADSHOT_MULT: 2, FIRE_INTERVAL: 110, MAG_SIZE: 30, RELOAD_TIME: 1800, RANGE: 150,
     SPREAD_BASE: 0.003, SPREAD_MOVE: 0.02, SPREAD_RUN: 0.035, SPREAD_AIR: 0.06, RECOIL: 0.012,
     AUTO: true, SPEED_MULT: 1,
   },
   awp: {
-    id: 'awp', slot: 2, NAME: 'AWP', kind: 'gun',
+    id: 'awp', cat: 'primary', NAME: 'AWP', kind: 'gun', DESC: 'Dürbünlü keskin nişancı, tek atış',
     // Nereye vurursan vur tek atış (100 can)
     DAMAGE: 115, HEADSHOT_MULT: 1, FIRE_INTERVAL: 1450, MAG_SIZE: 5, RELOAD_TIME: 2900, RANGE: 300,
     // Dürbünsüz çok dağınık, dürbünle durunca tam isabet
@@ -75,23 +77,77 @@ export const WEAPONS = {
     ZOOM_FOV: [40, 15], // dürbün seviyeleri (sağ tık)
   },
   knife: {
-    id: 'knife', slot: 3, NAME: 'SHIV', kind: 'melee',
+    id: 'knife', cat: 'melee', NAME: 'SHIV', kind: 'melee',
     DAMAGE: 40, HEAVY_DAMAGE: 90, HEADSHOT_MULT: 1.5, FIRE_INTERVAL: 420, HEAVY_INTERVAL: 1000, RANGE: 2.1,
     SPREAD_BASE: 0, SPREAD_MOVE: 0, SPREAD_RUN: 0, SPREAD_AIR: 0, RECOIL: 0,
     AUTO: true, SPEED_MULT: 1.1, MAG_SIZE: 0,
   },
   he: {
-    id: 'he', slot: 4, NAME: 'KABOOM', kind: 'grenade',
+    id: 'he', cat: 'grenade', NAME: 'KABOOM', kind: 'grenade', DESC: 'Patlayıcı bomba',
     DAMAGE: 98, RADIUS: 7, FUSE: 1600, FIRE_INTERVAL: 900, COUNT: 1, SPEED_MULT: 1, MAG_SIZE: 0,
     SPREAD_BASE: 0, SPREAD_MOVE: 0, SPREAD_RUN: 0, SPREAD_AIR: 0, RECOIL: 0,
   },
   smoke: {
-    id: 'smoke', slot: 5, NAME: 'PUFF', kind: 'grenade',
+    id: 'smoke', cat: 'grenade', NAME: 'PUFF', kind: 'grenade', DESC: 'Sis bombası',
     RADIUS: 4.2, FUSE: 1800, DURATION: 16000, FIRE_INTERVAL: 900, COUNT: 1, SPEED_MULT: 1, MAG_SIZE: 0,
     SPREAD_BASE: 0, SPREAD_MOVE: 0, SPREAD_RUN: 0, SPREAD_AIR: 0, RECOIL: 0,
   },
 };
-export const WEAPON_ORDER = ['rifle', 'awp', 'knife', 'he', 'smoke'];
+Object.assign(WEAPONS, {
+  carbine: {
+    id: 'carbine', cat: 'primary', NAME: 'STREAK-4', kind: 'gun', DESC: 'İsabetli, hızlı karabina',
+    DAMAGE: 22, HEADSHOT_MULT: 2.2, FIRE_INTERVAL: 95, MAG_SIZE: 30, RELOAD_TIME: 2000, RANGE: 160,
+    SPREAD_BASE: 0.002, SPREAD_MOVE: 0.015, SPREAD_RUN: 0.03, SPREAD_AIR: 0.06, RECOIL: 0.009,
+    AUTO: true, SPEED_MULT: 1,
+  },
+  smg: {
+    id: 'smg', cat: 'primary', NAME: 'BUZZ-5', kind: 'gun', DESC: 'Çok hızlı, hafif hafif makineli',
+    DAMAGE: 17, HEADSHOT_MULT: 2, FIRE_INTERVAL: 78, MAG_SIZE: 30, RELOAD_TIME: 1700, RANGE: 90,
+    SPREAD_BASE: 0.006, SPREAD_MOVE: 0.012, SPREAD_RUN: 0.02, SPREAD_AIR: 0.05, RECOIL: 0.007,
+    AUTO: true, SPEED_MULT: 1.08,
+  },
+  lmg: {
+    id: 'lmg', cat: 'primary', NAME: 'THUNDER', kind: 'gun', DESC: '100 mermilik ağır makineli',
+    DAMAGE: 26, HEADSHOT_MULT: 2, FIRE_INTERVAL: 92, MAG_SIZE: 100, RELOAD_TIME: 4300, RANGE: 150,
+    SPREAD_BASE: 0.009, SPREAD_MOVE: 0.04, SPREAD_RUN: 0.06, SPREAD_AIR: 0.1, RECOIL: 0.013,
+    AUTO: true, SPEED_MULT: 0.8,
+  },
+  popper: {
+    id: 'popper', cat: 'pistol', NAME: 'POPGUN', kind: 'gun', DESC: 'Hafif, isabetli tabanca',
+    DAMAGE: 24, HEADSHOT_MULT: 2.5, FIRE_INTERVAL: 150, MAG_SIZE: 12, RELOAD_TIME: 1600, RANGE: 120,
+    SPREAD_BASE: 0.005, SPREAD_MOVE: 0.02, SPREAD_RUN: 0.03, SPREAD_AIR: 0.06, RECOIL: 0.016,
+    AUTO: false, SPEED_MULT: 1.05,
+  },
+  cannon: {
+    id: 'cannon', cat: 'pistol', NAME: 'HAND CANNON', kind: 'gun', DESC: '.50 ağır tabanca, kafaya tek atış',
+    DAMAGE: 48, HEADSHOT_MULT: 2.5, FIRE_INTERVAL: 300, MAG_SIZE: 7, RELOAD_TIME: 2100, RANGE: 140,
+    SPREAD_BASE: 0.008, SPREAD_MOVE: 0.04, SPREAD_RUN: 0.06, SPREAD_AIR: 0.1, RECOIL: 0.045,
+    AUTO: false, SPEED_MULT: 1.02,
+    TWIRL: true, DEPLOY: 750, // çekilirken parmakta döner
+  },
+});
+
+// Snapshot'ta silah sırası (indeks). Yeni silahlar sona eklenir.
+export const WEAPON_ORDER = ['rifle', 'awp', 'knife', 'he', 'smoke', 'carbine', 'smg', 'lmg', 'popper', 'cannon'];
+
+// Seçilebilir silahlar
+export const LOADOUT_OPTIONS = {
+  primary: ['rifle', 'carbine', 'smg', 'lmg', 'awp'],
+  pistol: ['cannon', 'popper'],
+  nade: ['he', 'smoke'],
+};
+export const DEFAULT_LOADOUT = { primary: 'rifle', pistol: 'cannon', nade: 'he' };
+export const BUY_TIME = 10000; // doğduktan sonra ateş etmeden bu süre içinde silah değiştirilebilir
+
+/** Geçersiz değerleri varsayılana çeker */
+export function cleanLoadout(l) {
+  const out = { ...DEFAULT_LOADOUT };
+  for (const k of Object.keys(LOADOUT_OPTIONS)) if (l && LOADOUT_OPTIONS[k].includes(l[k])) out[k] = l[k];
+  return out;
+}
+
+/** Yuva tuşu: 1 ana · 2 tabanca · 3 bıçak · 4 bomba */
+export const SLOT_OF_CAT = { primary: 1, pistol: 2, melee: 3, grenade: 4 };
 
 // Eski kodla uyumluluk (botlar vb.)
 export const WEAPON = WEAPONS.rifle;

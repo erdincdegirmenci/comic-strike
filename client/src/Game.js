@@ -14,7 +14,7 @@ import { part } from './fx/Toon.js';
 const r2 = (v) => Math.round(v * 100) / 100;
 const r3 = (v) => Math.round(v * 1000) / 1000;
 const KILL_WORDS = ['KAPOW!', 'BLAM!', 'WHAM!', 'ZAP!', 'BOOM!', 'POW!'];
-const SLOT_KEYS = { Digit1: 'rifle', Digit2: 'awp', Digit3: 'knife', Digit4: 'he', Digit5: 'smoke' };
+const SLOT_KEYS = { Digit1: 1, Digit2: 2, Digit3: 3, Digit4: 4 };
 const NADE_GEO = {
   he: new THREE.SphereGeometry(0.1, 10, 8),
   smoke: new THREE.CylinderGeometry(0.08, 0.08, 0.22, 10),
@@ -91,8 +91,17 @@ export class Game {
     on(MSG.HIT, this.onHit);
     on(MSG.DAMAGED, this.onDamaged);
     on(MSG.KILL, this.onKill);
+    on(MSG.LOADOUT, (d) => {
+      // Silah seçimi hemen uygulandıysa yeni silahları eline al
+      if (d.now && this.alive) {
+        this.weapon.reset(d.ammo, d.nades, d.loadout);
+        this.switchBackAt = 0;
+        this.sfx.draw();
+      }
+      this.onLoadout?.(d);
+    });
     on(MSG.AMMO, (d) => {
-      const w = d.w ?? 'rifle';
+      const w = d.w ?? this.weapon.current;
       this.weapon.ammo[w] = d.ammo;
       if (w === this.weapon.current) this.weapon.reloading = false;
     });
@@ -135,7 +144,7 @@ export class Game {
       this.alive = true;
       this.hp = PLAYER.MAX_HP;
       this.deathT = 0;
-      this.weapon.reset(d.ammo, d.nades);
+      this.weapon.reset(d.ammo, d.nades, d.loadout);
       this.weapon.visible = true;
       this.switchBackAt = 0;
       this.hud.respawn(null);
@@ -318,6 +327,7 @@ export class Game {
     this.fov = null; // updateCamera FOV'u yeniden uygular
     this.camera.fov = this.settings.fov;
     this.camera.updateProjectionMatrix();
+    this.weapon.setHand(this.settings.hand);
   }
 
   // ---------------- Atış ----------------
@@ -383,7 +393,7 @@ export class Game {
     else if (hit) this.effects.impact(hit.point, hit.normal);
 
     _end.copy(_eye).addScaledVector(_dir, dist);
-    _from.copy(_eye).addScaledVector(_right, 0.16).addScaledVector(_up, -0.14).addScaledVector(_fwd, 0.5);
+    _from.copy(_eye).addScaledVector(_right, 0.16 * this.weapon.side).addScaledVector(_up, -0.14).addScaledVector(_fwd, 0.5);
     this.effects.tracer(_from, _end);
 
     this.net.emit(MSG.SHOOT, { d: [r3(_dir.x), r3(_dir.y), r3(_dir.z)] });
@@ -438,13 +448,18 @@ export class Game {
     const input = this.input;
     const wp = this.weapon;
 
-    // Silah seçimi: 1-5, fare tekeri, Q (son silah)
-    for (const [key, id] of Object.entries(SLOT_KEYS)) if (input.pressed(key)) this.switchWeapon(id, now);
+    // Silah seçimi: 1 ana · 2 tabanca · 3 bıçak · 4 bomba, fare tekeri, Q (son silah)
+    for (const [key, slot] of Object.entries(SLOT_KEYS)) {
+      if (input.pressed(key)) {
+        const id = wp.slotWeapon(slot);
+        if (id) this.switchWeapon(id, now);
+      }
+    }
     if (input.pressed('KeyQ')) this.switchWeapon(wp.has(wp.previous) ? wp.previous : 'knife', now);
     if (input.wheel) this.switchWeapon(wp.cycle(input.wheel > 0 ? 1 : -1), now);
     if (this.switchBackAt && now >= this.switchBackAt) {
       this.switchBackAt = 0;
-      const back = wp.has(wp.previous) && WEAPONS[wp.previous].kind !== 'grenade' ? wp.previous : 'rifle';
+      const back = wp.has(wp.previous) && WEAPONS[wp.previous].kind !== 'grenade' ? wp.previous : wp.loadout.primary;
       this.switchWeapon(back, now);
     }
 
@@ -495,6 +510,7 @@ export class Game {
     }
 
     if (controls) this.handleWeaponInput(now);
+    if (input.locked && this.state !== 'ended' && input.pressed('KeyB')) this.onBuyMenu?.();
     this.weapon.update(dt, now, this.local, look);
 
     // Girdiyi sunucuya gönder (saniyede CLIENT_SEND_RATE)
@@ -582,7 +598,7 @@ export class Game {
     const wp = this.weapon;
     hud.setHealth(this.alive ? this.hp : 0);
     hud.setAmmo(wp.def, wp.count, wp.reloading);
-    hud.setWeapons(wp.current, wp.nades, this.alive && this.state !== 'ended');
+    hud.setWeapons(wp.current, wp.owned, wp.nades, this.alive && this.state !== 'ended');
     hud.setScores(this.scores.red, this.scores.blue, this.scoreLimit);
     hud.setPing(this.myPing);
     const elapsed = this.state === 'playing' ? now - this.timeStamp : 0;
