@@ -1,7 +1,7 @@
 /**
  * Sunucu bağlantısı.
  * Aşama 1: Henüz multiplayer yok, oyun tek kişilik test modunda çalışır.
- * Bu sınıf şimdilik mesajları yok sayar. Aşama 5'te SignalR bağlantısı buraya gelecek.
+ * Bu sınıf şimdilik mesajları yok sayar. Aşama 5'te Socket.IO bağlantısı buraya gelecek.
  */
 export class Network {
   constructor() {

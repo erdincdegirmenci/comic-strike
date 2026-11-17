@@ -1,14 +1,14 @@
 {
   "name": "comicstrike",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
-  "workspaces": ["shared", "client"],
+  "workspaces": ["shared", "server", "client"],
+  "engines": { "node": ">=20" },
   "scripts": {
-    "dev": "concurrently -k -n server,client -c yellow,cyan \"dotnet watch --project server/ComicStrike.Server run -- --no-browser\" \"npm run dev -w client\"",
+    "dev": "concurrently -k -n server,client -c yellow,cyan \"node --watch server/src/index.js --no-browser\" \"npm run dev -w client\"",
     "build": "npm run build -w client",
-    "server": "dotnet run --project server/ComicStrike.Server -c Release",
-    "publish": "npm run build && dotnet publish server/ComicStrike.Server -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o publish"
+    "start": "node server/src/index.js"
   },
   "devDependencies": {
     "concurrently": "^9.0.0"
