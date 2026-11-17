@@ -19,6 +19,7 @@ Mesaj isimleri `shared/protocol.js` içindedir.
 | `switch` | `'rifle' \| 'awp' \| 'knife' \| 'he' \| 'smoke'` | Silah değiştir |
 | `throw` | `{d:[x,y,z]}` | Elindeki bombayı at |
 | `spray` | `{p, n}` | Duvara sticker (nokta + yüzey normali) |
+| `set_loadout` | `{primary, pistol, nade}` | Silah seçimi. Doğuştan sonra 10 sn içinde ve ateş etmeden hemen, yoksa sonraki doğuşta |
 
 ## Sunucu → İstemci
 | Mesaj | Veri |
@@ -37,6 +38,7 @@ Mesaj isimleri `shared/protocol.js` içindedir.
 | `grenade` | `{g, t, id, o, v}`: bomba atıldı; herkes `shared/grenade.js` ile aynı yörüngeyi hesaplar |
 | `boom` | `{g, t, p}`: bomba patladı / sis açıldı |
 | `sprayed` | `{id, c, p, n}`: sticker yapıştırıldı |
+| `loadout` | `{loadout, ammo, nades, now}`: silah seçimi kaydedildi (`now` = hemen uygulandı) |
 | `match_end` | `{winner, scores, players}` |
 | `sping` | ack ile ping ölçümü |
 

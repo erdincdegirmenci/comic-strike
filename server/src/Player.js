@@ -1,4 +1,4 @@
-import { PLAYER, WEAPONS, FLAG } from '@comic-strike/shared/constants.js';
+import { PLAYER, WEAPONS, FLAG, DEFAULT_LOADOUT } from '@comic-strike/shared/constants.js';
 
 /** Sunucu tarafında bir oyuncunun tüm durumu. */
 export class Player {
@@ -8,6 +8,9 @@ export class Player {
     this.name = name;
     this.team = team;
     this.char = char;
+    this.loadout = { ...DEFAULT_LOADOUT };
+    this.spawnedAt = 0;
+    this.fired = false; // doğduktan sonra ateş etti mi (silah değiştirme süresi için)
     this.ready = false;
     this.kills = 0;
     this.deaths = 0;
@@ -23,11 +26,12 @@ export class Player {
     this.protectedUntil = 0;
 
     this.weapon = 'rifle';
-    this.ammo = { rifle: WEAPONS.rifle.MAG_SIZE, awp: WEAPONS.awp.MAG_SIZE };
-    this.nades = { he: WEAPONS.he.COUNT, smoke: WEAPONS.smoke.COUNT };
+    this.ammo = {};
+    this.nades = {};
     this.reloadUntil = 0;
     this.lastShot = 0;
     this.lastSpray = 0;
+    this.resetLoadout();
 
     this.lastInput = 0;
     this.rtt = 80;
@@ -49,11 +53,19 @@ export class Player {
 
   /** Doğuşta silah/mermi/bomba sıfırlama */
   resetLoadout() {
-    this.weapon = 'rifle';
-    this.ammo = { rifle: WEAPONS.rifle.MAG_SIZE, awp: WEAPONS.awp.MAG_SIZE };
-    this.nades = { he: WEAPONS.he.COUNT, smoke: WEAPONS.smoke.COUNT };
+    const l = this.loadout;
+    this.weapon = l.primary;
+    this.ammo = { [l.primary]: WEAPONS[l.primary].MAG_SIZE, [l.pistol]: WEAPONS[l.pistol].MAG_SIZE };
+    this.nades = { [l.nade]: WEAPONS[l.nade].COUNT };
     this.reloadUntil = 0;
     this.lastShot = 0;
+    this.fired = false;
+  }
+
+  /** Bu oyuncunun elinde olabilecek silahlar */
+  owns(w) {
+    const l = this.loadout;
+    return w === 'knife' || w === l.primary || w === l.pistol || w === l.nade;
   }
 
   record(now) {

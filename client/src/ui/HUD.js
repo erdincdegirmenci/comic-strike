@@ -1,6 +1,8 @@
-import { TEAM_INFO, WEAPONS, WEAPON_ORDER } from '@comic-strike/shared/constants.js';
+import { TEAM_INFO, WEAPONS, SLOT_OF_CAT } from '@comic-strike/shared/constants.js';
 
-const KF_ICON = { rifle: '▬▬', awp: '━━⊕', knife: '🔪', he: '💣', smoke: '☁' };
+const KF_ICON = {
+  rifle: '▬▬', carbine: '▬▬', smg: '▬', lmg: '▬▬▬', awp: '━━⊕', popper: '⌐', cannon: '⌐■', knife: '🔪', he: '💣', smoke: '☁',
+};
 
 const $ = (id) => document.getElementById(id);
 
@@ -58,17 +60,17 @@ export class HUD {
   }
 
   /** Alttaki silah yuvaları (1-5) */
-  setWeapons(current, nades, visible) {
-    this.set('weapons', `${current}|${nades.he}|${nades.smoke}|${visible}`, () => {
+  setWeapons(current, owned, nades, visible) {
+    this.set('weapons', `${current}|${owned.join()}|${JSON.stringify(nades)}|${visible}`, () => {
       const box = $('weapons');
       box.classList.toggle('hidden', !visible);
       box.replaceChildren();
-      for (const id of WEAPON_ORDER) {
+      for (const id of owned) {
         const w = WEAPONS[id];
-        const empty = w.kind === 'grenade' && nades[id] <= 0;
+        const empty = w.kind === 'grenade' && !(nades[id] > 0);
         const slot = el('div', `slot${id === current ? ' active' : ''}${empty ? ' empty' : ''}`);
-        slot.append(el('b', '', String(w.slot)), el('span', '', w.NAME));
-        if (w.kind === 'grenade') slot.append(el('i', '', `×${nades[id]}`));
+        slot.append(el('b', '', String(SLOT_OF_CAT[w.cat])), el('span', '', w.NAME));
+        if (w.kind === 'grenade') slot.append(el('i', '', `×${nades[id] ?? 0}`));
         box.append(slot);
       }
     });

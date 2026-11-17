@@ -1,10 +1,25 @@
 import { MSG } from '@comic-strike/shared/protocol.js';
-import { TEAM_INFO, CHARACTERS, CHARACTER_IDS } from '@comic-strike/shared/constants.js';
+import { TEAM_INFO, CHARACTERS, CHARACTER_IDS, WEAPONS, LOADOUT_OPTIONS, cleanLoadout } from '@comic-strike/shared/constants.js';
 import { MAPS, MAP_IDS } from '@comic-strike/shared/maps.js';
 import { saveSettings } from './settings.js';
 import { drawSpray } from '../fx/Sprays.js';
 
 const $ = (id) => document.getElementById(id);
+
+// Kontroller tablosu: [eylem, klavye, fare]
+const CONTROLS = [
+  ['HAREKET'],
+  ['İLERİ', 'W', ''], ['GERİ', 'S', ''], ['SOL', 'A', ''], ['SAĞ', 'D', ''],
+  ['ZIPLA', 'SPACE', ''], ['KOŞ', 'LEFT SHIFT', ''], ['ÇÖMEL', 'LEFT CTRL / C', ''],
+  ['SAVAŞ'],
+  ['ATEŞ / BOMBA AT', '', 'LEFT MOUSE BUTTON'], ['DÜRBÜN / AĞIR BIÇAK', '', 'RIGHT MOUSE BUTTON'],
+  ['ŞARJÖR DEĞİŞTİR', 'R', ''],
+  ['ANA SİLAH', '1', ''], ['TABANCA', '2', ''], ['BIÇAK', '3', ''], ['BOMBA', '4', ''],
+  ['ÖNCEKİ SİLAH', 'Q', 'MOUSE WHEEL UP'], ['SONRAKİ SİLAH', '', 'MOUSE WHEEL DOWN'],
+  ['SİLAH SEÇİMİ', 'B', ''],
+  ['DİĞER'],
+  ['STICKER YAPIŞTIR', 'T', ''], ['SKOR TABLOSU', 'TAB', ''], ['MENÜ / DURAKLAT', 'ESC', ''],
+];
 
 /**
  * Menüler ve uygulama akışı:
@@ -37,6 +52,77 @@ export class Menu {
     $('inp-name').value = this.settings.name;
     this.buildCharacters();
     this.buildMaps();
+    this.buildControls();
+    this.buildLoadout();
+    this.game.onBuyMenu = () => this.openLoadout();
+    this.game.onLoadout = (d) => {
+      this.msg('loadout-msg', d.now ? 'Silahların eline verildi!' : 'Seçimin bir sonraki doğuşta geçerli olacak.', false);
+    };
+  }
+
+  buildControls() {
+    const t = $('controls-table');
+    const row = (cells, cls) => {
+      const tr = document.createElement('tr');
+      if (cls) tr.className = cls;
+      for (const [tag, text, c] of cells) {
+        const td = document.createElement(tag);
+        td.textContent = text;
+        if (c) td.className = c;
+        tr.append(td);
+      }
+      t.append(tr);
+    };
+    row([['th', 'EYLEM'], ['th', 'KLAVYE'], ['th', 'FARE']]);
+    for (const [action, key, mouse] of CONTROLS) {
+      if (key === undefined) row([['td', action, 'group'], ['td', ''], ['td', '']], 'group-row');
+      else row([['td', action, 'act'], ['td', key, 'key'], ['td', mouse, 'key']]);
+    }
+  }
+
+  /** Silah seçim kartları */
+  buildLoadout() {
+    this.settings.loadout = cleanLoadout(this.settings.loadout);
+    for (const box of document.querySelectorAll('.lo-cards')) {
+      const cat = box.dataset.cat;
+      for (const id of LOADOUT_OPTIONS[cat]) {
+        const w = WEAPONS[id];
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'lo-card';
+        b.dataset.weapon = id;
+        const name = document.createElement('b');
+        name.textContent = w.NAME;
+        const desc = document.createElement('span');
+        desc.textContent = w.DESC ?? '';
+        const stats = document.createElement('i');
+        stats.textContent = w.kind === 'gun'
+          ? `HASAR ${w.DAMAGE} · ŞARJÖR ${w.MAG_SIZE} · ${Math.round(60000 / w.FIRE_INTERVAL)} RPM`
+          : w.id === 'he' ? `HASAR ${w.DAMAGE} · ${w.RADIUS} m` : `${w.DURATION / 1000} sn sis`;
+        b.append(name, desc, stats);
+        b.addEventListener('click', () => {
+          this.sfx.ensure();
+          this.settings.loadout[cat] = id;
+          saveSettings(this.settings);
+          this.renderLoadout();
+          if (this.game.active) this.net.emit(MSG.SET_LOADOUT, this.settings.loadout);
+        });
+        box.append(b);
+      }
+    }
+    this.renderLoadout();
+  }
+
+  renderLoadout() {
+    for (const box of document.querySelectorAll('.lo-cards')) {
+      for (const b of box.children) b.classList.toggle('active', this.settings.loadout[box.dataset.cat] === b.dataset.weapon);
+    }
+  }
+
+  openLoadout() {
+    this.msg('loadout-msg', 'Doğduktan sonraki 10 sn içinde (ateş etmeden) hemen değişir.', false);
+    this.show('loadout');
+    this.input.unlock();
   }
 
   /** Lobide harita seçimi (sadece host değiştirebilir) */
@@ -112,9 +198,9 @@ export class Menu {
   action(a) {
     switch (a) {
       case 'play':
-        return this.request(MSG.QUICK_PLAY, { name: this.playerName(), char: this.settings.char }, 'main-msg');
+        return this.request(MSG.QUICK_PLAY, { name: this.playerName(), char: this.settings.char, loadout: this.settings.loadout }, 'main-msg');
       case 'create':
-        return this.request(MSG.CREATE_ROOM, { name: this.playerName(), char: this.settings.char }, 'main-msg');
+        return this.request(MSG.CREATE_ROOM, { name: this.playerName(), char: this.settings.char, loadout: this.settings.loadout }, 'main-msg');
       case 'join':
         this.playerName();
         this.show('join');
@@ -123,13 +209,21 @@ export class Menu {
       case 'join-confirm': {
         const code = $('inp-code').value.trim().toUpperCase();
         if (code.length < 4) return this.msg('join-msg', 'Oda kodunu gir.');
-        return this.request(MSG.JOIN_ROOM, { name: this.settings.name, char: this.settings.char, code }, 'join-msg');
+        return this.request(MSG.JOIN_ROOM, { name: this.settings.name, char: this.settings.char, loadout: this.settings.loadout, code }, 'join-msg');
       }
       case 'settings':
         this.settingsBack = this.current;
         return this.show('settings');
       case 'back':
+        if (this.current === 'controls') return this.show('settings');
         return this.show(this.current === 'settings' ? this.settingsBack : 'main');
+      case 'controls':
+        return this.show('controls');
+      case 'loadout':
+        return this.openLoadout();
+      case 'loadout-done':
+        if (!this.game.active) return this.show('main');
+        return this.resume();
       case 'team-red':
       case 'team-blue':
         return this.net.emit(MSG.SET_TEAM, a.slice(5));
@@ -165,7 +259,7 @@ export class Menu {
   onLockChange(locked) {
     if (!this.game.active) return;
     if (locked) this.show('none');
-    else if (this.game.state !== 'ended' && this.current !== 'settings') {
+    else if (this.game.state !== 'ended' && !['settings', 'controls', 'loadout'].includes(this.current)) {
       $('pause-title').textContent = 'PAUSED';
       $('btn-resume').textContent = 'RESUME';
       this.show('pause');
@@ -192,7 +286,9 @@ export class Menu {
       this.game.start(info, this.net.id);
       $('pause-title').textContent = 'GET READY!';
       $('btn-resume').textContent = 'CLICK TO FIGHT';
-      this.show('pause');
+      // Maç başında önce silah seçimi
+      this.net.emit(MSG.SET_LOADOUT, this.settings.loadout);
+      this.openLoadout();
       document.body.classList.remove('in-menu');
     });
 
@@ -289,6 +385,7 @@ export class Menu {
     bind('set-fov', 'fov', (v) => `${v}°`);
     bind('set-vol', 'volume', (v) => `${Math.round(v * 100)}%`);
     bind('set-quality', 'quality', (v) => v, String);
+    bind('set-hand', 'hand', (v) => v, String);
   }
 
   applySettings() {

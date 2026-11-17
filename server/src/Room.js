@@ -1,5 +1,5 @@
 import {
-  PLAYER, WEAPONS, WEAPON_ORDER, GRENADE, SPRAY, MATCH, SERVER_TICK_RATE, MAX_PLAYERS, MAX_PER_TEAM, MIN_PLAYERS_TO_START, INTERP_DELAY, TEAMS,
+  PLAYER, WEAPONS, WEAPON_ORDER, GRENADE, SPRAY, BUY_TIME, cleanLoadout, MATCH, SERVER_TICK_RATE, MAX_PLAYERS, MAX_PER_TEAM, MIN_PLAYERS_TO_START, INTERP_DELAY, TEAMS,
 } from '@comic-strike/shared/constants.js';
 import { stepGrenade, throwVelocity } from '@comic-strike/shared/grenade.js';
 import { MSG } from '@comic-strike/shared/protocol.js';
@@ -76,9 +76,10 @@ export class Room {
 
   // ---------------- Üyelik ----------------
 
-  addPlayer(socket, name, char) {
+  addPlayer(socket, name, char, loadout) {
     const team = this.teamCount('red') <= this.teamCount('blue') ? 'red' : 'blue';
     const p = new Player(socket, name, team, char);
+    p.loadout = cleanLoadout(loadout);
     this.players.set(p.id, p);
     if (!this.hostId) this.hostId = p.id;
     socket.join(this.code);
@@ -225,12 +226,13 @@ export class Room {
     p.alive = true;
     p.life++;
     p.resetLoadout();
+    p.spawnedAt = now;
     p.respawnAt = 0;
     p.protectedUntil = now + PLAYER.SPAWN_PROTECTION;
     p.history.length = 0;
     p.lastInput = now;
     p.record(now);
-    this.emit(MSG.RESPAWN, { id: p.id, p: p.pos, yaw: p.yaw, life: p.life, ammo: p.ammo, nades: p.nades });
+    this.emit(MSG.RESPAWN, { id: p.id, p: p.pos, yaw: p.yaw, life: p.life, ammo: p.ammo, nades: p.nades, loadout: p.loadout });
   }
 
   // ---------------- Oyun içi girdiler ----------------
@@ -269,13 +271,13 @@ export class Room {
     const p = this.players.get(id);
     if (!p || !p.alive || p.reloadUntil) return;
     const w = WEAPONS[p.weapon];
-    if (w.kind !== 'gun' || p.ammo[w.id] >= w.MAG_SIZE) return;
+    if (w.kind !== 'gun' || !(p.ammo[w.id] < w.MAG_SIZE)) return;
     p.reloadUntil = Date.now() + w.RELOAD_TIME;
   }
 
   onSwitch(id, w) {
     const p = this.players.get(id);
-    if (!p || typeof w !== 'string' || !WEAPONS[w] || p.weapon === w) return;
+    if (!p || typeof w !== 'string' || !WEAPONS[w] || p.weapon === w || !p.owns(w)) return;
     p.weapon = w;
     p.reloadUntil = 0; // silah değişince şarjör değiştirme iptal
   }
@@ -291,12 +293,13 @@ export class Room {
     const dir = norm(d.d);
     if (!dir) return;
     if (w.kind === 'gun') {
-      if (p.reloadUntil || p.ammo[w.id] <= 0) return;
+      if (p.reloadUntil || !(p.ammo[w.id] > 0)) return;
       p.ammo[w.id]--;
     }
 
     p.lastShot = now + (heavy ? w.HEAVY_INTERVAL : w.FIRE_INTERVAL) * 0.8;
     p.protectedUntil = 0; // ateş eden spawn korumasını kaybeder
+    p.fired = true;
 
     // Lag compensation: hedefleri, atış yapanın gördüğü ana geri sar
     const rewind = now - Math.min(p.rtt + INTERP_DELAY, 400);
@@ -323,12 +326,13 @@ export class Room {
     if (!p || !p.alive || this.state !== 'playing' || !d || !isVec(d.d)) return;
     const w = WEAPONS[p.weapon];
     const now = Date.now();
-    if (w.kind !== 'grenade' || p.nades[w.id] <= 0 || now < p.lastShot) return;
+    if (w.kind !== 'grenade' || !(p.nades[w.id] > 0) || now < p.lastShot) return;
     const dir = norm(d.d);
     if (!dir) return;
     p.nades[w.id]--;
     p.lastShot = now + w.FIRE_INTERVAL * 0.8;
     p.protectedUntil = 0;
+    p.fired = true;
 
     const eye = [p.pos[0], p.pos[1] + p.eyeHeight, p.pos[2]];
     // Elden biraz ileride başlasın; duvarın dibindeysen gözden başla
@@ -339,6 +343,17 @@ export class Room {
     const g = { g: this.nextGid++, t: w.id, by: p, sim: { p: [...o], v: [...v] }, born: now, steps: 0 };
     this.grenades.push(g);
     this.emit(MSG.GRENADE, { g: g.g, t: g.t, id: p.id, o, v });
+  }
+
+  /** Silah seçimi: doğduktan sonra BUY_TIME içinde ve ateş etmeden hemen, yoksa sonraki doğuşta uygulanır */
+  onSetLoadout(id, d) {
+    const p = this.players.get(id);
+    if (!p || !d) return;
+    p.loadout = cleanLoadout(d);
+    const now = Date.now();
+    const canNow = p.alive && this.inMatch && !p.fired && (this.state === 'countdown' || now - p.spawnedAt < BUY_TIME);
+    if (canNow) p.resetLoadout();
+    p.socket.emit(MSG.LOADOUT, { loadout: p.loadout, ammo: p.ammo, nades: p.nades, now: canNow });
   }
 
   onSpray(id, d) {

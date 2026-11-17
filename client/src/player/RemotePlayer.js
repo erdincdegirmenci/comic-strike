@@ -155,7 +155,20 @@ export class RemotePlayer {
     this.nadeMesh = part(G.nade, '#52b788', 0.015);
     this.nadeMesh.position.set(0.22, -0.08, -0.4);
     nade.add(this.nadeMesh);
-    this.guns = { rifle, awp, knife, he: nade, smoke: nade };
+    // Diğer silahlar: basit gövde + namlu (renk ve boy ile ayırt edilir)
+    const simple = (len, color, tipZ, y = -0.12, w = 0.08) => {
+      const g = holder(tipZ);
+      const body = part(new THREE.BoxGeometry(w, 0.11, len), color, 0.02);
+      body.position.set(0.08, y, -0.2 - len / 2);
+      g.add(body);
+      return g;
+    };
+    const carbine = simple(0.62, '#22223b', -0.84);
+    const smg = simple(0.42, '#4f5d75', -0.64);
+    const lmg = simple(0.75, '#5c6b3a', -0.97, -0.12, 0.11);
+    const popper = simple(0.2, '#3d405b', -0.42, -0.08, 0.06);
+    const cannon = simple(0.26, '#c0c6cf', -0.48, -0.08, 0.07);
+    this.guns = { rifle, awp, knife, he: nade, smoke: nade, carbine, smg, lmg, popper, cannon };
     rifle.visible = true;
     this.gunTip = rifle.tip;
     this.arms.add(armR, armL);

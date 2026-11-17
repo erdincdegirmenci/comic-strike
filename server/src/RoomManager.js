@@ -59,7 +59,7 @@ export class RoomManager {
     socket.on(MSG.CREATE_ROOM, (data, cb) => {
       this.leave(socket);
       const room = this.createRoom(false);
-      room.addPlayer(socket, cleanName(data?.name), cleanChar(data?.char));
+      room.addPlayer(socket, cleanName(data?.name), cleanChar(data?.char), data?.loadout);
       reply(cb)({ ok: true, code: room.code });
     });
 
@@ -70,7 +70,7 @@ export class RoomManager {
       if (socket.data.room === room) return reply(cb)({ ok: true, code });
       if (!room.canJoin()) return reply(cb)({ ok: false, error: 'Oda dolu.' });
       this.leave(socket);
-      room.addPlayer(socket, cleanName(data?.name), cleanChar(data?.char));
+      room.addPlayer(socket, cleanName(data?.name), cleanChar(data?.char), data?.loadout);
       reply(cb)({ ok: true, code });
     });
 
@@ -78,7 +78,7 @@ export class RoomManager {
       this.leave(socket);
       let room = [...this.rooms.values()].find((r) => r.isPublic && r.canJoin());
       if (!room) room = this.createRoom(true);
-      room.addPlayer(socket, cleanName(data?.name), cleanChar(data?.char));
+      room.addPlayer(socket, cleanName(data?.name), cleanChar(data?.char), data?.loadout);
       reply(cb)({ ok: true, code: room.code });
     });
 
@@ -103,6 +103,7 @@ export class RoomManager {
     forward(MSG.SWITCH, 'onSwitch');
     forward(MSG.THROW, 'onThrow');
     forward(MSG.SPRAY, 'onSpray');
+    forward(MSG.SET_LOADOUT, 'onSetLoadout');
 
     socket.on('disconnect', () => {
       this.leave(socket);
