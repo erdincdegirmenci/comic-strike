@@ -4,10 +4,17 @@ import RAPIER from '@dimforge/rapier3d-compat';
 export class Physics {
   constructor() {
     this.world = new RAPIER.World({ x: 0, y: 0, z: 0 });
+    this.mapColliders = [];
   }
 
   addBox(x, y, z, hx, hy, hz) {
-    this.world.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(x, y, z));
+    this.mapColliders.push(this.world.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(x, y, z)));
+  }
+
+  /** Harita değişirken eski haritanın kutularını kaldır */
+  clearMap() {
+    for (const c of this.mapColliders) this.world.removeCollider(c, false);
+    this.mapColliders.length = 0;
   }
 
   step() {

@@ -281,3 +281,19 @@ body.in-menu #halftone {
 #char-pick button.active { background: var(--yellow); box-shadow: 3px 3px 0 var(--ink); transform: rotate(-2deg); }
 .field small { font-size: 12px; color: #666; letter-spacing: 0; }
 .controls-hint { text-align: center; line-height: 1.5; }
+
+/* ---------------- Harita seçimi ---------------- */
+.map-row { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
+.map-row i { font-style: normal; color: #666; }
+#map-pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.map-card {
+  font-family: var(--font); font-size: 18px; letter-spacing: 1px; cursor: pointer; color: var(--ink);
+  border: 3px solid var(--ink); border-radius: 8px; padding: 18px 6px; opacity: 0.6;
+  text-shadow: 2px 2px 0 #fff;
+}
+.map-card.map-city { background: linear-gradient(180deg, #8ecae6 50%, #565b69 50%); }
+.map-card.map-pool { background: linear-gradient(180deg, #8ecae6 45%, #4cc9f0 45%, #4cc9f0 75%, #f1e3c8 75%); }
+.map-card.map-frost { background: linear-gradient(180deg, #cfe8f3 50%, #a8dadc 50%, #f1faee 80%); }
+.map-card.active { opacity: 1; box-shadow: 4px 4px 0 var(--ink); transform: rotate(-1.5deg); }
+.map-card:disabled { cursor: default; }
+.map-card:disabled:not(.active) { opacity: 0.35; }

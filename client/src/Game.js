@@ -3,7 +3,7 @@ import { MSG } from '@comic-strike/shared/protocol.js';
 import {
   PLAYER, WEAPONS, WEAPON_ORDER, SPRAY, CLIENT_SEND_RATE, INTERP_DELAY, TEAM_INFO,
 } from '@comic-strike/shared/constants.js';
-import { CITY_ARENA } from '@comic-strike/shared/map.js';
+import { solidsOf } from '@comic-strike/shared/maps.js';
 import { stepGrenade } from '@comic-strike/shared/grenade.js';
 import { LocalPlayer } from './player/LocalPlayer.js';
 import { RemotePlayer } from './player/RemotePlayer.js';
@@ -14,7 +14,6 @@ import { part } from './fx/Toon.js';
 const r2 = (v) => Math.round(v * 100) / 100;
 const r3 = (v) => Math.round(v * 1000) / 1000;
 const KILL_WORDS = ['KAPOW!', 'BLAM!', 'WHAM!', 'ZAP!', 'BOOM!', 'POW!'];
-const SOLIDS = CITY_ARENA.boxes.filter((b) => b.solid);
 const SLOT_KEYS = { Digit1: 'rifle', Digit2: 'awp', Digit3: 'knife', Digit4: 'he', Digit5: 'smoke' };
 const NADE_GEO = {
   he: new THREE.SphereGeometry(0.1, 10, 8),
@@ -38,7 +37,7 @@ const _mat = new THREE.Matrix4();
  */
 export class Game {
   constructor(ctx) {
-    Object.assign(this, ctx); // view, physics, input, sfx, hud, net, settings
+    Object.assign(this, ctx); // view, physics, input, sfx, hud, net, settings, world
     this.scene = this.view.scene;
     this.camera = this.view.camera;
     this.local = new LocalPlayer(this.physics);
@@ -261,6 +260,9 @@ export class Game {
 
   start(info, myId) {
     this.reset();
+    this.world.load(info.map);
+    this.solids = solidsOf(this.world.id);
+    this.local.traction = this.world.map.traction ?? 1;
     this.active = true;
     this.input.gameActive = true;
     this.myId = myId;
@@ -526,7 +528,7 @@ export class Game {
       const target = Math.floor((now - g.born) / 1000 / (1 / 60));
       let n = 0;
       while (g.steps < target && n++ < 600) {
-        stepGrenade(g.sim, SOLIDS);
+        stepGrenade(g.sim, this.solids);
         g.steps++;
         // Sekme sesi: dikey hız yön değiştirdiyse
         if (g.lastVy < -2 && g.sim.v[1] > 0) {

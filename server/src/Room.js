@@ -3,12 +3,10 @@ import {
 } from '@comic-strike/shared/constants.js';
 import { stepGrenade, throwVelocity } from '@comic-strike/shared/grenade.js';
 import { MSG } from '@comic-strike/shared/protocol.js';
-import { CITY_ARENA } from '@comic-strike/shared/map.js';
+import { MAPS, MAP_IDS, DEFAULT_MAP, solidsOf } from '@comic-strike/shared/maps.js';
 import { Player } from './Player.js';
 import { castShot } from './HitScan.js';
 
-const SOLIDS = CITY_ARENA.boxes.filter((b) => b.solid);
-const BOUNDS = CITY_ARENA.bounds;
 const MIN_PLAYERS = Number(process.env.MIN_PLAYERS) || MIN_PLAYERS_TO_START;
 
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -41,12 +39,21 @@ export class Room {
     this.endTimer = null;
     this.grenades = [];
     this.nextGid = 1;
+    this.mapId = DEFAULT_MAP;
     this.sprays = new Map(); // oyuncu id -> son sticker (sonradan katilanlar da gorsun)
     this.timer = setInterval(() => this.tick(), 1000 / SERVER_TICK_RATE);
   }
 
   get size() {
     return this.players.size;
+  }
+
+  get map() {
+    return MAPS[this.mapId];
+  }
+
+  get solids() {
+    return solidsOf(this.mapId);
   }
 
   get inMatch() {
@@ -108,6 +115,7 @@ export class Room {
       code: this.code,
       hostId: this.hostId,
       state: this.state,
+      map: this.mapId,
       isPublic: this.isPublic,
       scores: this.scores,
       minPlayers: MIN_PLAYERS,
@@ -124,6 +132,7 @@ export class Room {
   matchInfo() {
     const now = Date.now();
     return {
+      map: this.mapId,
       roster: [...this.players.values()].map((p) => p.info()),
       scores: this.scores,
       scoreLimit: MATCH.SCORE_LIMIT,
@@ -151,6 +160,12 @@ export class Room {
     const p = this.players.get(id);
     if (!p || this.state !== 'lobby') return;
     p.ready = !!ready;
+    this.broadcastRoom();
+  }
+
+  onSetMap(id, mapId) {
+    if (id !== this.hostId || this.state !== 'lobby' || !MAP_IDS.includes(mapId) || mapId === this.mapId) return;
+    this.mapId = mapId;
     this.broadcastRoom();
   }
 
@@ -182,7 +197,7 @@ export class Room {
   // ---------------- Doğma ----------------
 
   pickSpawn(p) {
-    const points = CITY_ARENA.spawns[p.team];
+    const points = this.map.spawns[p.team];
     const enemies = [...this.players.values()].filter((o) => o.alive && o.team !== p.team);
     if (enemies.length === 0) return points[Math.floor(Math.random() * points.length)];
     let best = points[0];
@@ -201,7 +216,7 @@ export class Room {
 
   spawn(p, index) {
     const now = Date.now();
-    const points = CITY_ARENA.spawns[p.team];
+    const points = this.map.spawns[p.team];
     const sp = index !== undefined ? points[index % points.length] : this.pickSpawn(p);
     p.pos = [sp[0], sp[1], sp[2]];
     p.yaw = sp[3];
@@ -237,7 +252,8 @@ export class Room {
     const up = y - p.pos[1];
     const maxHoriz = PLAYER.RUN_SPEED * 1.35 * dt + 0.35;
     const maxUp = PLAYER.JUMP_VELOCITY * 1.3 * dt + 0.5;
-    const outside = Math.abs(x) > BOUNDS.x + 0.5 || Math.abs(z) > BOUNDS.z + 0.5 || y < BOUNDS.minY || y > BOUNDS.maxY;
+    const B = this.map.bounds;
+    const outside = Math.abs(x) > B.x + 0.5 || Math.abs(z) > B.z + 0.5 || y < B.minY || y > B.maxY;
 
     p.lastInput = now;
     if (horiz > maxHoriz || up > maxUp || outside) {
@@ -292,7 +308,7 @@ export class Room {
         targets.push({ player: o, pos: past.pos, crouch: past.crouch });
       }
     }
-    const hit = castShot(origin, dir, SOLIDS, targets, w.RANGE);
+    const hit = castShot(origin, dir, this.solids, targets, w.RANGE);
     const end = hit.point.map(r2);
 
     p.socket.to(this.code).emit(MSG.SHOT, { id: p.id, o: origin.map(r2), e: end, w: w.id });
@@ -316,7 +332,7 @@ export class Room {
 
     const eye = [p.pos[0], p.pos[1] + p.eyeHeight, p.pos[2]];
     // Elden biraz ileride başlasın; duvarın dibindeysen gözden başla
-    const wall = castShot(eye, dir, SOLIDS, [], 0.6);
+    const wall = castShot(eye, dir, this.solids, [], 0.6);
     const ahead = Math.max(0, Math.min(0.5, wall.distance - 0.15));
     const o = [eye[0] + dir[0] * ahead, eye[1] + dir[1] * ahead - 0.1, eye[2] + dir[2] * ahead].map(r2);
     const v = throwVelocity(dir).map(r2);
@@ -345,7 +361,7 @@ export class Room {
       const g = this.grenades[i];
       const target = Math.floor((now - g.born) / 1000 / GRENADE.STEP);
       while (g.steps < target) {
-        stepGrenade(g.sim, SOLIDS);
+        stepGrenade(g.sim, this.solids);
         g.steps++;
       }
       if (now - g.born < WEAPONS[g.t].FUSE) continue;
@@ -373,7 +389,7 @@ export class Room {
       if (dist >= w.RADIUS) continue;
       // Duvar arkasındakiler etkilenmez
       if (dist > 0.05) {
-        const los = castShot(center, [dx / dist, dy / dist, dz / dist], SOLIDS, [], dist);
+        const los = castShot(center, [dx / dist, dy / dist, dz / dist], this.solids, [], dist);
         if (los.distance < dist - 0.05) continue;
       }
       const dmg = Math.round(w.DAMAGE * (1 - dist / w.RADIUS));
