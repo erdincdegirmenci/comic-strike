@@ -59,6 +59,7 @@ export class Weapon {
     this.swing = 0;
     this.heavy = false;
     this.throwT = 0;
+    this.charge = 0; // bomba basılı tutma (0..1): kol geriye çekilir
     this.scope = 0; // 0 kapalı, 1-2 dürbün seviyesi
     this.resumeScope = 0;
     this.bobT = 0;
@@ -454,7 +455,7 @@ export class Weapon {
     const swingRotY = this.heavy ? 0 : sw * 0.9;
     const swingRotX = this.heavy ? -sw * 0.3 : 0;
     // Bomba fırlatma
-    const th = Math.sin(this.throwT * Math.PI);
+    const th = Math.sin(this.throwT * Math.PI) - this.charge * 0.8; // şarjda kol geride, atınca ileri
     // Son bomba elden çıktıktan sonra el boş kalır (ardından önceki silaha geçilir)
     m.group.visible = !(this.def.kind === 'grenade' && this.nades[this.current] <= 0 && this.throwT < 0.6);
 

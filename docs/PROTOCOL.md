@@ -17,7 +17,7 @@ Mesaj isimleri `shared/protocol.js` içindedir.
 | `shoot` | `{d:[x,y,z], h?}` | Atış yönü (dağılma dahil). Bıçakta `h:1` ağır saldırı |
 | `reload` | — | Elindeki silahı doldurur |
 | `switch` | `'rifle' \| 'awp' \| 'knife' \| 'he' \| 'smoke'` | Silah değiştir |
-| `throw` | `{d:[x,y,z]}` | Elindeki bombayı at |
+| `throw` | `{d:[x,y,z], c}` | Elindeki bombayı at. `c` 0..1: basılı tutma oranı (uzaklık) |
 | `spray` | `{p, n}` | Duvara sticker (nokta + yüzey normali) |
 | `set_loadout` | `{primary, pistol, nade}` | Silah seçimi. Doğuştan sonra 10 sn içinde ve ateş etmeden hemen, yoksa sonraki doğuşta |
 

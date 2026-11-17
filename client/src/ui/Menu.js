@@ -3,6 +3,7 @@ import { TEAM_INFO, CHARACTERS, CHARACTER_IDS, WEAPONS, LOADOUT_OPTIONS, cleanLo
 import { MAPS, MAP_IDS } from '@comic-strike/shared/maps.js';
 import { saveSettings } from './settings.js';
 import { drawSpray } from '../fx/Sprays.js';
+import { WeaponPreview } from './WeaponPreview.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -53,6 +54,7 @@ export class Menu {
     this.buildCharacters();
     this.buildMaps();
     this.buildControls();
+    this.preview = new WeaponPreview($('lo-canvas'));
     this.buildLoadout();
     this.game.onBuyMenu = () => this.openLoadout();
     this.game.onLoadout = (d) => {
@@ -102,6 +104,7 @@ export class Menu {
         b.append(name, desc, stats);
         b.addEventListener('click', () => {
           this.sfx.ensure();
+          this.previewWeapon(id);
           this.settings.loadout[cat] = id;
           saveSettings(this.settings);
           this.renderLoadout();
@@ -113,6 +116,17 @@ export class Menu {
     this.renderLoadout();
   }
 
+  /** Seçilen silahın 3B dönen önizlemesi ve bilgisi */
+  previewWeapon(id) {
+    const w = WEAPONS[id];
+    this.preview.show(id);
+    $('lo-name').textContent = w.NAME;
+    $('lo-desc').textContent = w.DESC ?? '';
+    $('lo-stats').textContent = w.kind === 'gun'
+      ? `HASAR ${w.DAMAGE} · KAFA x${w.HEADSHOT_MULT} · ŞARJÖR ${w.MAG_SIZE} · ${Math.round(60000 / w.FIRE_INTERVAL)} RPM`
+      : w.id === 'he' ? `HASAR ${w.DAMAGE} · ETKİ ALANI ${w.RADIUS} m · basılı tut, uzağa at` : `${w.DURATION / 1000} sn görüş kapatır · basılı tut, uzağa at`;
+  }
+
   renderLoadout() {
     for (const box of document.querySelectorAll('.lo-cards')) {
       for (const b of box.children) b.classList.toggle('active', this.settings.loadout[box.dataset.cat] === b.dataset.weapon);
@@ -122,6 +136,8 @@ export class Menu {
   openLoadout() {
     this.msg('loadout-msg', 'Doğduktan sonraki 10 sn içinde (ateş etmeden) hemen değişir.', false);
     this.show('loadout');
+    this.previewWeapon(this.settings.loadout.primary);
+    this.preview.start();
     this.input.unlock();
   }
 
@@ -165,6 +181,7 @@ export class Menu {
   }
 
   show(name) {
+    if (name !== 'loadout') this.preview?.stop();
     for (const s of document.querySelectorAll('.screen')) s.classList.toggle('hidden', s.id !== `screen-${name}`);
     this.current = name;
     document.body.classList.toggle('in-menu', !this.game.active);
@@ -215,7 +232,7 @@ export class Menu {
         this.settingsBack = this.current;
         return this.show('settings');
       case 'back':
-        if (this.current === 'controls') return this.show('settings');
+        if (this.current === 'controls') return this.show('main');
         return this.show(this.current === 'settings' ? this.settingsBack : 'main');
       case 'controls':
         return this.show('controls');

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { MSG } from '@comic-strike/shared/protocol.js';
 import {
-  PLAYER, WEAPONS, WEAPON_ORDER, SPRAY, CLIENT_SEND_RATE, INTERP_DELAY, TEAM_INFO,
+  PLAYER, GRENADE, WEAPONS, WEAPON_ORDER, SPRAY, CLIENT_SEND_RATE, INTERP_DELAY, TEAM_INFO,
 } from '@comic-strike/shared/constants.js';
 import { solidsOf } from '@comic-strike/shared/maps.js';
 import { stepGrenade } from '@comic-strike/shared/grenade.js';
@@ -77,6 +77,7 @@ export class Game {
     this.shake = 0;
     this.lastSpray = -Infinity;
     this.switchBackAt = 0;
+    this.chargeStart = 0; // bomba basılı tutuluyorsa başlangıç anı
     this.fov = null;
   }
 
@@ -209,6 +210,7 @@ export class Game {
       this.alive = false;
       this.weapon.visible = false;
       this.weapon.scope = 0;
+      this.chargeStart = 0;
       this.killedBy = d.k === d.v ? '' : killer.name;
       this.respawnAt = performance.now() + PLAYER.RESPAWN_TIME;
     }
@@ -405,12 +407,19 @@ export class Game {
     l.clampPitch();
   }
 
+  get charge() {
+    return this.chargeStart ? Math.min(1, (performance.now() - this.chargeStart) / GRENADE.CHARGE_TIME) : 0;
+  }
+
   throwGrenade(now) {
     const id = this.weapon.current;
+    const c = r2(this.charge);
+    this.chargeStart = 0;
+    this.weapon.charge = 0;
     this.weapon.throwNade(now);
     this.sfx.throw();
     this.aim();
-    this.net.emit(MSG.THROW, { d: [r3(_fwd.x), r3(_fwd.y), r3(_fwd.z)] });
+    this.net.emit(MSG.THROW, { d: [r3(_fwd.x), r3(_fwd.y), r3(_fwd.z)], c });
     // Bu bombadan kalmadıysa elindeki önceki silaha dön
     if (this.weapon.nades[id] <= 0) this.switchBackAt = now + 450;
   }
@@ -431,6 +440,8 @@ export class Game {
 
   switchWeapon(id, now) {
     if (this.weapon.switchTo(id, now)) {
+      this.chargeStart = 0;
+      this.weapon.charge = 0;
       this.net.emit(MSG.SWITCH, id);
       this.sfx.draw();
       this.switchBackAt = 0;
@@ -476,9 +487,17 @@ export class Game {
     if (w.kind === 'melee' && input.rightDown && !input.mouseDown && wp.canFire(now)) this.fire(now, true);
 
     if (w.kind === 'grenade') {
-      if (input.mouseClicked && wp.canFire(now)) this.throwGrenade(now);
+      // Basılı tut: güç dolar; bırakınca at. Sağ tık iptal eder.
+      if (!this.chargeStart && input.mouseClicked && wp.canFire(now)) this.chargeStart = now;
+      if (this.chargeStart) {
+        if (input.rightClicked) this.chargeStart = 0;
+        else if (!input.mouseDown) this.throwGrenade(now);
+      }
+      wp.charge = this.charge;
       return;
     }
+    this.chargeStart = 0;
+    wp.charge = 0;
 
     const trigger = w.AUTO ? input.mouseDown : input.mouseClicked;
     if (trigger) {
@@ -605,6 +624,8 @@ export class Game {
     hud.setTime(this.timeLeft - elapsed);
     const scoped = this.alive && wp.scope > 0;
     hud.setScope(scoped);
+    hud.setCharge(this.alive && this.chargeStart ? this.charge : 0);
+    hud.setLowHealth(this.alive && this.state !== 'ended' && this.hp > 0 && this.hp < PLAYER.MAX_HP * 0.15);
     hud.setSmoke(this.effects.smokeDensity(this.camera.position));
     hud.setCrosshair(wp.def.kind === 'gun' ? 5 + this.spread() * 500 : 3);
     // AWP'de dürbünsüz nişangah yok (CS gibi); dürbünün kendi çizgileri var

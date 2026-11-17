@@ -161,6 +161,9 @@ export const GRENADE = {
   BOUNCE: 0.4,
   FRICTION: 0.7,
   STEP: 1 / 60,
+  // Basılı tutma: kısa basış yakına, CHARGE_TIME kadar tutunca en uzağa
+  MIN_POWER: 0.3,
+  CHARGE_TIME: 1000,
 };
 
 // ---- Karakterler ----

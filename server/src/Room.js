@@ -339,7 +339,7 @@ export class Room {
     const wall = castShot(eye, dir, this.solids, [], 0.6);
     const ahead = Math.max(0, Math.min(0.5, wall.distance - 0.15));
     const o = [eye[0] + dir[0] * ahead, eye[1] + dir[1] * ahead - 0.1, eye[2] + dir[2] * ahead].map(r2);
-    const v = throwVelocity(dir).map(r2);
+    const v = throwVelocity(dir, typeof d.c === 'number' ? d.c : 1).map(r2);
     const g = { g: this.nextGid++, t: w.id, by: p, sim: { p: [...o], v: [...v] }, born: now, steps: 0 };
     this.grenades.push(g);
     this.emit(MSG.GRENADE, { g: g.g, t: g.t, id: p.id, o, v });

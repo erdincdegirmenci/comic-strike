@@ -14,7 +14,7 @@ export const MSG = {
   SHOOT: 'shoot', // {d:[x,y,z], h?:1 (bıçak ağır saldırı)}
   RELOAD: 'reload',
   SWITCH: 'switch', // 'rifle' | 'awp' | 'knife' | 'he' | 'smoke'
-  THROW: 'throw', // {d:[x,y,z]} elindeki bombayı at
+  THROW: 'throw', // {d:[x,y,z], c:0..1} elindeki bombayı at (c = basılı tutma oranı)
   SPRAY: 'spray', // {p:[x,y,z], n:[x,y,z]} duvara sticker
   SET_LOADOUT: 'set_loadout', // {primary, pistol, nade}
 
