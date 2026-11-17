@@ -32,6 +32,11 @@ export class Renderer {
     this.resize();
   }
 
+  setSky(color) {
+    this.scene.background.set(color);
+    this.scene.fog.color.set(color);
+  }
+
   get aspect() {
     return window.innerWidth / window.innerHeight;
   }

@@ -35,6 +35,7 @@ export class LocalPlayer {
     this.crouching = false;
     this.crouchT = 0; // 0 ayakta, 1 çömelmiş (göz yüksekliği yumuşak geçiş)
     this.speedMult = 1; // elindeki silaha göre (AWP yavaşlatır)
+    this.traction = 1; // haritaya göre zemin tutuşu (buz < 1)
     this.scoped = false;
   }
 
@@ -112,7 +113,7 @@ export class LocalPlayer {
     speed *= this.speedMult;
 
     if (this.grounded || len > 0) {
-      const k = Math.min(1, (this.grounded ? 14 : 2.5) * dt);
+      const k = Math.min(1, (this.grounded ? 14 * this.traction : 2.5) * dt);
       this.velocity.x += (wx * speed - this.velocity.x) * k;
       this.velocity.z += (wz * speed - this.velocity.z) * k;
     }

@@ -11,6 +11,7 @@ Mesaj isimleri `shared/protocol.js` içindedir.
 | `leave_room` | — | |
 | `set_team` | `'red' \| 'blue'` | Sadece lobide |
 | `set_ready` | `boolean` | |
+| `set_map` | `'city' \| 'pool' \| 'frost'` | Sadece host, lobide |
 | `start_match` | — | Sadece host; herkes hazır olmalı |
 | `input` | `{l, p:[x,y,z], y, pi, f}` | 30/sn. `l`=life no, `p`=ayak pozisyonu, `y`=yaw, `pi`=pitch, `f`=bayraklar (1 hareket, 2 koşu, 4 havada, 8 çömelmiş, 16 dürbün) |
 | `shoot` | `{d:[x,y,z], h?}` | Atış yönü (dağılma dahil). Bıçakta `h:1` ağır saldırı |
@@ -24,7 +25,7 @@ Mesaj isimleri `shared/protocol.js` içindedir.
 |---|---|
 | `room_state` | `{code, hostId, state, isPublic, scores, minPlayers, maxPlayers, maxPerTeam, players:[{id,name,team,ready,kills,deaths}]}` |
 | `notice` | metin (ör. "Herkes hazır değil.") |
-| `match_start` | `{roster, scores, scoreLimit, timeLeft, countdown}` |
+| `match_start` | `{map, roster, scores, scoreLimit, timeLeft, countdown}` |
 | `snapshot` | 20/sn: `{t, st, tl, cd, s:[red,blue], p:[[id,x,y,z,yaw,pitch,hp,alive,flags,rtt,kills,deaths,weaponIndex], ...]}` |
 | `respawn` | `{id, p, yaw, life, ammo:{rifle,awp}, nades:{he,smoke}}` |
 | `correction` | `{p, l}`: sunucu hareketini kabul etmedi, bu konuma dön |

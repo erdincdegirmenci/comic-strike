@@ -71,9 +71,43 @@ export function buildMap(map, scene, physics) {
 
   for (const g of [...colorGeos, ...outlineGeos, ...edgeGeos]) g.dispose();
 
+  if (map.water) addWater(group, map.water);
   addClouds(group);
   scene.add(group);
   return group;
+}
+
+/** Yarı saydam su yüzeyi + çizgi roman parıltıları */
+function addWater(group, w) {
+  const sx = w.max[0] - w.min[0];
+  const sz = w.max[2] - w.min[2];
+  const surface = new THREE.Mesh(
+    new THREE.PlaneGeometry(sx, sz),
+    new THREE.MeshBasicMaterial({ color: w.color, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide }),
+  );
+  surface.rotation.x = -Math.PI / 2;
+  surface.position.set((w.min[0] + w.max[0]) / 2, w.max[1], (w.min[2] + w.max[2]) / 2);
+  surface.renderOrder = 3;
+  group.add(surface);
+  const glint = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.8, depthWrite: false });
+  let seed = 5;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < 14; i++) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.6 + rand() * 0.8, 0.08), glint);
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(w.min[0] + 0.5 + rand() * (sx - 1), w.max[1] + 0.01, w.min[2] + 0.5 + rand() * (sz - 1));
+    m.renderOrder = 4;
+    group.add(m);
+  }
+}
+
+/** Haritayı sahneden ve fizikten kaldırır */
+export function disposeMap(group, scene, physics) {
+  scene.remove(group);
+  group.traverse((o) => {
+    if (o.geometry) o.geometry.dispose();
+  });
+  physics.clearMap();
 }
 
 /** Çizgi roman bulutları (birkaç küre + kontur) */

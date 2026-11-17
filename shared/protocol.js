@@ -8,6 +8,7 @@ export const MSG = {
   LEAVE_ROOM: 'leave_room',
   SET_TEAM: 'set_team', // 'red' | 'blue'
   SET_READY: 'set_ready', // boolean
+  SET_MAP: 'set_map', // 'city' | 'pool' | 'frost' (sadece host, lobide)
   START_MATCH: 'start_match',
   INPUT: 'input', // {l, p:[x,y,z], y, pi, f}
   SHOOT: 'shoot', // {d:[x,y,z], h?:1 (bıçak ağır saldırı)}

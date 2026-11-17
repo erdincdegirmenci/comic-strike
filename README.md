@@ -68,7 +68,7 @@ Sen **http://localhost:3000**, arkadaşların **http://BILGISAYAR_IP:3000** adre
 
 ## Ayarlanabilir değerler
 Oyun dengesi `shared/constants.js` içinde: can, hız, silah hasarı, ateş hızı, şarjör, skor limiti, maç süresi, spawn koruması.
-Harita `shared/map.js` içinde: kutu listesi + spawn noktaları.
+Haritalar `shared/maps.js` içinde (City Arena `shared/map.js`): kutu listesi + spawn noktaları. Lobide host haritayı seçer: CITY ARENA, POOL PARTY, FROST ARENA (buz zemini kaygan).
 
 Sunucu ortam değişkenleri:
 - `PORT`: varsayılan 3000
