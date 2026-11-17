@@ -1,4 +1,5 @@
 import { MSG } from '@comic-strike/shared/protocol.js';
+import { CHARACTER_IDS } from '@comic-strike/shared/constants.js';
 import { Room } from './Room.js';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // karışan karakterler (0/O, 1/I) yok
@@ -6,6 +7,10 @@ const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // karışan karakterler 
 function cleanName(name) {
   const n = typeof name === 'string' ? name.replace(/[<>&"'`]/g, '').trim().slice(0, 16) : '';
   return n || `Player${Math.floor(Math.random() * 900 + 100)}`;
+}
+
+function cleanChar(c) {
+  return CHARACTER_IDS.includes(c) ? c : CHARACTER_IDS[Math.floor(Math.random() * CHARACTER_IDS.length)];
 }
 
 /** Tüm odaları yönetir ve socket olaylarını ilgili odaya yönlendirir. */
@@ -54,7 +59,7 @@ export class RoomManager {
     socket.on(MSG.CREATE_ROOM, (data, cb) => {
       this.leave(socket);
       const room = this.createRoom(false);
-      room.addPlayer(socket, cleanName(data?.name));
+      room.addPlayer(socket, cleanName(data?.name), cleanChar(data?.char));
       reply(cb)({ ok: true, code: room.code });
     });
 
@@ -65,7 +70,7 @@ export class RoomManager {
       if (socket.data.room === room) return reply(cb)({ ok: true, code });
       if (!room.canJoin()) return reply(cb)({ ok: false, error: 'Oda dolu.' });
       this.leave(socket);
-      room.addPlayer(socket, cleanName(data?.name));
+      room.addPlayer(socket, cleanName(data?.name), cleanChar(data?.char));
       reply(cb)({ ok: true, code });
     });
 
@@ -73,7 +78,7 @@ export class RoomManager {
       this.leave(socket);
       let room = [...this.rooms.values()].find((r) => r.isPublic && r.canJoin());
       if (!room) room = this.createRoom(true);
-      room.addPlayer(socket, cleanName(data?.name));
+      room.addPlayer(socket, cleanName(data?.name), cleanChar(data?.char));
       reply(cb)({ ok: true, code: room.code });
     });
 
@@ -94,6 +99,9 @@ export class RoomManager {
     forward(MSG.INPUT, 'onInput');
     forward(MSG.SHOOT, 'onShoot');
     forward(MSG.RELOAD, 'onReload');
+    forward(MSG.SWITCH, 'onSwitch');
+    forward(MSG.THROW, 'onThrow');
+    forward(MSG.SPRAY, 'onSpray');
 
     socket.on('disconnect', () => {
       this.leave(socket);

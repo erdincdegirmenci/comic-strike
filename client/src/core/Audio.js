@@ -76,6 +76,62 @@ export class Sfx {
     this.tone({ type: 'sine', from: 150, to: 45, gain: 0.7 * volume, decay: 0.12 });
   }
 
+  awp(volume = 1, far = false) {
+    if (!this.ready || volume <= 0.01) return;
+    this.noiseBurst({ gain: 1.1 * volume, decay: far ? 0.5 : 0.32, freq: far ? 500 : 900, q: 0.5 });
+    this.tone({ type: 'sine', from: 110, to: 30, gain: 0.95 * volume, decay: 0.35 });
+    // sürgü sesi
+    this.noiseBurst({ gain: 0.25 * volume, decay: 0.05, freq: 2600, type: 'highpass', delay: 0.55 });
+    this.noiseBurst({ gain: 0.3 * volume, decay: 0.06, freq: 2000, type: 'highpass', delay: 0.85 });
+  }
+
+  knife(volume = 1) {
+    if (!this.ready || volume <= 0.01) return;
+    this.noiseBurst({ gain: 0.35 * volume, decay: 0.12, freq: 3200, q: 1.5 });
+  }
+
+  stab() {
+    if (!this.ready) return;
+    this.tone({ type: 'square', from: 220, to: 90, gain: 0.25, decay: 0.08 });
+  }
+
+  explosion(volume = 1) {
+    if (!this.ready || volume <= 0.01) return;
+    this.noiseBurst({ gain: 1.3 * volume, decay: 0.9, freq: 300, q: 0.4, type: 'lowpass' });
+    this.tone({ type: 'sine', from: 90, to: 25, gain: 1.0 * volume, decay: 0.8 });
+    this.noiseBurst({ gain: 0.6 * volume, decay: 0.25, freq: 1500, q: 0.5 });
+  }
+
+  smokePop(volume = 1) {
+    if (!this.ready || volume <= 0.01) return;
+    this.noiseBurst({ gain: 0.6 * volume, decay: 1.4, freq: 900, q: 0.3 });
+  }
+
+  throw() {
+    if (!this.ready) return;
+    this.noiseBurst({ gain: 0.3, decay: 0.15, freq: 1200, q: 1 });
+  }
+
+  bounce(volume = 1) {
+    if (!this.ready || volume <= 0.01) return;
+    this.tone({ type: 'triangle', from: 900, to: 600, gain: 0.15 * volume, decay: 0.05 });
+  }
+
+  spray() {
+    if (!this.ready) return;
+    this.noiseBurst({ gain: 0.4, decay: 0.5, freq: 5000, type: 'highpass' });
+  }
+
+  scope() {
+    if (!this.ready) return;
+    this.tone({ type: 'square', from: 1400, gain: 0.05, decay: 0.03 });
+  }
+
+  draw() {
+    if (!this.ready) return;
+    this.noiseBurst({ gain: 0.2, decay: 0.04, freq: 3000, type: 'highpass' });
+  }
+
   hit() {
     if (!this.ready) return;
     this.tone({ type: 'triangle', from: 1900, to: 1500, gain: 0.25, decay: 0.06 });

@@ -1,4 +1,6 @@
-import { TEAM_INFO, WEAPON } from '@comic-strike/shared/constants.js';
+import { TEAM_INFO, WEAPONS, WEAPON_ORDER } from '@comic-strike/shared/constants.js';
+
+const KF_ICON = { rifle: '▬▬', awp: '━━⊕', knife: '🔪', he: '💣', smoke: '☁' };
 
 const $ = (id) => document.getElementById(id);
 
@@ -44,12 +46,42 @@ export class HUD {
     });
   }
 
-  setAmmo(ammo, reloading) {
-    this.set('ammo', `${ammo}|${reloading}`, () => {
-      $('ammo-val').textContent = ammo;
-      $('ammo-max').textContent = `/ ${WEAPON.MAG_SIZE}`;
-      $('ammo').classList.toggle('low', ammo <= 5);
+  /** def: silah tanımı, count: mermi / bomba sayısı (bıçakta null) */
+  setAmmo(def, count, reloading) {
+    this.set('ammo', `${def.id}|${count}|${reloading}`, () => {
+      $('weapon-name').textContent = def.NAME;
+      $('ammo-val').textContent = count === null ? '∞' : count;
+      $('ammo-max').textContent = def.kind === 'gun' ? `/ ${def.MAG_SIZE}` : def.kind === 'grenade' ? 'ADET' : '';
+      $('ammo').classList.toggle('low', def.kind === 'gun' && count <= Math.max(1, Math.floor(def.MAG_SIZE / 6)));
       $('reload-msg').classList.toggle('hidden', !reloading);
+    });
+  }
+
+  /** Alttaki silah yuvaları (1-5) */
+  setWeapons(current, nades, visible) {
+    this.set('weapons', `${current}|${nades.he}|${nades.smoke}|${visible}`, () => {
+      const box = $('weapons');
+      box.classList.toggle('hidden', !visible);
+      box.replaceChildren();
+      for (const id of WEAPON_ORDER) {
+        const w = WEAPONS[id];
+        const empty = w.kind === 'grenade' && nades[id] <= 0;
+        const slot = el('div', `slot${id === current ? ' active' : ''}${empty ? ' empty' : ''}`);
+        slot.append(el('b', '', String(w.slot)), el('span', '', w.NAME));
+        if (w.kind === 'grenade') slot.append(el('i', '', `×${nades[id]}`));
+        box.append(slot);
+      }
+    });
+  }
+
+  setScope(on) {
+    this.set('scope', on, () => $('scope').classList.toggle('hidden', !on));
+  }
+
+  setSmoke(density) {
+    const d = Math.round(density * 20) / 20;
+    this.set('smoke', d, () => {
+      $('smoke-veil').style.opacity = d;
     });
   }
 
@@ -84,13 +116,18 @@ export class HUD {
     this.set('chv', v, () => $('crosshair').classList.toggle('hidden', !v));
   }
 
-  killfeed(killer, victim, head) {
+  killfeed(killer, victim, head, weapon) {
     const row = el('div', 'kf-row');
-    row.append(
-      el('span', `kf-name ${killer.team}`, killer.name),
-      el('span', 'kf-icon', head ? '✹ ⌖' : '✹'),
-      el('span', `kf-name ${victim.team}`, victim.name),
-    );
+    const icon = (KF_ICON[weapon] ?? '✹') + (head ? ' ⌖' : '');
+    if (killer === victim || killer.id === victim.id) {
+      row.append(el('span', 'kf-icon', icon), el('span', `kf-name ${victim.team}`, victim.name));
+    } else {
+      row.append(
+        el('span', `kf-name ${killer.team}`, killer.name),
+        el('span', 'kf-icon', icon),
+        el('span', `kf-name ${victim.team}`, victim.name),
+      );
+    }
     const feed = $('killfeed');
     feed.prepend(row);
     while (feed.children.length > 5) feed.lastChild.remove();

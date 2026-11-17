@@ -48,8 +48,10 @@ export function castShot(origin, dir, solids, targets, range) {
     if (t >= 0 && t < best) best = t;
   }
 
-  for (const { player: p, pos } of targets) {
-    const hc = [pos[0], pos[1] + HITBOX.HEAD_Y, pos[2]];
+  for (const { player: p, pos, crouch } of targets) {
+    const headY = crouch ? HITBOX.CROUCH_HEAD_Y : HITBOX.HEAD_Y;
+    const bodyTop = crouch ? HITBOX.CROUCH_BODY_TOP : HITBOX.BODY_TOP;
+    const hc = [pos[0], pos[1] + headY, pos[2]];
     const th = raySphere(origin, dir, hc, HITBOX.HEAD_R, best);
     if (th >= 0 && th < best) {
       best = th;
@@ -57,7 +59,7 @@ export function castShot(origin, dir, solids, targets, range) {
       head = true;
     }
     const bmin = [pos[0] - HITBOX.BODY_HALF, pos[1], pos[2] - HITBOX.BODY_HALF];
-    const bmax = [pos[0] + HITBOX.BODY_HALF, pos[1] + HITBOX.BODY_TOP, pos[2] + HITBOX.BODY_HALF];
+    const bmax = [pos[0] + HITBOX.BODY_HALF, pos[1] + bodyTop, pos[2] + HITBOX.BODY_HALF];
     const tb = rayAABB(origin, dir, bmin, bmax, best);
     if (tb >= 0 && tb < best) {
       best = tb;

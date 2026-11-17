@@ -1,12 +1,13 @@
-import { PLAYER, WEAPON } from '@comic-strike/shared/constants.js';
+import { PLAYER, WEAPONS, FLAG } from '@comic-strike/shared/constants.js';
 
 /** Sunucu tarafında bir oyuncunun tüm durumu. */
 export class Player {
-  constructor(socket, name, team) {
+  constructor(socket, name, team, char) {
     this.id = socket.id;
     this.socket = socket;
     this.name = name;
     this.team = team;
+    this.char = char;
     this.ready = false;
     this.kills = 0;
     this.deaths = 0;
@@ -21,9 +22,12 @@ export class Player {
     this.respawnAt = 0;
     this.protectedUntil = 0;
 
-    this.ammo = WEAPON.MAG_SIZE;
+    this.weapon = 'rifle';
+    this.ammo = { rifle: WEAPONS.rifle.MAG_SIZE, awp: WEAPONS.awp.MAG_SIZE };
+    this.nades = { he: WEAPONS.he.COUNT, smoke: WEAPONS.smoke.COUNT };
     this.reloadUntil = 0;
     this.lastShot = 0;
+    this.lastSpray = 0;
 
     this.lastInput = 0;
     this.rtt = 80;
@@ -35,30 +39,47 @@ export class Player {
     this.deaths = 0;
   }
 
+  get crouching() {
+    return (this.flags & FLAG.CROUCH) !== 0;
+  }
+
+  get eyeHeight() {
+    return this.crouching ? PLAYER.CROUCH_EYE : PLAYER.EYE;
+  }
+
+  /** Doğuşta silah/mermi/bomba sıfırlama */
+  resetLoadout() {
+    this.weapon = 'rifle';
+    this.ammo = { rifle: WEAPONS.rifle.MAG_SIZE, awp: WEAPONS.awp.MAG_SIZE };
+    this.nades = { he: WEAPONS.he.COUNT, smoke: WEAPONS.smoke.COUNT };
+    this.reloadUntil = 0;
+    this.lastShot = 0;
+  }
+
   record(now) {
-    this.history.push({ t: now, x: this.pos[0], y: this.pos[1], z: this.pos[2] });
+    this.history.push({ t: now, x: this.pos[0], y: this.pos[1], z: this.pos[2], c: this.crouching });
     while (this.history.length > 2 && this.history[0].t < now - 1000) this.history.shift();
   }
 
   /** Geçmişteki bir andaki pozisyon (lag compensation) */
   posAt(t) {
     const h = this.history;
-    if (h.length === 0) return this.pos;
+    if (h.length === 0) return { pos: this.pos, crouch: this.crouching };
     const last = h[h.length - 1];
-    if (t >= last.t) return [last.x, last.y, last.z];
-    if (t <= h[0].t) return [h[0].x, h[0].y, h[0].z];
+    if (t >= last.t) return { pos: [last.x, last.y, last.z], crouch: last.c };
+    if (t <= h[0].t) return { pos: [h[0].x, h[0].y, h[0].z], crouch: h[0].c };
     for (let i = h.length - 1; i > 0; i--) {
       const a = h[i - 1];
       if (a.t <= t) {
         const b = h[i];
         const k = (t - a.t) / (b.t - a.t || 1);
-        return [a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k, a.z + (b.z - a.z) * k];
+        return { pos: [a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k, a.z + (b.z - a.z) * k], crouch: k < 0.5 ? a.c : b.c };
       }
     }
-    return this.pos;
+    return { pos: this.pos, crouch: this.crouching };
   }
 
   info() {
-    return { id: this.id, name: this.name, team: this.team, ready: this.ready, kills: this.kills, deaths: this.deaths };
+    return { id: this.id, name: this.name, team: this.team, char: this.char, ready: this.ready, kills: this.kills, deaths: this.deaths };
   }
 }

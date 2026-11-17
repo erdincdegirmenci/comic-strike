@@ -26,13 +26,16 @@
         <h1 class="logo">COMIC<br />STRIKE</h1>
         <div class="panel menu">
           <label class="field">NAME<input id="inp-name" maxlength="16" placeholder="Takma adın" autocomplete="off" /></label>
+          <div class="field">CHARACTER <small>(T tuşuyla duvara sticker'ını yapıştırır)</small>
+            <div id="char-pick"></div>
+          </div>
           <button class="btn big" data-action="play">PLAY</button>
           <button class="btn" data-action="create">CREATE ROOM</button>
           <button class="btn" data-action="join">JOIN ROOM</button>
           <button class="btn alt" data-action="settings">SETTINGS</button>
           <p id="main-msg" class="msg"></p>
         </div>
-        <p class="controls-hint">WASD hareket · SHIFT koş · SPACE zıpla · SOL TIK ateş · R şarjör · TAB skor · ESC menü</p>
+        <p class="controls-hint">WASD hareket · SHIFT koş · SPACE zıpla · CTRL/C çömel · SOL TIK ateş · SAĞ TIK dürbün / ağır bıçak · R şarjör<br />1 INK-47 · 2 AWP · 3 BIÇAK · 4 BOMBA · 5 SİS · Q son silah · T sticker · TAB skor · ESC menü</p>
       </section>
 
       <!-- ODAYA KATIL -->
@@ -111,6 +114,8 @@
 
     <!-- OYUN İÇİ ARAYÜZ -->
     <div id="hud" class="hidden">
+      <div id="smoke-veil"></div>
+      <div id="scope" class="hidden"><i class="h"></i><i class="v"></i></div>
       <div id="crosshair"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i></div>
       <div id="hitmarker"></div>
       <div id="damage-flash"></div>
@@ -129,7 +134,9 @@
         <span class="label">HP</span><b id="hp-val">100</b>
         <div class="bar"><div id="hp-bar"></div></div>
       </div>
+      <div id="weapons"></div>
       <div id="ammo" class="hud-box">
+        <span id="weapon-name">INK-47</span>
         <b id="ammo-val">30</b><span id="ammo-max">/ 30</span>
         <div id="reload-msg" class="hidden">RELOADING...</div>
       </div>
