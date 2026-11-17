@@ -25,16 +25,10 @@ export class HUD {
   show() {
     this.root.classList.remove('hidden');
     this.cache = {};
-    this.setTopbarVisible(true);
     $('killfeed').replaceChildren();
     this.hideEnd();
     this.respawn(null);
     this.center('');
-  }
-
-  setTopbarVisible(v) {
-    $('topbar').classList.toggle('hidden', !v);
-    $('ping').classList.toggle('hidden', !v);
   }
 
   hide() {

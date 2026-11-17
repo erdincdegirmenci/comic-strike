@@ -1,34 +1,59 @@
-# Mimari (v0.2)
+# Mimari
 
+## Genel bakış
 ```
- Oyuncunun tarayıcısı                      Senin bilgisayarın
- ┌────────────────────────────┐   HTTP    ┌────────────────────────────────┐
- │ Three.js (çizim)           │ ◄──────── │ ComicStrike.exe                │
- │ Rapier (hareket/çarpışma)  │           │  ASP.NET Core (Kestrel :5000)  │
- │ Menü + HUD (HTML/CSS)      │  SignalR  │  ├─ Gömülü oyun dosyaları      │
- │                            │ ◄ ─ ─ ─ ► │  ├─ /api/health                │
- └────────────────────────────┘ (Aşama 5) │  └─ GameHub (Aşama 5)          │
-                                          └────────────────────────────────┘
+ Tarayıcı (client)                         Node.js (server)
+ ┌──────────────────────────┐   Socket.IO   ┌──────────────────────────┐
+ │ Menu / Lobby (DOM)       │ ◄───────────► │ RoomManager              │
+ │ Game                     │   websocket   │  └─ Room (oda başına)     │
+ │  ├─ LocalPlayer (Rapier) │               │      ├─ Player            │
+ │  ├─ RemotePlayer (interp)│               │      ├─ 20 Hz tick        │
+ │  ├─ Weapon (viewmodel)   │               │      └─ HitScan           │
+ │  ├─ Effects              │               └──────────────────────────┘
+ │  └─ HUD (DOM)            │                         ▲
+ │ Renderer (Three.js)      │                         │
+ └──────────────────────────┘                         │
+              ▲            shared/ (constants, protocol, map)
+              └───────────────────────────────────────┘
 ```
 
-## Nasıl çalışıyor?
-1. `npm run build`: Vite, `client/` klasöründeki JavaScript'i birkaç dosyaya paketler ve `server/ComicStrike.Server/game/` içine yazar.
-2. `dotnet build/publish`: `.csproj` bu dosyaları **EXE'nin içine gömer** (EmbeddedResource).
-3. EXE açılınca `EmbeddedGameFiles` gömülü dosyaları belleğe okur ve tarayıcıya sunar. Böylece EXE'nin yanında başka dosya gerekmez.
-4. `Banner`, bilgisayarın Wi-Fi/Ethernet IPv4 adreslerini bulup konsola yazar.
+## Kim neye karar verir?
+| Konu | Karar veren |
+|---|---|
+| Kendi hareketin | İstemci hesaplar; sunucu hız/sınır kontrolü yapar, şüpheliyse `correction` ile geri çeker |
+| Atış yönü | İstemci gönderir |
+| İsabet, hasar, ölüm, skor | **Sunucu** |
+| Mühimmat, reload süresi, ateş hızı | **Sunucu** (istemci sadece tahmin eder) |
+| Doğma yeri ve zamanı | **Sunucu** |
+| Maç süresi ve bitişi | **Sunucu** |
 
-## Geliştirme modu
-`npm run dev` iki programı birlikte başlatır:
-- `dotnet watch`: C# sunucu, kod değişince yeniden başlar (port 5000).
-- `vite`: tarayıcı oyunu, kod değişince sayfa anında güncellenir (port 5173). `/api` ve `/hub` isteklerini 5000'e yönlendirir.
+## Akıcılık teknikleri
+- **Client prediction:** Yerel oyuncu Rapier ile anında hareket eder, sunucuyu beklemez.
+- **Interpolation:** Diğer oyuncular `INTERP_DELAY` (100 ms) geriden, iki snapshot arasında yumuşatılarak gösterilir.
+- **Lag compensation:** Sunucu her oyuncunun son 1 saniyelik pozisyon geçmişini tutar. Atış gelince hedefleri `şimdi − (ping + 100 ms)` anına geri sarar ve ışını orada test eder. Böylece ekranda vurduğun yere isabet edersin.
 
-## Planlanan oyun mimarisi (Aşama 2–6)
-- **Sunucu otoritesi:** hasar, ölüm, skor, mermi, stamina, koşma hızı ve ateş hızı C# sunucuda hesaplanır.
-- **Sekme ve dağılma sunucuda:** tarayıcı sadece nişan yönünü yollar. Sunucu oyuncunun durumuna göre dağılmayı ekler: koşuyor, eğiliyor, havada veya art arda ateş ediyor. Böylece sekme herkes için aynı olur.
-- **Ortak harita:** harita bir JSON dosyası olacak. Hem tarayıcı (çizim ve çarpışma) hem C# sunucu (isabet ve el bombası) aynı dosyayı okuyacak.
-- **LAN ayarları:** sunucu saniyede 30 güncelleme yapacak, diğer oyuncular 50 ms geriden gösterilecek.
+## Grafik
+- `MeshToonMaterial` + 3 tonlu gradient → çizgi film gölgelendirme.
+- Kontur: her nesnenin biraz büyütülmüş, arka yüzü çizilen siyah kopyası ("inverted hull").
+- Harita kutuları üç mesh'e birleştirilir (renk, kontur, kenar çizgileri) → haritanın tamamı 3 draw call.
+- Halftone nokta deseni ve vinyet tek bir CSS katmanı (GPU maliyeti yok).
+- Silah ayrı bir sahnede, derinlik temizlenerek çizilir (duvara girmez).
+- Efekt dokuları (yıldız, mürekkep, duman, "KAPOW!") canvas ile çizilir; harici görsel dosya yok.
+- Sesler WebAudio ile anlık üretilir; harici ses dosyası yok.
 
-## Kaldırılanlar (v0.1 → v0.2)
-- Node.js sunucu (Socket.IO): yerine C# ASP.NET Core geldi.
-- Oda kodu, lobi, takım seçimi: tek sunucu, herkes herkese (FFA).
-- İnternette yayınlama (Render) ve test botları. Botlar 8 oyuncu testleri için Aşama 8'de C# tarafında yeniden yazılacak.
+## Dosyalar
+| Dosya | Görev |
+|---|---|
+| `shared/constants.js` | Tüm denge değerleri |
+| `shared/protocol.js` | Mesaj isimleri |
+| `shared/map.js` | City Arena: kutular + spawn noktaları (Z eksenine göre aynalı) |
+| `server/src/RoomManager.js` | Oda oluşturma/katılma, olay yönlendirme |
+| `server/src/Room.js` | Lobi, maç durumu, girdi doğrulama, hasar, skor, snapshot |
+| `server/src/HitScan.js` | Işın-kutu / ışın-küre testleri |
+| `client/src/main.js` | Açılış, ana döngü |
+| `client/src/Game.js` | Maç içi istemci mantığı ve ağ olayları |
+| `client/src/ui/Menu.js` | Menüler, lobi, uygulama akışı |
+| `client/src/ui/HUD.js` | Can, mühimmat, skor, süre, kill feed, skor tablosu |
+| `client/src/world/MapBuilder.js` | Haritayı görsel + fizik olarak kurar |
+| `client/src/player/*` | Yerel oyuncu, uzak oyuncular, silah |
+| `client/src/fx/*` | Toon materyaller, efektler |
