@@ -2,6 +2,16 @@
 
 Tarayıcıda oynanan, çizgi roman görünümlü multiplayer FPS. 4v4 Team Deathmatch, oda kodu ile lobi, sunucu doğrulamalı hasar ve skor.
 
+Oyna
+
+https://comic-strike.onrender.com/
+
+Linke tıkla, tarayıcıdan oyuna gir. Kurulum gerekmez.
+
+Sunucu bir süre kullanılmazsa uyku moduna geçebilir. İlk açılışta sayfa yüklenirken biraz bekleyebilirsin (yaklaşık 30-50 saniye).
+
+Sunucunun ayakta olup olmadığını şuradan görebilirsin: https://comic-strike.onrender.com/api/health
+
 ## Gereksinimler
 - Node.js 20 veya üstü (`node -v`)
 - Chrome / Edge / Opera
