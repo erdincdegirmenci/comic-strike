@@ -36,6 +36,7 @@ async function boot() {
   const game = new Game({ view, physics, input, sfx, hud, net, settings });
   const menu = new Menu({ net, game, input, sfx, settings, view });
   menu.show('main');
+  menu.checkServer();
   window.__comic = { game, menu, view }; // tarayıcı konsolundan hata ayıklamak için
 
   // Ana döngü

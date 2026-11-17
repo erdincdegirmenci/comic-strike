@@ -1,4 +1,4 @@
-/* COMIC STRIKE WEB — çizgi roman arayüzü */
+/* ComicStrike — çizgi roman arayüzü */
 :root {
   --ink: #141414;
   --paper: #fffdf4;
@@ -74,7 +74,6 @@ body.in-menu #halftone {
   font-family: system-ui, sans-serif; font-weight: 700; font-size: 20px; letter-spacing: 1px;
   padding: 8px 10px; border: 3px solid var(--ink); background: #fff; outline: none;
 }
-#inp-code { text-transform: uppercase; font-family: var(--font); font-size: 30px; letter-spacing: 8px; text-align: center; }
 .field input[type='range'] { accent-color: var(--red); height: 24px; }
 
 .msg { min-height: 22px; text-align: center; font-size: 18px; color: var(--green); }
@@ -83,33 +82,8 @@ body.in-menu #halftone {
   font-family: system-ui, sans-serif; font-weight: 700; font-size: 13px; color: var(--paper);
   background: rgba(20, 20, 20, 0.75); padding: 6px 12px; border-radius: 4px; letter-spacing: 0.5px;
 }
-.small { font-size: 16px; }
-
-/* ---------------- Lobi ---------------- */
-.lobby { width: min(760px, 95vw); display: flex; flex-direction: column; gap: 16px; }
-.lobby-head { display: flex; justify-content: space-between; align-items: end; gap: 16px; flex-wrap: wrap; }
-.lobby-head p { font-family: system-ui, sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 0; }
-.code-row { display: flex; gap: 12px; align-items: center; }
-#lobby-code { font-size: 56px; letter-spacing: 8px; -webkit-text-stroke: 2px var(--ink); color: var(--yellow); }
-.teams { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: start; }
-.vs { align-self: center; font-size: 44px; color: var(--yellow); -webkit-text-stroke: 2px var(--ink); transform: rotate(-8deg); }
-.team { border: 4px solid var(--ink); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
-.team.red { background: #ffe1e3; }
-.team.blue { background: #e0ebff; }
-.team h3 { font-size: 28px; color: var(--paper); -webkit-text-stroke: 1.2px var(--ink); text-align: center; }
-.team.red h3 { color: var(--red); }
-.team.blue h3 { color: var(--blue); }
-.team ul { list-style: none; display: flex; flex-direction: column; gap: 4px; }
-.team li {
-  display: flex; justify-content: space-between; background: #fff; border: 2px solid var(--ink);
-  padding: 4px 8px; font-size: 20px;
-}
-.team li.me { background: var(--yellow); }
-.team li.empty { opacity: 0.35; border-style: dashed; justify-content: center; }
-.team li .ok { color: var(--green); }
-.team li .wait { color: #888; }
-.status { text-align: center; font-size: 20px; }
-.lobby-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.server-status { text-align: center; font: 700 12px system-ui, sans-serif; letter-spacing: 0; color: var(--green); }
+.server-status.error { color: var(--red); }
 
 /* ---------------- HUD ---------------- */
 #hud { position: fixed; inset: 0; z-index: 5; pointer-events: none; }

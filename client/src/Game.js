@@ -5,6 +5,7 @@ import { LocalPlayer } from './player/LocalPlayer.js';
 import { RemotePlayer } from './player/RemotePlayer.js';
 import { Weapon } from './player/Weapon.js';
 import { Effects } from './fx/Effects.js';
+import { CITY_ARENA } from '@comic-strike/shared/map.js';
 
 const r2 = (v) => Math.round(v * 100) / 100;
 const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -205,8 +206,25 @@ export class Game {
     this.hud.show();
   }
 
+  /** Aşama 1: tek kişilik test modu. Sunucu olmadan haritada dolaşıp ateş edilebilir. */
+  startOffline() {
+    this.reset();
+    this.active = true;
+    this.offline = true;
+    this.input.gameActive = true;
+    this.myId = 'local';
+    this.syncRoster([]);
+    this.state = 'playing';
+    this.applySettings();
+    this.hud.show();
+    this.hud.setTopbarVisible(false);
+    const sp = CITY_ARENA.spawns.red[0];
+    this.onRespawn({ id: 'local', p: [sp[0], sp[1], sp[2]], yaw: sp[3], life: 1, ammo: WEAPON.MAG_SIZE });
+  }
+
   stop() {
     this.active = false;
+    this.offline = false;
     this.input.gameActive = false;
     for (const r of this.remotes.values()) r.dispose();
     this.remotes.clear();

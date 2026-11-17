@@ -1,18 +1,19 @@
 import { defineConfig } from 'vite';
 
-// Geliştirmede Vite 5173'te çalışır; API ve Socket.IO istekleri 3000'deki sunucuya yönlenir.
+// Geliştirme: Vite 5173'te çalışır; /api ve /hub istekleri 5000'deki C# sunucuya yönlenir.
+// Build: dosyalar C# projesinin "game" klasörüne yazılır ve EXE'nin içine gömülür.
 export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:3000',
-      '/socket.io': { target: 'http://localhost:3000', ws: true },
+      '/api': 'http://localhost:5000',
+      '/hub': { target: 'http://localhost:5000', ws: true },
     },
   },
   build: {
-    outDir: 'dist',
+    outDir: '../server/ComicStrike.Server/game',
+    emptyOutDir: true,
     target: 'es2022',
-    // Rapier (WASM içerir) ve Three.js ayrı dosyalarda: oyun kodu değişse bile tarayıcı önbelleğinde kalırlar
     chunkSizeWarningLimit: 2000,
     rollupOptions: {
       output: {
