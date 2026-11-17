@@ -57,7 +57,7 @@ Sen **http://localhost:3000**, arkadaşların **http://BILGISAYAR_IP:3000** adre
 | Shift | Koş |
 | Space | Zıpla |
 | Ctrl / C | Çömel |
-| Sol tık | Ateş / bomba at |
+| Sol tık | Ateş · bombada basılı tut (ne kadar uzun, o kadar uzağa), bırakınca atar |
 | Sağ tık | AWP dürbünü (2 seviye) · bıçakta ağır saldırı |
 | 1 / 2 / 3 / 4 | Ana silah / tabanca / bıçak / bomba |
 | B | Silah seçimi (ana silah + tabanca + bomba) |

@@ -15,9 +15,17 @@ function overlaps(p, solids) {
   return false;
 }
 
-/** Atış yönünden başlangıç hızı. dir normalize olmalı. */
-export function throwVelocity(dir) {
-  return [dir[0] * GRENADE.THROW_SPEED, dir[1] * GRENADE.THROW_SPEED + GRENADE.THROW_UP, dir[2] * GRENADE.THROW_SPEED];
+/** Basılı tutma oranından (0..1) atış gücü */
+export function throwPower(charge) {
+  const c = Math.max(0, Math.min(1, Number(charge) || 0));
+  return GRENADE.MIN_POWER + (1 - GRENADE.MIN_POWER) * c;
+}
+
+/** Atış yönünden başlangıç hızı. dir normalize olmalı, charge 0..1 (basılı tutma). */
+export function throwVelocity(dir, charge = 1) {
+  const s = GRENADE.THROW_SPEED * throwPower(charge);
+  const up = GRENADE.THROW_UP * (0.5 + 0.5 * throwPower(charge));
+  return [dir[0] * s, dir[1] * s + up, dir[2] * s];
 }
 
 /** Tek sabit adım (GRENADE.STEP). g = { p:[x,y,z], v:[x,y,z] } yerinde güncellenir. */

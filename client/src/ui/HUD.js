@@ -76,6 +76,19 @@ export class HUD {
     });
   }
 
+  setCharge(k) {
+    const v = Math.round(k * 50) / 50;
+    this.set('charge', v, () => {
+      $('charge').classList.toggle('hidden', v <= 0);
+      $('charge-fill').style.width = `${v * 100}%`;
+    });
+  }
+
+  /** Can %15'in altında: ekran kenarlarında hafif kırmızılık */
+  setLowHealth(on) {
+    this.set('lowhp', on, () => $('low-hp').classList.toggle('show', on));
+  }
+
   setScope(on) {
     this.set('scope', on, () => $('scope').classList.toggle('hidden', !on));
   }
