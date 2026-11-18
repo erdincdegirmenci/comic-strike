@@ -1,5 +1,12 @@
-import { PLAYER, WEAPONS, FLAG, FLAG_STATE, TEAMS, isEnemy } from '@comic-strike/shared/constants.js';
-import { castShot } from './HitScan.js';
+import {
+  PLAYER,
+  WEAPONS,
+  FLAG,
+  FLAG_STATE,
+  TEAMS,
+  isEnemy,
+} from "@comic-strike/shared/constants.js";
+import { castShot } from "./HitScan.js";
 
 // Sunucu tarafında çalışan pratik botları.
 // Sunucuda oyuncu fiziği yok; botlar için harita kutularıyla basit bir çarpışmalı hareket burada yapılır:
@@ -8,7 +15,16 @@ import { castShot } from './HitScan.js';
 const R = PLAYER.RADIUS;
 const BODY = PLAYER.HEIGHT;
 const STEP = 0.45;
-const NAMES = ['Bot Bıçkın', 'Bot Sakar', 'Bot Uykucu', 'Bot Kuzen', 'Bot Fırtına', 'Bot Pinpon', 'Bot Turşu', 'Bot Şaşkın'];
+const NAMES = [
+  "Bot Bıçkın",
+  "Bot Sakar",
+  "Bot Uykucu",
+  "Bot Kuzen",
+  "Bot Fırtına",
+  "Bot Pinpon",
+  "Bot Turşu",
+  "Bot Şaşkın",
+];
 
 /** Bot için sahte socket: Room kodu oyuncu socket'i gibi kullanabilsin diye */
 export class BotSocket {
@@ -31,7 +47,7 @@ export class BotSocket {
   }
 
   timeout() {
-    return { emit: (_ev, cb) => typeof cb === 'function' && cb(null) };
+    return { emit: (_ev, cb) => typeof cb === "function" && cb(null) };
   }
 }
 
@@ -44,7 +60,15 @@ function hitsBody(solids, x, y, z) {
   const y0 = y + STEP;
   const y1 = y + BODY;
   for (const b of solids) {
-    if (x + R > b.min[0] && x - R < b.max[0] && z + R > b.min[2] && z - R < b.max[2] && y1 > b.min[1] && y0 < b.max[1]) return true;
+    if (
+      x + R > b.min[0] &&
+      x - R < b.max[0] &&
+      z + R > b.min[2] &&
+      z - R < b.max[2] &&
+      y1 > b.min[1] &&
+      y0 < b.max[1]
+    )
+      return true;
   }
   return false;
 }
@@ -54,7 +78,15 @@ function groundBelow(solids, x, y, z) {
   let g = -Infinity;
   const lim = y + STEP;
   for (const b of solids) {
-    if (x + R * 0.7 > b.min[0] && x - R * 0.7 < b.max[0] && z + R * 0.7 > b.min[2] && z - R * 0.7 < b.max[2] && b.max[1] <= lim + 1e-3 && b.max[1] > g) g = b.max[1];
+    if (
+      x + R * 0.7 > b.min[0] &&
+      x - R * 0.7 < b.max[0] &&
+      z + R * 0.7 > b.min[2] &&
+      z - R * 0.7 < b.max[2] &&
+      b.max[1] <= lim + 1e-3 &&
+      b.max[1] > g
+    )
+      g = b.max[1];
   }
   return g;
 }
@@ -69,7 +101,15 @@ function hitsBodyR(solids, x, y, z, r) {
   const y0 = y + STEP;
   const y1 = y + BODY;
   for (const b of solids) {
-    if (x + r > b.min[0] && x - r < b.max[0] && z + r > b.min[2] && z - r < b.max[2] && y1 > b.min[1] && y0 < b.max[1]) return true;
+    if (
+      x + r > b.min[0] &&
+      x - r < b.max[0] &&
+      z + r > b.min[2] &&
+      z - r < b.max[2] &&
+      y1 > b.min[1] &&
+      y0 < b.max[1]
+    )
+      return true;
   }
   return false;
 }
@@ -85,7 +125,8 @@ function gridFor(mapId, map, solids) {
       const x = -B.x + (i + 0.5) * CELL;
       const z = -B.z + (j + 0.5) * CELL;
       const gy = groundBelow(solids, x, 0, z);
-      ok[j * nx + i] = gy > -0.5 && !hitsBodyR(solids, x, gy, z, R + 0.1) ? 1 : 0;
+      ok[j * nx + i] =
+        gy > -0.3 && !hitsBodyR(solids, x, gy, z, R + 0.1) ? 1 : 0; // çukur/tünel girişi yürünmez
     }
   }
   const g = { nx, nz, ok, B };
@@ -97,7 +138,10 @@ const cellOf = (g, x, z) => [
   Math.max(0, Math.min(g.nx - 1, Math.floor((x + g.B.x) / CELL))),
   Math.max(0, Math.min(g.nz - 1, Math.floor((z + g.B.z) / CELL))),
 ];
-const centerOf = (g, i, j) => [-g.B.x + (i + 0.5) * CELL, -g.B.z + (j + 0.5) * CELL];
+const centerOf = (g, i, j) => [
+  -g.B.x + (i + 0.5) * CELL,
+  -g.B.z + (j + 0.5) * CELL,
+];
 
 /** En yakın yürünebilir hücre */
 function nearestOk(g, i, j) {
@@ -108,7 +152,8 @@ function nearestOk(g, i, j) {
         if (Math.max(Math.abs(di), Math.abs(dj)) !== r) continue;
         const a = i + di;
         const b = j + dj;
-        if (a >= 0 && b >= 0 && a < g.nx && b < g.nz && g.ok[b * g.nx + a]) return [a, b];
+        if (a >= 0 && b >= 0 && a < g.nx && b < g.nz && g.ok[b * g.nx + a])
+          return [a, b];
       }
     }
   }
@@ -175,7 +220,8 @@ function findPath(g, from, to) {
     }
     return top;
   };
-  const h = (idx) => Math.hypot((idx % g.nx) - t[0], Math.floor(idx / g.nx) - t[1]);
+  const h = (idx) =>
+    Math.hypot((idx % g.nx) - t[0], Math.floor(idx / g.nx) - t[1]);
   gScore[start] = 0;
   push(h(start), start);
   let iter = 0;
@@ -194,7 +240,8 @@ function findPath(g, from, to) {
         if (a < 0 || b < 0 || a >= g.nx || b >= g.nz) continue;
         const n = b * g.nx + a;
         if (!g.ok[n] || closed[n]) continue;
-        if (di && dj && (!g.ok[cj * g.nx + a] || !g.ok[b * g.nx + ci])) continue; // köşe kesme yok
+        if (di && dj && (!g.ok[cj * g.nx + a] || !g.ok[b * g.nx + ci]))
+          continue; // köşe kesme yok
         const ng = gScore[cur] + (di && dj ? 1.414 : 1);
         if (ng < gScore[n]) {
           gScore[n] = ng;
@@ -206,7 +253,8 @@ function findPath(g, from, to) {
   }
   if (came[goal] === -1 && goal !== start) return null;
   const path = [];
-  for (let c = goal; c !== -1 && c !== start; c = came[c]) path.push(centerOf(g, c % g.nx, Math.floor(c / g.nx)));
+  for (let c = goal; c !== -1 && c !== start; c = came[c])
+    path.push(centerOf(g, c % g.nx, Math.floor(c / g.nx)));
   path.reverse();
   return path;
 }
@@ -233,10 +281,12 @@ export class BotBrain {
     this.strafe = Math.random() < 0.5 ? 1 : -1;
     this.strafeFlip = 0;
     this.skill = 0.6 + Math.random() * 0.3; // nişan becerisi
-    this.role = Math.random() < 0.3 ? 'defend' : 'attack'; // CTF'de
+    this.role = Math.random() < 0.3 ? "defend" : "attack"; // CTF'de
   }
 
   onSpawn() {
+    this.pitExit = null;
+    this.climbing = null;
     this.vy = 0;
     this.goal = null;
     this.target = null;
@@ -247,7 +297,9 @@ export class BotBrain {
   /** Hedefe giden yoldaki sıradaki ara nokta */
   waypoint(now, dest) {
     const p = this.p;
-    const moved = !this.pathFor || Math.hypot(this.pathFor[0] - dest[0], this.pathFor[2] - dest[2]) > 2.5;
+    const moved =
+      !this.pathFor ||
+      Math.hypot(this.pathFor[0] - dest[0], this.pathFor[2] - dest[2]) > 2.5;
     if (!this.path || moved || now > this.repathAt) {
       const g = gridFor(this.room.mapId, this.room.map, this.solids);
       this.path = findPath(g, p.pos, dest);
@@ -256,7 +308,11 @@ export class BotBrain {
     }
     const path = this.path;
     if (!path || !path.length) return dest;
-    while (path.length > 1 && Math.hypot(path[0][0] - p.pos[0], path[0][1] - p.pos[2]) < 0.9) path.shift();
+    while (
+      path.length > 1 &&
+      Math.hypot(path[0][0] - p.pos[0], path[0][1] - p.pos[2]) < 0.9
+    )
+      path.shift();
     // Yol düz ve yürünebilirse birkaç nokta ileriye kestirme (zigzag azalsın)
     const g = gridFor(this.room.mapId, this.room.map, this.solids);
     let k = 0;
@@ -285,7 +341,13 @@ export class BotBrain {
     const d = [t[0] - e[0], t[1] - e[1], t[2] - e[2]];
     const len = Math.hypot(d[0], d[1], d[2]);
     if (len > 70 || len < 0.01) return false;
-    const hit = castShot(e, [d[0] / len, d[1] / len, d[2] / len], this.solids, [], len);
+    const hit = castShot(
+      e,
+      [d[0] / len, d[1] / len, d[2] / len],
+      this.solids,
+      [],
+      len,
+    );
     return hit.distance >= len - 0.3;
   }
 
@@ -293,21 +355,34 @@ export class BotBrain {
   destination() {
     const room = this.room;
     const p = this.p;
-    // Havuza düştüyse en yakın merdivenden çık
+    // Havuza / tünele düştüyse bulunduğu seviyedeki en yakın merdivenden çık
     const exits = room.map.botExits;
-    if (exits && p.pos[1] < -0.5) {
-      let best = exits[0];
-      let bd = Infinity;
-      for (const ex of exits) {
-        const d = Math.hypot(ex[0][0] - p.pos[0], ex[0][1] - p.pos[2]);
+    if (exits && p.pos[1] < -0.3) {
+      // Çıkış, çukura düşüldüğü an bir kez seçilir ve yüzeye çıkana kadar değişmez
+      let best = this.pitExit ?? exits[0];
+      let bd = this.pitExit ? 0 : Infinity;
+      for (const ex of this.pitExit ? [] : exits) {
+        // zemini botun bulunduğu yerden yukarıda olan çukurda olamaz (ör. tünel merdivenindeyken havuz çıkışı)
+        if (ex[2] !== undefined && ex[2] > p.pos[1] + 0.3) continue;
+        // başka seviyedeki çıkışlar cezalandırılır
+        const d =
+          Math.hypot(ex[0][0] - p.pos[0], ex[0][1] - p.pos[2]) +
+          (ex[2] !== undefined ? Math.abs(ex[2] - p.pos[1]) * 20 : 0);
         if (d < bd) {
           bd = d;
           best = ex;
         }
       }
-      const q = bd > 0.7 ? best[0] : best[1];
+      this.pitExit = best;
+      // merdiven dibine yaklaşınca (1.2 m) yukarıdaki çıkış noktasına yönel
+      const near =
+        Math.hypot(best[0][0] - p.pos[0], best[0][1] - p.pos[2]) < 1.2;
+      if (near) this.climbing = best;
+      const q = this.climbing === best || near ? best[1] : best[0];
       return [q[0], 0, q[1]];
     }
+    this.climbing = null;
+    this.pitExit = null;
     if (room.flags) {
       const bases = room.flagBases;
       const enemy = TEAMS.find((t) => t !== p.team);
@@ -316,7 +391,7 @@ export class BotBrain {
       if (theirs.carrier === p) return bases[p.team]; // bayrak bende: eve
       if (mine.state === FLAG_STATE.CARRIED) return mine.pos; // bayrağımızı kaçıranı kovala
       if (mine.state === FLAG_STATE.DROPPED) return mine.pos; // düşen bayrağımızı geri al
-      if (this.role === 'defend') return bases[p.team];
+      if (this.role === "defend") return bases[p.team];
       return theirs.pos;
     }
     // Takım savaşı: en yakın canlı rakibe
@@ -344,7 +419,11 @@ export class BotBrain {
     const step = (x, z) => {
       if (hitsBody(s, x, p.pos[1], z)) return false;
       // Uçurumdan / havuz kenarından kendiliğinden düşme
-      if (this.vy === 0 && groundBelow(s, x, p.pos[1], z) < p.pos[1] - 0.7) return false;
+      if (this.vy === 0 && groundBelow(s, x, p.pos[1], z) < p.pos[1] - 0.7)
+        return false;
+      // Yüzeydeyken tünel girişine / çukura inme
+      if (p.pos[1] > -0.3 && groundBelow(s, x, p.pos[1], z) < -0.3)
+        return false;
       p.pos[0] = x;
       p.pos[2] = z;
       return true;
@@ -359,14 +438,18 @@ export class BotBrain {
     const p = this.p;
     const room = this.room;
     if (!p.alive) return;
-    const playing = room.state === 'playing';
+    const playing = room.state === "playing";
 
     // --- Hedef seçimi: görünen en yakın rakip ---
     let enemy = null;
     let ed = Infinity;
     for (const o of room.players.values()) {
       if (!o.alive || !isEnemy(o, p) || now < o.protectedUntil) continue;
-      const d = Math.hypot(o.pos[0] - p.pos[0], o.pos[1] - p.pos[1], o.pos[2] - p.pos[2]);
+      const d = Math.hypot(
+        o.pos[0] - p.pos[0],
+        o.pos[1] - p.pos[1],
+        o.pos[2] - p.pos[2],
+      );
       if (d < ed && this.canSee(o)) {
         ed = d;
         enemy = o;
@@ -379,8 +462,12 @@ export class BotBrain {
 
     // --- Hareket ---
     const finalDest = this.destination();
-    const inPit = room.map.botExits && p.pos[1] < -0.5;
-    let dest = inPit ? finalDest : this.goal && now < this.goalUntil ? this.goal : this.waypoint(now, finalDest);
+    const inPit = room.map.botExits && p.pos[1] < -0.3;
+    let dest = inPit
+      ? finalDest
+      : this.goal && now < this.goalUntil
+        ? this.goal
+        : this.waypoint(now, finalDest);
     let dx = dest[0] - p.pos[0];
     let dz = dest[2] - p.pos[2];
     let dist = Math.hypot(dx, dz);
@@ -389,11 +476,18 @@ export class BotBrain {
       dz = finalDest[2] - p.pos[2];
       dist = Math.hypot(dx, dz) || 1;
     }
-    const carrying = room.flags && Object.values(room.flags).some((f) => f.carrier === p);
-    let moving = playing && Math.hypot(finalDest[0] - p.pos[0], finalDest[2] - p.pos[2]) > 1;
+    const carrying =
+      room.flags && Object.values(room.flags).some((f) => f.carrier === p);
+    let moving =
+      playing &&
+      Math.hypot(finalDest[0] - p.pos[0], finalDest[2] - p.pos[2]) >
+        (inPit ? 0.2 : 1);
     let speed = PLAYER.WALK_SPEED * 0.95;
     // CTF'de saldıran bot çatışırken de hedefe yürür (ateş ederek); diğerleri yerinde yana kayar
-    const objective = room.flags && (carrying || this.role === 'attack') && Math.random() < 0.97;
+    const objective =
+      room.flags &&
+      (carrying || this.role === "attack") &&
+      Math.random() < 0.97;
     if (enemy && !objective) {
       // Çatışmada: yaklaş ama çok yakına gitme, yanlara kay
       if (now > this.strafeFlip) {
@@ -409,7 +503,8 @@ export class BotBrain {
       dist = Math.hypot(dx, dz) || 1;
       moving = playing;
       speed = PLAYER.WALK_SPEED * 0.8;
-    } else if (Math.hypot(finalDest[0] - p.pos[0], finalDest[2] - p.pos[2]) > 8) speed = PLAYER.RUN_SPEED * 0.85;
+    } else if (Math.hypot(finalDest[0] - p.pos[0], finalDest[2] - p.pos[2]) > 8)
+      speed = PLAYER.RUN_SPEED * 0.85;
 
     let moved = false;
     if (moving) {
@@ -431,17 +526,32 @@ export class BotBrain {
         this.stuckT = 0;
         this.path = null;
         const B = room.map.bounds;
-        this.goal = [(Math.random() * 2 - 1) * B.x * 0.8, 0, p.pos[2] + (Math.random() * 2 - 1) * 10];
+        this.goal = [
+          (Math.random() * 2 - 1) * B.x * 0.8,
+          0,
+          p.pos[2] + (Math.random() * 2 - 1) * 10,
+        ];
         this.goalUntil = now + 2500;
       }
-      if (this.goal && Math.hypot(this.goal[0] - p.pos[0], this.goal[2] - p.pos[2]) < 1) this.goal = null;
+      if (
+        this.goal &&
+        Math.hypot(this.goal[0] - p.pos[0], this.goal[2] - p.pos[2]) < 1
+      )
+        this.goal = null;
       // 2 sn'de hedefe 0.7 m bile yaklaşamadıysa takılmıştır: kısa bir yan sapma + yeni yol
       if (!enemy && now > this.progAt) {
-        const real = Math.hypot(finalDest[0] - p.pos[0], finalDest[2] - p.pos[2]);
+        const real = Math.hypot(
+          finalDest[0] - p.pos[0],
+          finalDest[2] - p.pos[2],
+        );
         if (real > 2 && real > this.progDist - 0.7) {
           this.path = null;
           const a = Math.random() * Math.PI * 2;
-          this.goal = [p.pos[0] + Math.cos(a) * 3, 0, p.pos[2] + Math.sin(a) * 3];
+          this.goal = [
+            p.pos[0] + Math.cos(a) * 3,
+            0,
+            p.pos[2] + Math.sin(a) * 3,
+          ];
           this.goalUntil = now + 800;
         }
         this.progDist = real;
@@ -472,22 +582,32 @@ export class BotBrain {
       p.yaw = angleTo(dx, dz);
       p.pitch = 0;
     }
-    p.flags = (moved ? FLAG.MOVING : 0) | (moved && speed > PLAYER.WALK_SPEED ? FLAG.RUNNING : 0) | (this.vy !== 0 ? FLAG.AIR : 0);
+    p.flags =
+      (moved ? FLAG.MOVING : 0) |
+      (moved && speed > PLAYER.WALK_SPEED ? FLAG.RUNNING : 0) |
+      (this.vy !== 0 ? FLAG.AIR : 0);
     p.record(now);
 
     // --- Ateş ---
     if (!playing) return;
     const w = WEAPONS[p.weapon];
-    if (w.kind === 'gun' && !(p.ammo[w.id] > 0) && !p.reloadUntil) room.onReload(p.id);
-    if (!enemy || now - this.seenAt < 450 || now < p.lastShot || p.reloadUntil) return;
-    if (w.kind !== 'gun' || !(p.ammo[w.id] > 0)) return;
+    if (w.kind === "gun" && !(p.ammo[w.id] > 0) && !p.reloadUntil)
+      room.onReload(p.id);
+    if (!enemy || now - this.seenAt < 450 || now < p.lastShot || p.reloadUntil)
+      return;
+    if (w.kind !== "gun" || !(p.ammo[w.id] > 0)) return;
     const e = this.eye();
-    const t = [enemy.pos[0], enemy.pos[1] + (Math.random() < 0.15 ? 1.5 : 1.0), enemy.pos[2]];
+    const t = [
+      enemy.pos[0],
+      enemy.pos[1] + (Math.random() < 0.15 ? 1.5 : 1.0),
+      enemy.pos[2],
+    ];
     const d = [t[0] - e[0], t[1] - e[1], t[2] - e[2]];
     const len = Math.hypot(d[0], d[1], d[2]);
     // Nişan hatası: uzaklık, hareket ve beceriye göre
     const err = (0.032 + (moved ? 0.02 : 0)) * (1.6 - this.skill);
-    for (let i = 0; i < 3; i++) d[i] = d[i] / len + (Math.random() - 0.5) * 2 * err;
+    for (let i = 0; i < 3; i++)
+      d[i] = d[i] / len + (Math.random() - 0.5) * 2 * err;
     room.onShoot(p.id, { d });
   }
 }

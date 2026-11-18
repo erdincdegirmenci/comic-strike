@@ -3,36 +3,38 @@
 // solid=true kutular hem istemci fiziğinde hem sunucu isabet testinde kullanılır.
 // Kırmızı takım -Z, mavi takım +Z tarafında. Harita Z=0'a göre aynalanır, iki taraf eşittir.
 
+import { addTunnel, carve, tunnelExits } from "./tunnel.js";
+
 const COL = {
-  ground: '#565b69',
-  sidewalk: '#c2b9a7',
-  wall: '#9c7b63',
-  wallCap: '#4a3b31',
-  roof: '#3d405b',
-  window: '#25335e',
-  shop: '#3f6e8c',
-  door: '#5a3a22',
-  b1: '#f4a259',
-  b2: '#8cb369',
-  b3: '#f4d35e',
-  b4: '#e07a5f',
-  b5: '#81b29a',
-  b6: '#c8a2c8',
-  crate: '#c97b3d',
-  sand: '#b59f6b',
-  concrete: '#cfcfcf',
-  metal: '#6c757d',
-  gold: '#ffbe0b',
-  lamp: '#fff3b0',
-  line: '#ffd23f',
-  red: '#e63946',
-  blue: '#2a6fdb',
-  car1: '#3a86ff',
-  car2: '#ff006e',
-  tire: '#1d1d1d',
-  carGlass: '#9bd1e5',
-  barrel: '#d62828',
-  skyline: ['#7d8597', '#8d99ae', '#6c7a92', '#9aa5b8'],
+  ground: "#565b69",
+  sidewalk: "#c2b9a7",
+  wall: "#9c7b63",
+  wallCap: "#4a3b31",
+  roof: "#3d405b",
+  window: "#25335e",
+  shop: "#3f6e8c",
+  door: "#5a3a22",
+  b1: "#f4a259",
+  b2: "#8cb369",
+  b3: "#f4d35e",
+  b4: "#e07a5f",
+  b5: "#81b29a",
+  b6: "#c8a2c8",
+  crate: "#c97b3d",
+  sand: "#b59f6b",
+  concrete: "#cfcfcf",
+  metal: "#6c757d",
+  gold: "#ffbe0b",
+  lamp: "#fff3b0",
+  line: "#ffd23f",
+  red: "#e63946",
+  blue: "#2a6fdb",
+  car1: "#3a86ff",
+  car2: "#ff006e",
+  tire: "#1d1d1d",
+  carGlass: "#9bd1e5",
+  barrel: "#d62828",
+  skyline: ["#7d8597", "#8d99ae", "#6c7a92", "#9aa5b8"],
 };
 
 const boxes = [];
@@ -43,7 +45,8 @@ function pad(cx, cz, v, o = {}) {
   const y = o.y ?? 0;
   const r = o.r ?? 1;
   pads.push({ c: [cx, y, cz], r, v });
-  if (o.mirror ?? true) pads.push({ c: [cx, y, -cz], r, v: [v[0], v[1], -v[2]] });
+  if (o.mirror ?? true)
+    pads.push({ c: [cx, y, -cz], r, v: [v[0], v[1], -v[2]] });
 }
 
 function add(min, max, color, solid) {
@@ -55,8 +58,19 @@ function box(cx, cz, w, d, h, color, o = {}) {
   const y = o.y ?? 0;
   const solid = o.solid ?? true;
   const mirror = o.mirror ?? true;
-  add([cx - w / 2, y, cz - d / 2], [cx + w / 2, y + h, cz + d / 2], color, solid);
-  if (mirror) add([cx - w / 2, y, -cz - d / 2], [cx + w / 2, y + h, -cz + d / 2], o.mirrorColor ?? color, solid);
+  add(
+    [cx - w / 2, y, cz - d / 2],
+    [cx + w / 2, y + h, cz + d / 2],
+    color,
+    solid,
+  );
+  if (mirror)
+    add(
+      [cx - w / 2, y, -cz - d / 2],
+      [cx + w / 2, y + h, -cz + d / 2],
+      o.mirrorColor ?? color,
+      solid,
+    );
 }
 
 /** Pencereli bina + kaldırım + çatı kenarı */
@@ -74,8 +88,10 @@ function building(cx, cz, w, d, h, color) {
     const z = cz + s * (d / 2 + 0.04);
     let i = 0;
     for (let x = cx - w / 2 + 1.6; x <= cx + w / 2 - 1.59; x += 2.6, i++) {
-      for (const y of rows) box(x, z, 1.2, 0.12, 1.5, COL.window, { ...deco, y });
-      if (i % 3 === 1) box(x, z, 1.2, 0.12, 2.2, COL.door, { ...deco, y: 0.15 });
+      for (const y of rows)
+        box(x, z, 1.2, 0.12, 1.5, COL.window, { ...deco, y });
+      if (i % 3 === 1)
+        box(x, z, 1.2, 0.12, 2.2, COL.door, { ...deco, y: 0.15 });
       else box(x, z, 1.7, 0.12, 1.2, COL.shop, { ...deco, y: 0.9 });
     }
   }
@@ -83,7 +99,8 @@ function building(cx, cz, w, d, h, color) {
   for (const s of [-1, 1]) {
     const x = cx + s * (w / 2 + 0.04);
     for (let z = cz - d / 2 + 1.6; z <= cz + d / 2 - 1.59; z += 2.6) {
-      for (const y of rows) box(x, z, 0.12, 1.2, 1.5, COL.window, { ...deco, y });
+      for (const y of rows)
+        box(x, z, 0.12, 1.2, 1.5, COL.window, { ...deco, y });
       box(x, z, 0.12, 1.7, 1.2, COL.shop, { ...deco, y: 0.9 });
     }
   }
@@ -96,11 +113,14 @@ const WALL_T = 0.3;
  * axis='z' ise duvar Z sabit, X boyunca uzanır; axis='x' ise tersi.
  */
 function wall(axis, at, from, to, h, openings, color) {
-  const cuts = [from, to, ...openings.flatMap((o) => [o.a, o.b])].filter((v) => v >= from && v <= to).sort((a, b) => a - b);
+  const cuts = [from, to, ...openings.flatMap((o) => [o.a, o.b])]
+    .filter((v) => v >= from && v <= to)
+    .sort((a, b) => a - b);
   const seg = (a, b, y0, y1, col = color, solid = true) => {
     if (y1 - y0 < 0.01) return;
     const mid = (a + b) / 2;
-    if (axis === 'z') box(mid, at, b - a, WALL_T, y1 - y0, col, { y: y0, solid });
+    if (axis === "z")
+      box(mid, at, b - a, WALL_T, y1 - y0, col, { y: y0, solid });
     else box(at, mid, WALL_T, b - a, y1 - y0, col, { y: y0, solid });
   };
   for (let i = 0; i < cuts.length - 1; i++) {
@@ -116,8 +136,16 @@ function wall(axis, at, from, to, h, openings, color) {
     seg(a, b, op.y1, h);
     // pencere pervazı (dekor)
     if (op.y0 > 0) {
-      if (axis === 'z') box((a + b) / 2, at, b - a + 0.1, WALL_T + 0.16, 0.08, COL.wallCap, { y: op.y0 - 0.08, solid: false });
-      else box(at, (a + b) / 2, WALL_T + 0.16, b - a + 0.1, 0.08, COL.wallCap, { y: op.y0 - 0.08, solid: false });
+      if (axis === "z")
+        box((a + b) / 2, at, b - a + 0.1, WALL_T + 0.16, 0.08, COL.wallCap, {
+          y: op.y0 - 0.08,
+          solid: false,
+        });
+      else
+        box(at, (a + b) / 2, WALL_T + 0.16, b - a + 0.1, 0.08, COL.wallCap, {
+          y: op.y0 - 0.08,
+          solid: false,
+        });
     }
   }
 }
@@ -139,9 +167,19 @@ function house(cx, cz, w, d, h, color, stairs) {
   const win = (c) => ({ a: c - 0.7, b: c + 0.7, y0: 1.05, y1: 2.2 });
   const door = { a: cx - 0.75, b: cx + 0.75, y0: 0, y1: 2.5 };
   // Ön/arka: kapı + iki pencere
-  for (const z of [z0 + T / 2, z1 - T / 2]) wall('z', z, x0, x1, h, [door, win(cx - w / 4 - 0.4), win(cx + w / 4 + 0.4)], color);
+  for (const z of [z0 + T / 2, z1 - T / 2])
+    wall(
+      "z",
+      z,
+      x0,
+      x1,
+      h,
+      [door, win(cx - w / 4 - 0.4), win(cx + w / 4 + 0.4)],
+      color,
+    );
   // Yanlar: pencere
-  for (const x of [x0 + T / 2, x1 - T / 2]) wall('x', x, z0 + T, z1 - T, h, [win(cz)], color);
+  for (const x of [x0 + T / 2, x1 - T / 2])
+    wall("x", x, z0 + T, z1 - T, h, [win(cz)], color);
   // Çatı + kenar şeridi
   const RT = 0.3;
   box(cx, cz, w, d, RT, COL.roof, { y: h });
@@ -152,8 +190,12 @@ function house(cx, cz, w, d, h, color, stairs) {
   box(cx, z1 - 0.1, w, 0.2, P, COL.wallCap, { y: top });
   const sx = stairs > 0 ? x1 : x0; // merdiven tarafı
   const ox = stairs > 0 ? x0 : x1; // karşı taraf
-  box(ox + (stairs > 0 ? 0.1 : -0.1), cz, 0.2, d - 0.4, P, COL.wallCap, { y: top });
-  box(sx - (stairs > 0 ? 0.1 : -0.1), cz + 0.9, 0.2, d - 2.2, P, COL.wallCap, { y: top }); // çıkış boşluğu z0 ucunda
+  box(ox + (stairs > 0 ? 0.1 : -0.1), cz, 0.2, d - 0.4, P, COL.wallCap, {
+    y: top,
+  });
+  box(sx - (stairs > 0 ? 0.1 : -0.1), cz + 0.9, 0.2, d - 2.2, P, COL.wallCap, {
+    y: top,
+  }); // çıkış boşluğu z0 ucunda
   // İçeride siper
   box(cx + w / 4, cz, 1.2, 1.2, 1.1, COL.crate);
   box(cx - w / 4, cz + 0.5, 2, 0.6, 0.9, COL.crate);
@@ -167,7 +209,10 @@ function house(cx, cz, w, d, h, color, stairs) {
     box(stairX, z1 - 0.1 - (i + 0.5) * depth, 1.2, depth, st, COL.concrete);
   }
   // Merdiven korkuluğu (dekor)
-  box(stairX + stairs * 0.62, cz, 0.06, d - 0.2, 0.06, COL.metal, { y: top + 0.9, solid: false });
+  box(stairX + stairs * 0.62, cz, 0.06, d - 0.2, 0.06, COL.metal, {
+    y: top + 0.9,
+    solid: false,
+  });
 }
 
 /** İki köşesi verilen yatay dikdörtgen kutu (ayna dahil) */
@@ -205,13 +250,35 @@ function apartment(cx, cz, w, d, h, color) {
   const frontX = cx - out * (w / 4); // ön yüz kapısı (sokak tarafına yakın)
   const sideZ = cz + 0.55; // sokak yüzü kapısı (merdiven bandından uzakta)
   const doorW = 1.6;
-  wall('z', z1 - T / 2, x0, x1, h, [{ a: frontX - doorW / 2, b: frontX + doorW / 2, y0: 0, y1: 2.5 }], color);
-  wall('z', z0 + T / 2, x0, x1, h, [], color);
-  wall('x', xin + out * T / 2, z0 + T, z1 - T, h, [{ a: sideZ - doorW / 2, b: sideZ + doorW / 2, y0: 0, y1: 2.5 }], color);
-  wall('x', xout - out * T / 2, z0 + T, z1 - T, h, [], color);
+  wall(
+    "z",
+    z1 - T / 2,
+    x0,
+    x1,
+    h,
+    [{ a: frontX - doorW / 2, b: frontX + doorW / 2, y0: 0, y1: 2.5 }],
+    color,
+  );
+  wall("z", z0 + T / 2, x0, x1, h, [], color);
+  wall(
+    "x",
+    xin + (out * T) / 2,
+    z0 + T,
+    z1 - T,
+    h,
+    [{ a: sideZ - doorW / 2, b: sideZ + doorW / 2, y0: 0, y1: 2.5 }],
+    color,
+  );
+  wall("x", xout - (out * T) / 2, z0 + T, z1 - T, h, [], color);
   // Kapı üstü saçak (dekor)
-  box(frontX, z1 + 0.15, doorW + 0.5, 0.5, 0.12, COL.wallCap, { y: 2.55, solid: false });
-  box(xin - out * 0.15, sideZ, 0.5, doorW + 0.5, 0.12, COL.wallCap, { y: 2.55, solid: false });
+  box(frontX, z1 + 0.15, doorW + 0.5, 0.5, 0.12, COL.wallCap, {
+    y: 2.55,
+    solid: false,
+  });
+  box(xin - out * 0.15, sideZ, 0.5, doorW + 0.5, 0.12, COL.wallCap, {
+    y: 2.55,
+    solid: false,
+  });
 
   // Merdiven: z0 duvarı boyunca, sokak tarafından dış tarafa doğru çıkar; son basamak çatı seviyesinde
   const SW = 1.3; // merdiven genişliği
@@ -231,7 +298,10 @@ function apartment(cx, cz, w, d, h, color) {
     if (holeFrom === null && st + 1.95 > h) holeFrom = a - out * depth; // bir basamak pay
   }
   // Merdiven korkuluğu (dekor)
-  box(cx + out * LANDING / 2, zb1 + 0.04, len, 0.06, 0.06, COL.metal, { y: top * 0.5 + 0.9, solid: false });
+  box(cx + (out * LANDING) / 2, zb1 + 0.04, len, 0.06, 0.06, COL.metal, {
+    y: top * 0.5 + 0.9,
+    solid: false,
+  });
 
   // Çatı: merdivenin üstünde kapak boşluğu bırakan parçalar
   const rx0 = x0 - 0.25;
@@ -244,7 +314,8 @@ function apartment(cx, cz, w, d, h, color) {
   // Çatı kapağı çevresinde alçak korkuluk (kapağa düşmeyi zorlaştırır, sokak tarafı açık)
   // (merdivenin çıktığı son 1.4 m açık: oradan çatıya çıkılır)
   const railEnd = xout - out * (T + 1.4);
-  if ((railEnd - holeFrom) * out > 0.3) rect(holeFrom, railEnd, zb1 + 0.02, zb1 + 0.14, top, 0.5, COL.wallCap);
+  if ((railEnd - holeFrom) * out > 0.3)
+    rect(holeFrom, railEnd, zb1 + 0.02, zb1 + 0.14, top, 0.5, COL.wallCap);
   rect(holeFrom - out * 0.12, holeFrom, zb0, zb1, top, 0.5, COL.wallCap);
   // Çatı kenarında alçak siper (ön ve iki yan)
   box(cx, z1 + 0.15, w + 0.5, 0.2, 0.6, COL.wallCap, { y: top });
@@ -258,7 +329,8 @@ function apartment(cx, cz, w, d, h, color) {
     const z = s > 0 ? z1 + 0.04 : z0 - 0.04;
     let i = 0;
     for (let x = cx - w / 2 + 1.6; x <= cx + w / 2 - 1.59; x += 2.6, i++) {
-      for (const y of rows) box(x, z, 1.2, 0.12, 1.5, COL.window, { ...deco, y });
+      for (const y of rows)
+        box(x, z, 1.2, 0.12, 1.5, COL.window, { ...deco, y });
       if (s > 0 && Math.abs(x - frontX) < 1.7) continue;
       box(x, z, 1.7, 0.12, 1.2, COL.shop, { ...deco, y: 0.9 });
     }
@@ -266,7 +338,8 @@ function apartment(cx, cz, w, d, h, color) {
   for (const s of [-1, 1]) {
     const x = s > 0 ? x1 + 0.04 : x0 - 0.04;
     for (let z = cz - d / 2 + 1.6; z <= cz + d / 2 - 1.59; z += 2.6) {
-      for (const y of rows) box(x, z, 0.12, 1.2, 1.5, COL.window, { ...deco, y });
+      for (const y of rows)
+        box(x, z, 0.12, 1.2, 1.5, COL.window, { ...deco, y });
       if (s === -out && Math.abs(z - sideZ) < 1.7) continue; // sokak yüzündeki kapı
       box(x, z, 0.12, 1.7, 1.2, COL.shop, { ...deco, y: 0.9 });
     }
@@ -287,10 +360,23 @@ function car(cx, cz, alongZ, color) {
   box(cx, cz, cw, cd, 0.65, COL.carGlass, { y: 1.2 });
   const tx = w / 2 - 0.15;
   const tz = d / 2 - 0.6;
-  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+  for (const [sx, sz] of [
+    [-1, -1],
+    [1, -1],
+    [-1, 1],
+    [1, 1],
+  ]) {
     const ox = alongZ ? sx * tx : sx * (w / 2 - 0.6);
     const oz = alongZ ? sz * tz : sz * (d / 2 - 0.15);
-    box(cx + ox, cz + oz, alongZ ? 0.3 : 0.65, alongZ ? 0.65 : 0.3, 0.6, COL.tire, { solid: false });
+    box(
+      cx + ox,
+      cz + oz,
+      alongZ ? 0.3 : 0.65,
+      alongZ ? 0.65 : 0.3,
+      0.6,
+      COL.tire,
+      { solid: false },
+    );
   }
 }
 
@@ -310,15 +396,31 @@ for (const sx of [-1, 1]) {
 
 // Uzaktaki şehir silüeti (yalnızca görsel)
 let seed = 7;
-const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 for (let x = -70; x <= 70; x += 9) {
   const h = 10 + rand() * 22;
-  box(x, -56 - rand() * 8, 7 + rand() * 3, 8, h, COL.skyline[Math.floor(rand() * 4)], { solid: false });
+  box(
+    x,
+    -56 - rand() * 8,
+    7 + rand() * 3,
+    8,
+    h,
+    COL.skyline[Math.floor(rand() * 4)],
+    { solid: false },
+  );
 }
 for (let z = -40; z <= 0; z += 10) {
   for (const sx of [-1, 1]) {
     const h = 9 + rand() * 20;
-    box(sx * (42 + rand() * 6), z, 8, 8 + rand() * 2, h, COL.skyline[Math.floor(rand() * 4)], { solid: false });
+    box(
+      sx * (42 + rand() * 6),
+      z,
+      8,
+      8 + rand() * 2,
+      h,
+      COL.skyline[Math.floor(rand() * 4)],
+      { solid: false },
+    );
   }
 }
 
@@ -376,23 +478,67 @@ box(9.5, 0, 4.6, 2.4, 0.3, COL.roof, { y: 2.6, mirror: false });
 // ---------------- ZIPLAMA PEDLERİ VE EĞİLEREK GEÇİLEN YERLER ----------------
 const CRAWL = 1.25; // ayakta geçilmez, çömelince geçilir
 // Tır dorsesi: altından eğilerek geçilir, üstüne pedle çıkılır
-box(9.5, -27, 7, 2.6, 1.95, '#e76f51', { y: CRAWL });
+box(9.5, -27, 7, 2.6, 1.95, "#e76f51", { y: CRAWL });
 box(9.5, -27, 7.08, 2.68, 0.18, COL.gold, { y: CRAWL + 1.2, solid: false });
-for (const x of [6.7, 7.6, 11.4, 12.3]) for (const z of [-28.15, -25.85]) box(x, z, 0.75, 0.3, 0.8, COL.tire, { y: 0.15, solid: false });
+for (const x of [6.7, 7.6, 11.4, 12.3])
+  for (const z of [-28.15, -25.85])
+    box(x, z, 0.75, 0.3, 0.8, COL.tire, { y: 0.15, solid: false });
 box(6.3, -27, 0.15, 2, CRAWL, COL.metal, { solid: false }); // dorse ayağı (dekor)
 pad(9.5, -31, [0, 12, 4.4]); // dorsenin üstüne
 // Ara sokağı kapatan duvar: ortasında eğilerek geçilen delik
-wall('x', -14.8, -19, -15, 2.6, [{ a: -17.6, b: -16.4, y0: 0, y1: CRAWL }], COL.wall);
+wall(
+  "x",
+  -14.8,
+  -19,
+  -15,
+  2.6,
+  [{ a: -17.6, b: -16.4, y0: 0, y1: CRAWL }],
+  COL.wall,
+);
 // Ortadaki evin çatısına ped
 pad(-8.5, -19, [4.8, 16.75, 0]);
 
+// ---------------- YER ALTI TÜNELLERİ ----------------
+// 1) Ev → ev: kırmızının sağ köşe evinden mavinin sağ köşe evine (merdiven evin içinde, arka kapının dibinde)
+// 2) Yol → yol: sol yoldaki rögar girişinden karşı takımın yoluna çıkar
+const TUNNELS = [
+  {
+    axis: "z",
+    at: 22,
+    from: -41.2,
+    to: 41.2,
+    color: "#6c757d",
+    wall: "#4a4e69",
+  },
+  { axis: "z", at: -9.5, from: -31, to: 31, color: "#6c757d", wall: "#4a4e69" },
+];
+const holes = TUNNELS.flatMap((t) => addTunnel(box, t));
+carve(boxes, holes);
+// rögar kapağı çerçevesi (dekor): yol girişlerinin etrafında sarı-siyah şerit
+for (const s of [-1, 1]) {
+  for (const z of [s * 31.1, s * 26.9])
+    box(-9.5, z, 2.6, 0.2, 0.05, COL.line, { solid: false, mirror: false });
+  for (const x of [-10.75, -8.25])
+    box(x, s * 29, 0.2, 4.4, 0.05, COL.line, { solid: false, mirror: false });
+}
+
 // ---------------- SPAWN NOKTALARI ----------------
-const RED_SPAWNS = [[-6, -38], [-2, -39], [2, -39], [6, -38], [-10, -36.5], [10, -36.5], [-4, -35], [4, -35]];
+const RED_SPAWNS = [
+  [-6, -38],
+  [-2, -39],
+  [2, -39],
+  [6, -38],
+  [-10, -36.5],
+  [10, -36.5],
+  [-4, -35],
+  [4, -35],
+];
 
 export const CITY_ARENA = {
-  name: 'City Arena',
+  name: "City Arena",
   boxes,
   pads,
+  botExits: TUNNELS.flatMap(tunnelExits), // tünele düşen bot en yakın merdivenden çıksın
   // [x, y, z, yaw]  — yaw=π → +Z'ye bakar
   spawns: {
     red: RED_SPAWNS.map(([x, z]) => [x, 0.1, z, Math.PI]),

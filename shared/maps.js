@@ -1,20 +1,33 @@
 // Harita listesi. Lobide host haritayı seçer; istemci ve sunucu aynı veriyi kullanır.
 // Her harita: { id, name, boxes, spawns, flags (CTF üsleri), bounds, sky, traction?, water? }
 // Kırmızı takım -Z, mavi takım +Z tarafında; haritalar Z=0'a göre aynalanır.
-import { CITY_ARENA } from './map.js';
+import { CITY_ARENA } from "./map.js";
+import { addTunnel, carve, tunnelExits } from "./tunnel.js";
 
 /** Kutu ekleme yardımcıları ve hazır yapılar (kulübe, merdiven, duvar). */
 function builder(defaults = {}) {
   const boxes = [];
   const pads = [];
   const MIRROR = defaults.mirror ?? true; // takım haritaları Z=0'a göre aynalanır; Herkes Tek haritası aynalanmaz
-  const add = (min, max, color, solid) => boxes.push({ min, max, color, solid });
+  const add = (min, max, color, solid) =>
+    boxes.push({ min, max, color, solid });
   /** cx/cz merkez, w (X), d (Z), h yükseklik, o.y taban; o.mirror=false ise aynalanmaz */
   const box = (cx, cz, w, d, h, color, o = {}) => {
     const y = o.y ?? 0;
     const solid = o.solid ?? true;
-    add([cx - w / 2, y, cz - d / 2], [cx + w / 2, y + h, cz + d / 2], color, solid);
-    if (o.mirror ?? MIRROR) add([cx - w / 2, y, -cz - d / 2], [cx + w / 2, y + h, -cz + d / 2], o.mirrorColor ?? color, solid);
+    add(
+      [cx - w / 2, y, cz - d / 2],
+      [cx + w / 2, y + h, cz + d / 2],
+      color,
+      solid,
+    );
+    if (o.mirror ?? MIRROR)
+      add(
+        [cx - w / 2, y, -cz - d / 2],
+        [cx + w / 2, y + h, -cz + d / 2],
+        o.mirrorColor ?? color,
+        solid,
+      );
   };
   /** İki köşesiyle verilen kutu */
   const rect = (xa, xb, za, zb, y, h, color, o = {}) => {
@@ -32,10 +45,13 @@ function builder(defaults = {}) {
    * openings: [{a, b, y0, y1}] kapı / pencere boşlukları.
    */
   const wall = (axis, at, from, to, h, openings, color, o = {}) => {
-    const cuts = [from, to, ...openings.flatMap((op) => [op.a, op.b])].filter((v) => v >= from && v <= to).sort((a, b) => a - b);
+    const cuts = [from, to, ...openings.flatMap((op) => [op.a, op.b])]
+      .filter((v) => v >= from && v <= to)
+      .sort((a, b) => a - b);
     const base = o.base ?? 0; // duvarın taban yüksekliği (üst katlar için)
     const seg = (a, b, y0, y1) => {
-      if (axis === 'z') rect(a, b, at - T / 2, at + T / 2, base + y0, y1 - y0, color, o);
+      if (axis === "z")
+        rect(a, b, at - T / 2, at + T / 2, base + y0, y1 - y0, color, o);
       else rect(at - T / 2, at + T / 2, a, b, base + y0, y1 - y0, color, o);
     };
     for (let i = 0; i < cuts.length - 1; i++) {
@@ -63,7 +79,8 @@ function builder(defaults = {}) {
       const top = ((i + 1) * rise) / n;
       const a = i * depth * dir;
       const b = (i + 1) * depth * dir;
-      if (along === 'z') rect(x - width / 2, x + width / 2, z + a, z + b, y0, top, color, o);
+      if (along === "z")
+        rect(x - width / 2, x + width / 2, z + a, z + b, y0, top, color, o);
       else rect(x + a, x + b, z - width / 2, z + width / 2, y0, top, color, o);
     }
   };
@@ -80,33 +97,61 @@ function builder(defaults = {}) {
     const z0 = cz - d / 2;
     const z1 = cz + d / 2;
     const open = { n: [], s: [], e: [], w: [] };
-    const centerOf = (side) => (side === 'n' || side === 's' ? cx : cz);
+    const centerOf = (side) => (side === "n" || side === "s" ? cx : cz);
     for (const dr of opt.doors ?? []) {
       const c = centerOf(dr.side) + (dr.at ?? 0);
       const dw = dr.w ?? 1.4;
-      open[dr.side].push({ a: c - dw / 2, b: c + dw / 2, y0: 0, y1: Math.min(2.4, h - 0.3) });
+      open[dr.side].push({
+        a: c - dw / 2,
+        b: c + dw / 2,
+        y0: 0,
+        y1: Math.min(2.4, h - 0.3),
+      });
     }
     for (const wn of opt.windows ?? []) {
       const c = centerOf(wn.side) + (wn.at ?? 0);
       const ww = wn.w ?? 1.2;
-      open[wn.side].push({ a: c - ww / 2, b: c + ww / 2, y0: wn.y0 ?? 1.05, y1: Math.min(wn.y1 ?? 2.0, h - 0.3) });
+      open[wn.side].push({
+        a: c - ww / 2,
+        b: c + ww / 2,
+        y0: wn.y0 ?? 1.05,
+        y1: Math.min(wn.y1 ?? 2.0, h - 0.3),
+      });
     }
-    if (opt.floor) box(cx, cz, w - 0.4, d - 0.4, 0.02, opt.floor, { mirror: opt.mirror, y: yb, solid: false });
-    wall('z', z1 - T / 2, x0, x1, h, open.n, color, o);
-    wall('z', z0 + T / 2, x0, x1, h, open.s, color, o);
-    wall('x', x0 + T / 2, z0 + T, z1 - T, h, open.w, color, o);
-    wall('x', x1 - T / 2, z0 + T, z1 - T, h, open.e, color, o);
+    if (opt.floor)
+      box(cx, cz, w - 0.4, d - 0.4, 0.02, opt.floor, {
+        mirror: opt.mirror,
+        y: yb,
+        solid: false,
+      });
+    wall("z", z1 - T / 2, x0, x1, h, open.n, color, o);
+    wall("z", z0 + T / 2, x0, x1, h, open.s, color, o);
+    wall("x", x0 + T / 2, z0 + T, z1 - T, h, open.w, color, o);
+    wall("x", x1 - T / 2, z0 + T, z1 - T, h, open.e, color, o);
     const RT = 0.3;
-    box(cx, cz, w + 0.3, d + 0.3, RT, opt.roof ?? '#3d405b', { mirror: opt.mirror, y: yb + h });
+    box(cx, cz, w + 0.3, d + 0.3, RT, opt.roof ?? "#3d405b", {
+      mirror: opt.mirror,
+      y: yb + h,
+    });
     if (!opt.roofStairs) return;
     // Dış merdiven: seçilen X yüzünde, +Z ucundan -Z'ye doğru çıkar; çatıda alçak siper (merdiven ucunda boşluk)
     const top = yb + h + RT;
-    const sgn = opt.roofStairs === 'e' ? 1 : -1;
+    const sgn = opt.roofStairs === "e" ? 1 : -1;
     const sx = sgn > 0 ? x1 : x0;
     const ox = sgn > 0 ? x0 : x1;
-    stairs(sx + sgn * 0.75, z1, 'z', -1, 1.2, d - 0.3, top, opt.stairColor ?? '#cfcfcf', o);
+    stairs(
+      sx + sgn * 0.75,
+      z1,
+      "z",
+      -1,
+      1.2,
+      d - 0.3,
+      top,
+      opt.stairColor ?? "#cfcfcf",
+      o,
+    );
     const P = 0.7;
-    const cap = opt.capColor ?? opt.roof ?? '#3d405b';
+    const cap = opt.capColor ?? opt.roof ?? "#3d405b";
     box(cx, z0 + 0.1, w, 0.2, P, cap, { ...o, y: top });
     box(cx, z1 - 0.1, w, 0.2, P, cap, { ...o, y: top });
     // karşı kenar siperi; opt.roofGap = [z0, z1] verilirse orada boşluk (köprü bağlantısı)
@@ -122,9 +167,23 @@ function builder(defaults = {}) {
   const tower = (cx, cz, size, height, color, opt = {}) => {
     const o = { mirror: opt.mirror };
     const half = size / 2;
-    for (const [px, pz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box(cx + px * (half - 0.15), cz + pz * (half - 0.15), 0.3, 0.3, height, opt.post ?? color, o);
+    for (const [px, pz] of [
+      [-1, -1],
+      [1, -1],
+      [-1, 1],
+      [1, 1],
+    ])
+      box(
+        cx + px * (half - 0.15),
+        cz + pz * (half - 0.15),
+        0.3,
+        0.3,
+        height,
+        opt.post ?? color,
+        o,
+      );
     box(cx, cz, size, size, 0.25, color, { ...o, y: height - 0.25 });
-    const rail = opt.rail ?? '#ffffff';
+    const rail = opt.rail ?? "#ffffff";
     const R = 0.9;
     box(cx, cz + half - 0.08, size, 0.16, R, rail, { ...o, y: height });
     box(cx - half + 0.08, cz, 0.16, size, R, rail, { ...o, y: height });
@@ -132,11 +191,27 @@ function builder(defaults = {}) {
     // -Z kenarında merdiven boşluğu: kenarın iki yanında kısa korkuluk
     const side = (size - 1.5) / 2; // ortada 1.5 m merdiven boşluğu
     if (side > 0.05) {
-      box(cx - half + side / 2, cz - half + 0.08, side, 0.16, R, rail, { ...o, y: height });
-      box(cx + half - side / 2, cz - half + 0.08, side, 0.16, R, rail, { ...o, y: height });
+      box(cx - half + side / 2, cz - half + 0.08, side, 0.16, R, rail, {
+        ...o,
+        y: height,
+      });
+      box(cx + half - side / 2, cz - half + 0.08, side, 0.16, R, rail, {
+        ...o,
+        y: height,
+      });
     }
     const run = height * 1.3;
-    stairs(cx, cz - half - run, 'z', 1, 1.2, run, height, opt.stairColor ?? color, o);
+    stairs(
+      cx,
+      cz - half - run,
+      "z",
+      1,
+      1.2,
+      run,
+      height,
+      opt.stairColor ?? color,
+      o,
+    );
   };
 
   /**
@@ -147,13 +222,37 @@ function builder(defaults = {}) {
     const y = o.y ?? 0;
     const r = o.r ?? 1;
     pads.push({ c: [cx, y, cz], r, v });
-    if (o.mirror ?? MIRROR) pads.push({ c: [cx, y, -cz], r, v: [v[0], v[1], -v[2]] });
+    if (o.mirror ?? MIRROR)
+      pads.push({ c: [cx, y, -cz], r, v: [v[0], v[1], -v[2]] });
   };
 
   /** Eğilerek geçilen delik: duvarın içinde 1.25 m yüksekliğinde boşluk (ayakta geçilmez, çömelince geçilir) */
   const CRAWL = 1.25;
 
-  return { boxes, pads, box, rect, wall, stairs, hut, tower, pad, CRAWL };
+  /** Yer altı tüneli (bkz. tunnel.js). Delikler finish() ile zeminden kesilir. */
+  const holes = [];
+  const exits = [];
+  const tunnel = (o) => {
+    holes.push(...addTunnel(box, o));
+    exits.push(...tunnelExits(o));
+  };
+  const finish = () => carve(boxes, holes);
+
+  return {
+    boxes,
+    pads,
+    box,
+    rect,
+    wall,
+    stairs,
+    hut,
+    tower,
+    pad,
+    CRAWL,
+    tunnel,
+    finish,
+    exits,
+  };
 }
 
 const spawnsFrom = (list, y = 0.1) => ({
@@ -167,13 +266,48 @@ const flagsFrom = (x, z, y = 0.1) => ({ red: [x, y, z], blue: [x, y, -z] });
 // çit labirenti, soyunma kabinleri, yan barlar. Bayrak her takımın arka bahçesinde.
 // ======================================================================
 function poolParty() {
-  const { boxes, pads, box, rect, hut, tower, pad, CRAWL } = builder();
+  const {
+    boxes,
+    pads,
+    box,
+    rect,
+    hut,
+    tower,
+    pad,
+    CRAWL,
+    tunnel,
+    finish,
+    exits,
+  } = builder();
   const C = {
-    grass: '#8cb369', tile: '#f1e3c8', tile2: '#e7d3ad', poolFloor: '#4cc9f0', poolEdge: '#ffffff',
-    wall: '#f4f1de', wallCap: '#e07a5f', house: '#ffb5a7', house2: '#a8dadc', roof: '#3d405b', lounger: '#ff70a6',
-    lounger2: '#ffd23f', towel: '#2a9d8f', board: '#ffffff', metal: '#adb5bd', palm: '#7f5539',
-    leaf: '#40916c', hedge: '#52b788', hedgeTop: '#74c69d', red: '#e63946', blue: '#2a6fdb', bar: '#f4a259',
-    slide: '#ff9f1c', cabin: '#bde0fe', cabinDoor: '#ffafcc', raft: '#ff70a6', crate: '#c97b3d', planter: '#b5838d',
+    grass: "#8cb369",
+    tile: "#f1e3c8",
+    tile2: "#e7d3ad",
+    poolFloor: "#4cc9f0",
+    poolEdge: "#ffffff",
+    wall: "#f4f1de",
+    wallCap: "#e07a5f",
+    house: "#ffb5a7",
+    house2: "#a8dadc",
+    roof: "#3d405b",
+    lounger: "#ff70a6",
+    lounger2: "#ffd23f",
+    towel: "#2a9d8f",
+    board: "#ffffff",
+    metal: "#adb5bd",
+    palm: "#7f5539",
+    leaf: "#40916c",
+    hedge: "#52b788",
+    hedgeTop: "#74c69d",
+    red: "#e63946",
+    blue: "#2a6fdb",
+    bar: "#f4a259",
+    slide: "#ff9f1c",
+    cabin: "#bde0fe",
+    cabinDoor: "#ffafcc",
+    raft: "#ff70a6",
+    crate: "#c97b3d",
+    planter: "#b5838d",
   };
   const PX = 7; // havuz yarı genişliği (X)
   const PZ = 9; // havuz yarı uzunluğu (Z)
@@ -181,18 +315,38 @@ function poolParty() {
   const BX = 22; // sınır duvarı X
   const BZ = 30; // sınır duvarı Z
 
-  // Zemin: ortasında havuz boşluğu bırakan 4 parça (3 m kalın)
-  box(-(100 + PX) / 2, 0, 100 - PX, 200, 3, C.grass, { y: -3, mirror: false });
-  box((100 + PX) / 2, 0, 100 - PX, 200, 3, C.grass, { y: -3, mirror: false });
-  box(0, -(100 + PZ) / 2, PX * 2, 100 - PZ, 3, C.grass, { y: -3 });
+  // Zemin: ortasında havuz boşluğu bırakan 4 parça (1 m kalın levha; altından tüneller geçer)
+  box(-(100 + PX) / 2, 0, 100 - PX, 200, 1, C.grass, { y: -1, mirror: false });
+  box((100 + PX) / 2, 0, 100 - PX, 200, 1, C.grass, { y: -1, mirror: false });
+  box(0, -(100 + PZ) / 2, PX * 2, 100 - PZ, 1, C.grass, { y: -1 });
+  // havuzun yan duvarları (levhanın altında, havuz tabanına kadar)
+  for (const s of [-1, 1]) {
+    box(s * (PX + 0.25), 0, 0.5, PZ * 2 + 1, DEPTH + 1, C.poolEdge, {
+      y: -DEPTH - 1,
+      mirror: false,
+    });
+    box(0, s * (PZ + 0.25), PX * 2 + 1, 0.5, DEPTH + 1, C.poolEdge, {
+      y: -DEPTH - 1,
+      mirror: false,
+    });
+  }
   // Fayans alan (dekor)
-  for (const sx of [-1, 1]) box(sx * (19 + PX) / 2, 0, 19 - PX, 56, 0.02, C.tile, { mirror: false, solid: false });
+  for (const sx of [-1, 1])
+    box((sx * (19 + PX)) / 2, 0, 19 - PX, 56, 0.02, C.tile, {
+      mirror: false,
+      solid: false,
+    });
   box(0, -(28 + PZ) / 2, PX * 2, 28 - PZ, 0.02, C.tile, { solid: false });
-  for (let x = -16; x <= 16; x += 4) box(x, -21, 2, 2, 0.025, C.tile2, { solid: false });
+  for (let x = -16; x <= 16; x += 4)
+    box(x, -21, 2, 2, 0.025, C.tile2, { solid: false });
   // Havuz tabanı, kenar şeridi, merdivenler, şişme bot (havuz içinde siper)
   box(0, 0, PX * 2, PZ * 2, 1, C.poolFloor, { y: -DEPTH - 1, mirror: false });
   box(0, -PZ - 0.25, PX * 2 + 1, 0.5, 0.06, C.poolEdge, { solid: false });
-  for (const s of [-1, 1]) box(s * (PX + 0.25), 0, 0.5, PZ * 2 + 1, 0.06, C.poolEdge, { solid: false, mirror: false });
+  for (const s of [-1, 1])
+    box(s * (PX + 0.25), 0, 0.5, PZ * 2 + 1, 0.06, C.poolEdge, {
+      solid: false,
+      mirror: false,
+    });
   box(0, -PZ + 0.6, 4, 1.2, DEPTH - 0.4, C.poolEdge, { y: -DEPTH });
   box(0, -PZ + 1.8, 4, 1.2, DEPTH - 0.8, C.poolEdge, { y: -DEPTH });
   for (const s of [-1, 1]) {
@@ -213,7 +367,10 @@ function poolParty() {
   box(0, -BZ, BX * 2 + 1.6, 1.6, 0.35, C.wallCap, { y: 4 });
   for (const sx of [-1, 1]) {
     box(sx * BX, 0, 1, BZ * 2 + 1, 4, C.wall, { mirror: false });
-    box(sx * BX, 0, 1.6, BZ * 2 + 1.6, 0.35, C.wallCap, { y: 4, mirror: false });
+    box(sx * BX, 0, 1.6, BZ * 2 + 1.6, 0.35, C.wallCap, {
+      y: 4,
+      mirror: false,
+    });
   }
 
   // Üs: spawn alanı ve bayrak yeri (bayrak çiçekliklerle çevrili)
@@ -232,25 +389,53 @@ function poolParty() {
   // Köşelerde havuz evleri: içine girilir, dıştan çatıya çıkılır (keskin nişancı yeri)
   for (const sx of [-1, 1]) {
     hut(sx * 16, -24.5, 8, 6, 3.4, C.house, {
-      roof: C.roof, floor: '#e9c46a', roofStairs: sx > 0 ? 'e' : 'w', stairColor: C.poolEdge, capColor: C.wallCap,
-      doors: [{ side: 'n', at: -sx * 1.5 }, { side: sx > 0 ? 'w' : 'e', at: 0.5 }],
-      windows: [{ side: 'n', at: sx * 2 }, { side: 's', at: 0 }],
+      roof: C.roof,
+      floor: "#e9c46a",
+      roofStairs: sx > 0 ? "e" : "w",
+      stairColor: C.poolEdge,
+      capColor: C.wallCap,
+      doors: [
+        { side: "n", at: -sx * 1.5 },
+        { side: sx > 0 ? "w" : "e", at: 0.5 },
+      ],
+      windows: [
+        { side: "n", at: sx * 2 },
+        { side: "s", at: 0 },
+      ],
     });
     box(sx * 16 + sx * 1.8, -24.2, 1.2, 2, 1, C.crate); // içeride sandık
   }
 
   // Kaydırak kuleleri (her takımın sol önünde): yüksek platform + havuza inen kaydırak (dekor)
-  tower(-10.5, -15.5, 3, 3.6, C.slide, { rail: C.poolEdge, stairColor: C.poolEdge, post: C.metal });
-  for (let i = 0; i < 5; i++) box(-9 + i * 0.45, -14.2 + i * 0.75, 1, 0.9, 0.12, C.slide, { y: 3.3 - i * 0.75, solid: false });
+  tower(-10.5, -15.5, 3, 3.6, C.slide, {
+    rail: C.poolEdge,
+    stairColor: C.poolEdge,
+    post: C.metal,
+  });
+  for (let i = 0; i < 5; i++)
+    box(-9 + i * 0.45, -14.2 + i * 0.75, 1, 0.9, 0.12, C.slide, {
+      y: 3.3 - i * 0.75,
+      solid: false,
+    });
   // Karşı tarafta cankurtaran kulesi (alçak platform)
-  tower(10.5, -15, 2.4, 2, C.red, { rail: C.poolEdge, stairColor: C.poolEdge, post: C.metal });
+  tower(10.5, -15, 2.4, 2, C.red, {
+    rail: C.poolEdge,
+    stairColor: C.poolEdge,
+    post: C.metal,
+  });
 
   // Yan barlar (ortada, iki takım arasında): içine girilir, tezgah arkası siper
   for (const sx of [-1, 1]) {
     hut(sx * 17.5, 0, 6, 9, 3, C.bar, {
-      mirror: false, roof: C.wallCap, floor: C.tile2,
-      doors: [{ side: 'n', at: 0 }, { side: 's', at: 0 }, { side: sx > 0 ? 'w' : 'e', at: 0, w: 3.2 }],
-      windows: [{ side: sx > 0 ? 'e' : 'w', at: 0, w: 2.4 }],
+      mirror: false,
+      roof: C.wallCap,
+      floor: C.tile2,
+      doors: [
+        { side: "n", at: 0 },
+        { side: "s", at: 0 },
+        { side: sx > 0 ? "w" : "e", at: 0, w: 3.2 },
+      ],
+      windows: [{ side: sx > 0 ? "e" : "w", at: 0, w: 2.4 }],
     });
     box(sx * 18.3, 0, 1, 4, 1.1, C.wall, { mirror: false }); // tezgah
     box(sx * 12, 0, 1.2, 5, 1.15, C.bar, { mirror: false }); // havuz başı tezgah
@@ -285,19 +470,33 @@ function poolParty() {
   }
 
   // Şezlonglar (alçak siper)
-  for (const [x, z, col] of [[-10, -9.5, C.lounger], [-10, -6.5, C.lounger2], [9.5, -10, C.lounger2], [9.5, -6, C.lounger]]) {
+  for (const [x, z, col] of [
+    [-10, -9.5, C.lounger],
+    [-10, -6.5, C.lounger2],
+    [9.5, -10, C.lounger2],
+    [9.5, -6, C.lounger],
+  ]) {
     box(x, z, 1.9, 0.8, 0.45, col);
     box(x - 0.75, z, 0.4, 0.8, 0.5, col, { y: 0.45 });
     box(x + 0.2, z, 1, 0.7, 0.02, C.towel, { y: 0.45, solid: false });
   }
   // Şemsiyeler
-  for (const [x, z] of [[8, -4], [-3.5, -17.5], [4, -18.5]]) {
+  for (const [x, z] of [
+    [8, -4],
+    [-3.5, -17.5],
+    [4, -18.5],
+  ]) {
     box(x, z, 0.12, 0.12, 2.6, C.metal);
     box(x, z, 2.6, 2.6, 0.2, C.lounger, { y: 2.6, solid: false });
     box(x, z, 1.6, 1.6, 0.2, C.poolEdge, { y: 2.8, solid: false });
   }
   // Palmiyeler (gövde siper)
-  for (const [x, z] of [[-20, -6], [20, -5], [-8, -23], [8.5, -23.5]]) {
+  for (const [x, z] of [
+    [-20, -6],
+    [20, -5],
+    [-8, -23],
+    [8.5, -23.5],
+  ]) {
     box(x, z, 0.5, 0.5, 4.5, C.palm);
     box(x, z, 3, 0.6, 0.25, C.leaf, { y: 4.5, solid: false });
     box(x, z, 0.6, 3, 0.25, C.leaf, { y: 4.6, solid: false });
@@ -314,21 +513,53 @@ function poolParty() {
   box(15.5, -19.5, 1.2, 1.2, 1.2, C.crate);
   box(3, -11.5, 1.2, 1.2, 1, C.crate);
 
+  // Yer altı tünelleri: iki yandaki yollardan karşı takımın tarafına (girişler havuz evlerinin önünde)
+  tunnel({
+    axis: "z",
+    at: 10.5,
+    from: -26,
+    to: 26,
+    color: "#90a4ae",
+    wall: "#4cc9f0",
+  });
+  tunnel({
+    axis: "z",
+    at: -13,
+    from: -19,
+    to: 19,
+    color: "#90a4ae",
+    wall: "#4cc9f0",
+  });
+  finish();
+
   return {
-    id: 'pool',
-    name: 'POOL PARTY',
+    id: "pool",
+    name: "POOL PARTY",
     boxes,
     pads,
-    spawns: spawnsFrom([[-3, -25.5], [0, -25], [3, -25.5], [-6, -26.5], [6, -26.5], [-1.5, -23.8], [1.5, -23.8], [-4.5, -24]]),
+    spawns: spawnsFrom([
+      [-3, -25.5],
+      [0, -25],
+      [3, -25.5],
+      [-6, -26.5],
+      [6, -26.5],
+      [-1.5, -23.8],
+      [1.5, -23.8],
+      [-4.5, -24],
+    ]),
     flags: flagsFrom(0, -28.2),
-    bounds: { x: BX - 0.4, z: BZ - 0.4, minY: -3, maxY: 15 },
-    sky: '#8ecae6',
-    water: { min: [-PX, -DEPTH, -PZ], max: [PX, -0.3, PZ], color: '#4cc9f0' },
+    bounds: { x: BX - 0.4, z: BZ - 0.4, minY: -5, maxY: 15 },
+    sky: "#8ecae6",
+    water: { min: [-PX, -DEPTH, -PZ], max: [PX, -0.3, PZ], color: "#4cc9f0" },
     // Havuza düşen botlar için çıkış merdivenleri: [havuz içindeki nokta, dışarıdaki nokta]
     botExits: [
-      [[0, -PZ + 2.6], [0, -PZ - 1.5]], [[0, PZ - 2.6], [0, PZ + 1.5]],
-      [[-PX + 2.6, -3], [-PX - 1.5, -3]], [[PX - 2.6, -3], [PX + 1.5, -3]],
-      [[-PX + 2.6, 3], [-PX - 1.5, 3]], [[PX - 2.6, 3], [PX + 1.5, 3]],
+      ...exits,
+      [[0, -PZ + 2.6], [0, -PZ - 1.5], -DEPTH],
+      [[0, PZ - 2.6], [0, PZ + 1.5], -DEPTH],
+      [[-PX + 2.6, -3], [-PX - 1.5, -3], -DEPTH],
+      [[PX - 2.6, -3], [PX + 1.5, -3], -DEPTH],
+      [[-PX + 2.6, 3], [-PX - 1.5, 3], -DEPTH],
+      [[PX - 2.6, 3], [PX + 1.5, 3], -DEPTH],
     ],
   };
 }
@@ -338,12 +569,42 @@ function poolParty() {
 // Yanlarda içine girilen kütük kulübeler (çatıya çıkılır), igloolar, kar siperleri, kar aracı.
 // ======================================================================
 function frostArena() {
-  const { boxes, pads, box, rect, hut, stairs, pad, CRAWL } = builder();
+  const {
+    boxes,
+    pads,
+    box,
+    rect,
+    hut,
+    stairs,
+    pad,
+    CRAWL,
+    tunnel,
+    finish,
+    exits,
+  } = builder();
   const C = {
-    snow: '#f1faee', snow2: '#dbe9f0', ice: '#a8dadc', ice2: '#90e0ef', deep: '#457b9d', rock: '#6c757d',
-    wall: '#bde0fe', wallCap: '#ffffff', fort: '#cde7f5', fortTop: '#e9f5fb', pine: '#2d6a4f', trunk: '#5a3a22',
-    red: '#e63946', blue: '#2a6fdb', crate: '#c97b3d', flag: '#ffd23f', log: '#8d5b3a', logRoof: '#5a3a22',
-    igloo: '#f8fbff', cat: '#ff9f1c', catDark: '#3d405b', glass: '#9bd1e5',
+    snow: "#f1faee",
+    snow2: "#dbe9f0",
+    ice: "#a8dadc",
+    ice2: "#90e0ef",
+    deep: "#457b9d",
+    rock: "#6c757d",
+    wall: "#bde0fe",
+    wallCap: "#ffffff",
+    fort: "#cde7f5",
+    fortTop: "#e9f5fb",
+    pine: "#2d6a4f",
+    trunk: "#5a3a22",
+    red: "#e63946",
+    blue: "#2a6fdb",
+    crate: "#c97b3d",
+    flag: "#ffd23f",
+    log: "#8d5b3a",
+    logRoof: "#5a3a22",
+    igloo: "#f8fbff",
+    cat: "#ff9f1c",
+    catDark: "#3d405b",
+    glass: "#9bd1e5",
   };
   const BX = 24;
   const BZ = 32;
@@ -378,9 +639,18 @@ function frostArena() {
     rect(x0, x1, -26.2, FZ - FW / 2, 0, FH, C.fort);
     rect(x0, x1, -28.2, -26.2, 2.5, FH - 2.5, C.fort);
     // mazgallar (dış kenarda)
-    for (let z = -30; z <= -23; z += 1.6) rect(sx * (FX + FW / 2) - sx * 0.25, sx * (FX + FW / 2), z - 0.4, z + 0.4, FH, 0.7, C.fortTop);
+    for (let z = -30; z <= -23; z += 1.6)
+      rect(
+        sx * (FX + FW / 2) - sx * 0.25,
+        sx * (FX + FW / 2),
+        z - 0.4,
+        z + 0.4,
+        FH,
+        0.7,
+        C.fortTop,
+      );
     // içeriden sura çıkan merdiven (ön surun dibine)
-    stairs(sx * 7.6, -28.5, 'z', 1, 1.3, 5.8, FH, C.fortTop);
+    stairs(sx * 7.6, -28.5, "z", 1, 1.3, 5.8, FH, C.fortTop);
   }
   for (let x = -FX + 0.4; x <= FX - 0.4; x += 1.6) {
     if (Math.abs(x) < 0.5) continue;
@@ -390,7 +660,10 @@ function frostArena() {
   box(0, -29, 2.6, 2.6, 0.12, C.deep);
   box(-4, -23.4, 1.6, 1.2, 1.2, C.ice);
   box(4.2, -23.6, 2.2, 1, 1.1, C.ice);
-  box(0, FZ - FW / 2 - 0.25, 10, 4, 0.03, C.red, { solid: false, mirrorColor: C.blue }); // spawn alanı (dekor)
+  box(0, FZ - FW / 2 - 0.25, 10, 4, 0.03, C.red, {
+    solid: false,
+    mirrorColor: C.blue,
+  }); // spawn alanı (dekor)
   // Kale önü: kapıyı koruyan kar siperleri
   for (const sx of [-1, 1]) {
     box(sx * 4, -18.3, 3.4, 0.9, 1.3, C.snow2);
@@ -400,9 +673,19 @@ function frostArena() {
   // ---- Kütük kulübeler (köşelerde): içine girilir, çatıya çıkılır ----
   for (const sx of [-1, 1]) {
     hut(sx * 17.5, -21, 7, 5.5, 3.2, C.log, {
-      roof: C.logRoof, floor: '#c9a27e', roofStairs: sx > 0 ? 'e' : 'w', stairColor: C.log, capColor: C.logRoof,
-      doors: [{ side: 'n', at: -sx * 1.4 }, { side: sx > 0 ? 'w' : 'e', at: 0.8 }],
-      windows: [{ side: 'n', at: sx * 1.8 }, { side: 's', at: 0 }],
+      roof: C.logRoof,
+      floor: "#c9a27e",
+      roofStairs: sx > 0 ? "e" : "w",
+      stairColor: C.log,
+      capColor: C.logRoof,
+      doors: [
+        { side: "n", at: -sx * 1.4 },
+        { side: sx > 0 ? "w" : "e", at: 0.8 },
+      ],
+      windows: [
+        { side: "n", at: sx * 1.8 },
+        { side: "s", at: 0 },
+      ],
     });
     box(sx * 18.5, -21.5, 1.1, 1.1, 1, C.crate);
   }
@@ -412,15 +695,23 @@ function frostArena() {
   pad(0, -13, [0, 12, 3.9]);
 
   // ---- İgloolar: alçak, içine saklanılır ----
-  for (const [x, z] of [[-11.5, -11.5], [12, -13.5]]) {
+  for (const [x, z] of [
+    [-11.5, -11.5],
+    [12, -13.5],
+  ]) {
     hut(x, z, 4.4, 4.4, 2.2, C.igloo, {
-      roof: C.igloo, floor: C.snow2,
-      doors: [{ side: 'n', at: 0, w: 1.2 }],
-      windows: [{ side: x < 0 ? 'w' : 'e', at: 0, w: 0.8, y0: 1.1, y1: 1.7 }],
+      roof: C.igloo,
+      floor: C.snow2,
+      // kapı kendi üssüne bakar; içeride yer altı tünelinin merdiveni var
+      doors: [{ side: "s", at: 0, w: 1.2 }],
+      windows: [
+        { side: x < 0 ? "w" : "e", at: 0, w: 0.8, y0: 1.1, y1: 1.7 },
+        { side: "n", at: 0, w: 0.8, y0: 1.1, y1: 1.7 },
+      ],
     });
     box(x, z, 3.4, 3.4, 0.4, C.igloo, { y: 2.5, solid: false });
     box(x, z, 2, 2, 0.35, C.igloo, { y: 2.9, solid: false });
-    box(x, z + 2.6, 1.6, 1, 1.6, C.snow2, { y: 0, solid: false }); // giriş tüneli (dekor)
+    box(x, z - 2.6, 1.6, 1, 1.6, C.snow2, { y: 0, solid: false }); // giriş tüneli (dekor)
   }
 
   // ---- Orta alan ----
@@ -428,13 +719,25 @@ function frostArena() {
   box(0, 0, 4, 4, 1, C.deep, { mirror: false });
   box(0, 0, 2.4, 2.4, 3.6, C.ice, { y: 1, mirror: false });
   box(0, 0, 1.2, 1.2, 1.6, C.ice2, { y: 4.6, mirror: false });
-  for (const [x, z] of [[-6, -3], [6, 3], [-6, 3], [6, -3]]) box(x, z, 2, 2, 1.3, C.ice, { mirror: false });
+  for (const [x, z] of [
+    [-6, -3],
+    [6, 3],
+    [-6, 3],
+    [6, -3],
+  ])
+    box(x, z, 2, 2, 1.3, C.ice, { mirror: false });
   // Orta koridoru kapatan büyük buz blokları (spawn'dan spawn'a görüşü keser)
   box(0, -10, 7, 1.6, 3, C.ice);
   box(-16, -5, 3, 3, 3, C.deep);
   box(16.5, -6, 2.5, 4, 3.4, C.deep);
   // Buz sütunları (yanlarda koşu yollarında siper)
-  for (const [x, z] of [[-20, -14], [-8, -6.5], [9, -8], [20, -11]]) box(x, z, 1.4, 1.4, 2.8, C.ice2);
+  for (const [x, z] of [
+    [-20, -14],
+    [-8, -6.5],
+    [9, -8],
+    [20, -11],
+  ])
+    box(x, z, 1.4, 1.4, 2.8, C.ice2);
   // Kar siperleri (L şeklinde)
   for (const sx of [-1, 1]) {
     box(sx * 6, -14.8, 4.5, 1, 1.4, C.snow2);
@@ -444,30 +747,71 @@ function frostArena() {
   // Kar aracı (araba gibi siper)
   box(-17, -10.5, 2.2, 4.4, 1.2, C.cat, { y: 0.4 });
   box(-17, -11, 2, 2.2, 0.8, C.glass, { y: 1.6 });
-  for (const sx of [-1, 1]) box(-17 + sx * 1.05, -10.5, 0.35, 4.6, 0.6, C.catDark, { solid: false });
+  for (const sx of [-1, 1])
+    box(-17 + sx * 1.05, -10.5, 0.35, 4.6, 0.6, C.catDark, { solid: false });
   // Kaya ve kasalar
   box(-3.5, -16.5, 2.2, 1.6, 1.2, C.rock);
   box(13.5, -4.5, 1.5, 1.5, 1.5, C.crate);
   box(14.7, -4.9, 1, 1, 0.9, C.crate);
   box(-12.5, -18, 1.6, 1.6, 1.6, C.crate);
   // Çam ağaçları (gövde siper, yapraklar dekor)
-  for (const [x, z] of [[-21, -27], [21, -27], [-21, -2], [21, -1], [-6.5, -20], [7, -20.5]]) {
+  for (const [x, z] of [
+    [-21, -27],
+    [21, -27],
+    [-21, -2],
+    [21, -1],
+    [-6.5, -20],
+    [7, -20.5],
+  ]) {
     box(x, z, 0.5, 0.5, 1.5, C.trunk);
     box(x, z, 2.4, 2.4, 1.6, C.pine, { y: 1.5 });
     box(x, z, 1.6, 1.6, 1.4, C.pine, { y: 3.1 });
     box(x, z, 0.8, 0.8, 1, C.snow, { y: 4.5, solid: false });
   }
 
+  // Yer altı tünelleri: kırmızının iglolarından mavinin iglolarına (merdivenler iglonun içinde)
+  tunnel({
+    axis: "z",
+    at: -11.5,
+    from: -13.2,
+    to: 13.2,
+    depth: 0.4,
+    color: "#bde0fe",
+    wall: "#90e0ef",
+    stairColor: "#f1faee",
+  });
+  tunnel({
+    axis: "z",
+    at: 12,
+    from: -15.2,
+    to: 15.2,
+    depth: 0.4,
+    color: "#bde0fe",
+    wall: "#90e0ef",
+    stairColor: "#f1faee",
+  });
+  finish();
+
   return {
-    id: 'frost',
-    name: 'FROST ARENA',
+    id: "frost",
+    name: "FROST ARENA",
     boxes,
     pads,
-    spawns: spawnsFrom([[-3, -25.8], [0, -25.5], [3, -25.8], [-5.5, -27], [5.5, -27], [-2, -27.5], [2, -27.5], [0, -24.5]]),
+    spawns: spawnsFrom([
+      [-3, -25.8],
+      [0, -25.5],
+      [3, -25.8],
+      [-5.5, -27],
+      [5.5, -27],
+      [-2, -27.5],
+      [2, -27.5],
+      [0, -24.5],
+    ]),
     flags: flagsFrom(0, -29),
     bounds: { x: BX - 0.6, z: BZ - 0.6, minY: -5, maxY: 15 },
-    sky: '#cfe8f3',
+    sky: "#cfe8f3",
     traction: 0.3, // buz: kaygan hareket
+    botExits: exits,
   };
 }
 
@@ -479,19 +823,59 @@ function frostArena() {
 // güneybatıda basamaklı hurda tepesi. Zıplama pedleri ve eğilerek geçilen yerler her bölgede.
 // ======================================================================
 function scrapyard() {
-  const { boxes, pads, box, rect, wall, stairs, hut, tower, pad, CRAWL } = builder({ mirror: false });
+  const {
+    boxes,
+    pads,
+    box,
+    rect,
+    wall,
+    stairs,
+    hut,
+    tower,
+    pad,
+    CRAWL,
+    tunnel,
+    finish,
+    exits,
+  } = builder({ mirror: false });
   const C = {
-    dirt: '#c2a878', dirt2: '#b39a6b', concrete: '#cfcfcf', concrete2: '#adb5bd', metal: '#6c757d', dark: '#3d405b',
-    rust: '#b5651d', yellow: '#ffd23f', wall: '#8d99ae', wallCap: '#5c677d', crate: '#c97b3d', tire: '#1d1d1d',
-    ware: '#e9c46a', wareRoof: '#7f5539', office: '#a8dadc', officeRoof: '#457b9d', pipe: '#e76f51', pipe2: '#2a9d8f',
-    scaf: '#f4a261', junk: '#8d8d8d', junk2: '#6b705c', car1: '#3a86ff', car2: '#ff006e', glass: '#9bd1e5',
-    cont: ['#e63946', '#2a9d8f', '#457b9d', '#f4a261', '#8338ec', '#52b788'],
+    dirt: "#c2a878",
+    dirt2: "#b39a6b",
+    concrete: "#cfcfcf",
+    concrete2: "#adb5bd",
+    metal: "#6c757d",
+    dark: "#3d405b",
+    rust: "#b5651d",
+    yellow: "#ffd23f",
+    wall: "#8d99ae",
+    wallCap: "#5c677d",
+    crate: "#c97b3d",
+    tire: "#1d1d1d",
+    ware: "#e9c46a",
+    wareRoof: "#7f5539",
+    office: "#a8dadc",
+    officeRoof: "#457b9d",
+    pipe: "#e76f51",
+    pipe2: "#2a9d8f",
+    scaf: "#f4a261",
+    junk: "#8d8d8d",
+    junk2: "#6b705c",
+    car1: "#3a86ff",
+    car2: "#ff006e",
+    glass: "#9bd1e5",
+    cont: ["#e63946", "#2a9d8f", "#457b9d", "#f4a261", "#8338ec", "#52b788"],
   };
   const B = 40;
 
   // Zemin ve sınır duvarları
   box(0, 0, 220, 220, 1, C.dirt, { y: -1 });
-  for (const [x, z, w, d] of [[-14, 12, 9, 7], [22, -10, 8, 10], [-26, 14, 10, 8], [12, 30, 12, 5]]) box(x, z, w, d, 0.02, C.dirt2, { solid: false });
+  for (const [x, z, w, d] of [
+    [-14, 12, 9, 7],
+    [22, -10, 8, 10],
+    [-26, 14, 10, 8],
+    [12, 30, 12, 5],
+  ])
+    box(x, z, w, d, 0.02, C.dirt2, { solid: false });
   for (const s of [-1, 1]) {
     box(0, s * B, B * 2 + 1.2, 1.2, 6, C.wall);
     box(0, s * B, B * 2 + 2, 1.8, 0.4, C.wallCap, { y: 6 });
@@ -506,7 +890,7 @@ function scrapyard() {
     const H = 2.6;
     const T = 0.18;
     const y = o.y ?? 0;
-    const open = o.open ?? 'both'; // 'both' | 'none' | 'start' | 'end'
+    const open = o.open ?? "both"; // 'both' | 'none' | 'start' | 'end'
     const [hx, hz] = alongX ? [L / 2, W / 2] : [W / 2, L / 2];
     const x0 = cx - hx;
     const x1 = cx + hx;
@@ -515,20 +899,44 @@ function scrapyard() {
     if (alongX) {
       rect(x0, x1, z0, z0 + T, y, H, color);
       rect(x0, x1, z1 - T, z1, y, H, color);
-      if (open === 'none' || open === 'end') rect(x0, x0 + T, z0, z1, y, H, color);
-      if (open === 'none' || open === 'start') rect(x1 - T, x1, z0, z1, y, H, color);
+      if (open === "none" || open === "end")
+        rect(x0, x0 + T, z0, z1, y, H, color);
+      if (open === "none" || open === "start")
+        rect(x1 - T, x1, z0, z1, y, H, color);
     } else {
       rect(x0, x0 + T, z0, z1, y, H, color);
       rect(x1 - T, x1, z0, z1, y, H, color);
-      if (open === 'none' || open === 'end') rect(x0, x1, z0, z0 + T, y, H, color);
-      if (open === 'none' || open === 'start') rect(x0, x1, z1 - T, z1, y, H, color);
+      if (open === "none" || open === "end")
+        rect(x0, x1, z0, z0 + T, y, H, color);
+      if (open === "none" || open === "start")
+        rect(x0, x1, z1 - T, z1, y, H, color);
     }
     rect(x0, x1, z0, z1, y + H - T, T, color); // tavan
     if (y > 0) rect(x0, x1, z0, z1, y, T, C.dark); // taban
     // oluklu yüzey çizgileri (dekor)
     for (let k = -2; k <= 2; k++) {
-      if (alongX) rect(cx + k * 1.1 - 0.05, cx + k * 1.1 + 0.05, z0 - 0.03, z1 + 0.03, y + 0.2, H - 0.4, C.dark, { solid: false });
-      else rect(x0 - 0.03, x1 + 0.03, cz + k * 1.1 - 0.05, cz + k * 1.1 + 0.05, y + 0.2, H - 0.4, C.dark, { solid: false });
+      if (alongX)
+        rect(
+          cx + k * 1.1 - 0.05,
+          cx + k * 1.1 + 0.05,
+          z0 - 0.03,
+          z1 + 0.03,
+          y + 0.2,
+          H - 0.4,
+          C.dark,
+          { solid: false },
+        );
+      else
+        rect(
+          x0 - 0.03,
+          x1 + 0.03,
+          cz + k * 1.1 - 0.05,
+          cz + k * 1.1 + 0.05,
+          y + 0.2,
+          H - 0.4,
+          C.dark,
+          { solid: false },
+        );
     }
   };
   const crate = (x, z, s, h, y = 0) => box(x, z, s, s, h, C.crate, { y });
@@ -549,15 +957,33 @@ function scrapyard() {
   const HUB = 6;
   const TOP = 4;
   rect(-HUB, HUB, -HUB, HUB, TOP - 0.3, 0.3, C.concrete2);
-  for (const x of [-HUB + 0.5, 0, HUB - 0.5]) for (const z of [-HUB + 0.5, HUB - 0.5]) {
-    if (x === 0) continue;
-    box(x, z, 0.8, 0.8, TOP - 0.3, C.metal);
-  }
+  for (const x of [-HUB + 0.5, 0, HUB - 0.5])
+    for (const z of [-HUB + 0.5, HUB - 0.5]) {
+      if (x === 0) continue;
+      box(x, z, 0.8, 0.8, TOP - 0.3, C.metal);
+    }
   // köşe korkulukları (kenarların çoğu açık: pedden ve köprülerden çıkılır)
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    rect(sx * HUB, sx * (HUB - 2.2), sz * (HUB - 0.15), sz * HUB, TOP, 0.9, C.yellow);
-    rect(sx * (HUB - 0.15), sx * HUB, sz * HUB, sz * (HUB - 2.2), TOP, 0.9, C.yellow);
-  }
+  for (const sx of [-1, 1])
+    for (const sz of [-1, 1]) {
+      rect(
+        sx * HUB,
+        sx * (HUB - 2.2),
+        sz * (HUB - 0.15),
+        sz * HUB,
+        TOP,
+        0.9,
+        C.yellow,
+      );
+      rect(
+        sx * (HUB - 0.15),
+        sx * HUB,
+        sz * HUB,
+        sz * (HUB - 2.2),
+        TOP,
+        0.9,
+        C.yellow,
+      );
+    }
   // platform üstü siper sandıkları ve altındaki sandıklar
   crate(-2.2, 1.6, 1.4, 1.2, TOP);
   crate(2.4, -1.8, 1.4, 1.2, TOP);
@@ -566,8 +992,8 @@ function scrapyard() {
   crate(2.2, 2.4, 1.2, 1.1);
   barrier(0, 0, 0.6, 3);
   // kuzey ve güney merdivenleri
-  stairs(0, -HUB - 5.2, 'z', 1, 2.2, 5.2, TOP, C.concrete);
-  stairs(0, HUB + 5.2, 'z', -1, 2.2, 5.2, TOP, C.concrete);
+  stairs(0, -HUB - 5.2, "z", 1, 2.2, 5.2, TOP, C.concrete);
+  stairs(0, HUB + 5.2, "z", -1, 2.2, 5.2, TOP, C.concrete);
   // pedler: kuzeydoğudan ve güneybatıdan platforma
   pad(10, 2.6, [-6, 14, 0]);
   pad(-10, -2.6, [6, 14, 0]);
@@ -579,18 +1005,43 @@ function scrapyard() {
     rect(a, b, -1.1, 1.1, TOP - 0.25, 0.25, C.scaf);
     rect(a, b, -1.1, -0.95, TOP, 0.9, C.yellow);
     rect(a, b, 0.95, 1.1, TOP, 0.9, C.yellow);
-    for (let x = 9; x <= 18; x += 4.5) box(s * x, 0, 0.4, 0.4, TOP - 0.25, C.metal);
+    for (let x = 9; x <= 18; x += 4.5)
+      box(s * x, 0, 0.4, 0.4, TOP - 0.25, C.metal);
   }
 
   // ---------------- DOĞU: depo (içine girilir; içte eğilerek geçilen havalandırma deliği) ----------------
   const WX = 26;
   hut(WX, 0, 10, 14, TOP - 0.3, C.ware, {
-    roof: C.wareRoof, floor: C.dirt2, roofStairs: 'e', stairColor: C.concrete, capColor: C.wareRoof, roofGap: [-1.2, 1.2],
-    doors: [{ side: 'w', at: -4.5 }, { side: 'w', at: 4.5 }, { side: 'n', at: -2 }, { side: 's', at: 2 }],
-    windows: [{ side: 'n', at: 2.5 }, { side: 's', at: -2.5 }],
+    roof: C.wareRoof,
+    floor: C.dirt2,
+    roofStairs: "e",
+    stairColor: C.concrete,
+    capColor: C.wareRoof,
+    roofGap: [-1.2, 1.2],
+    doors: [
+      { side: "w", at: -4.5 },
+      { side: "w", at: 4.5 },
+      { side: "n", at: -2 },
+      { side: "s", at: 2 },
+    ],
+    windows: [
+      { side: "n", at: 2.5 },
+      { side: "s", at: -2.5 },
+    ],
   });
   // iç bölme duvarı: ortada eğilerek geçilen delik, kuzeyde normal kapı
-  wall('x', WX, -7 + 0.3, 7 - 0.3, TOP - 0.3, [{ a: -0.7, b: 0.7, y0: 0, y1: CRAWL }, { a: 3.2, b: 4.8, y0: 0, y1: 2.4 }], C.ware);
+  wall(
+    "x",
+    WX,
+    -7 + 0.3,
+    7 - 0.3,
+    TOP - 0.3,
+    [
+      { a: -0.7, b: 0.7, y0: 0, y1: CRAWL },
+      { a: 3.2, b: 4.8, y0: 0, y1: 2.4 },
+    ],
+    C.ware,
+  );
   crate(WX - 3, -4, 1.4, 1.3);
   crate(WX - 2.6, -2.4, 1, 0.9);
   crate(WX + 3, 3, 1.5, 1.5);
@@ -600,30 +1051,32 @@ function scrapyard() {
   // ---------------- BATI: iskele platformu (üstü 4 m) + altında konteyner tüneli ----------------
   const SX = -25;
   rect(SX - 4, SX + 4, -4, 4, TOP - 0.25, 0.25, C.scaf);
-  for (const x of [SX - 3.8, SX + 3.8]) for (const z of [-3.8, 3.8]) box(x, z, 0.4, 0.4, TOP - 0.25, C.metal);
+  for (const x of [SX - 3.8, SX + 3.8])
+    for (const z of [-3.8, 3.8]) box(x, z, 0.4, 0.4, TOP - 0.25, C.metal);
   rect(SX - 4, SX + 4, 3.85, 4, TOP, 0.9, C.yellow);
   rect(SX - 4, SX - 3.85, -4, 4, TOP, 0.9, C.yellow);
   rect(SX - 4, SX - 1, -4, -3.85, TOP, 0.9, C.yellow);
   rect(SX + 1, SX + 4, -4, -3.85, TOP, 0.9, C.yellow);
-  stairs(SX, -4 - 5.2, 'z', 1, 1.8, 5.2, TOP, C.scaf);
+  stairs(SX, -4 - 5.2, "z", 1, 1.8, 5.2, TOP, C.scaf);
   container(SX, 0, true, C.cont[1]); // iskelenin altında açık uçlu tünel
   crate(SX - 2, 5.5, 1.3, 1.2);
 
   // ---------------- KUZEY: konteyner sahası ----------------
   container(-14, 20, true, C.cont[0]);
-  container(-6, 20, true, C.cont[2], { open: 'end' });
+  container(-6, 20, true, C.cont[2], { open: "end" });
   container(2, 20, true, C.cont[3]);
-  container(8, 22, false, C.cont[4], { open: 'none' }); // üst üste iki konteyner
-  container(8, 22, false, C.cont[5], { open: 'none', y: 2.6 });
+  container(8, 22, false, C.cont[4], { open: "none" }); // üst üste iki konteyner
+  container(8, 22, false, C.cont[5], { open: "none", y: 2.6 });
   pad(8, 17, [0, 16, 3]); // istifin tepesine
   // parkur: sandıklardan konteynerin üstüne zıpla
   crate(-6, 15.6, 1.4, 1);
   crate(-6, 17.1, 1.4, 2);
   // havada duran konteyner: altından eğilerek geçilir
-  container(-22, 28, true, C.cont[3], { y: CRAWL, open: 'both' });
-  for (const x of [-24.9, -19.1]) for (const z of [26.85, 29.15]) box(x, z, 0.25, 0.25, CRAWL, C.metal);
-  container(-30, 20, false, C.cont[0], { open: 'start' });
-  container(18, 32, true, C.cont[2], { open: 'none' });
+  container(-22, 28, true, C.cont[3], { y: CRAWL, open: "both" });
+  for (const x of [-24.9, -19.1])
+    for (const z of [26.85, 29.15]) box(x, z, 0.25, 0.25, CRAWL, C.metal);
+  container(-30, 20, false, C.cont[0], { open: "start" });
+  container(18, 32, true, C.cont[2], { open: "none" });
   container(-8, 33, false, C.cont[5]);
   tower(22, 22, 3, 5, C.metal, { rail: C.yellow, stairColor: C.metal }); // gözcü kulesi
   junkCar(-17, 13, true, C.car1);
@@ -637,21 +1090,43 @@ function scrapyard() {
   // ---------------- GÜNEY: boru rafı (altından eğilerek geçilir, üstünde yürünür) ----------------
   const RZ = -20;
   rect(-24, 4, RZ - 1.2, RZ + 1.2, CRAWL, 0.3, C.metal);
-  for (let x = -23.5; x <= 4; x += 5.5) for (const z of [RZ - 1.05, RZ + 1.05]) box(x, z, 0.3, 0.3, CRAWL, C.dark);
-  for (const [z, col] of [[RZ - 0.6, C.pipe], [RZ + 0.6, C.pipe2]]) rect(-24, 4, z - 0.25, z + 0.25, CRAWL + 0.3, 0.5, col, { solid: false });
-  stairs(-26.6, RZ, 'x', 1, 2.2, 2.6, CRAWL + 0.3, C.metal); // batı ucundan rafa çıkış
+  for (let x = -23.5; x <= 4; x += 5.5)
+    for (const z of [RZ - 1.05, RZ + 1.05]) box(x, z, 0.3, 0.3, CRAWL, C.dark);
+  for (const [z, col] of [
+    [RZ - 0.6, C.pipe],
+    [RZ + 0.6, C.pipe2],
+  ])
+    rect(-24, 4, z - 0.25, z + 0.25, CRAWL + 0.3, 0.5, col, { solid: false });
+  stairs(-26.6, RZ, "x", 1, 2.2, 2.6, CRAWL + 0.3, C.metal); // batı ucundan rafa çıkış
   pad(-10, RZ - 3, [0, 9, 4.5]); // rafın üstüne
   pad(-10, RZ + 3, [0, 9, -4.5]);
 
   // İki katlı ofis: zemin kat + çatıda ikinci kulübe
   hut(19, -26, 12, 9, 3.2, C.office, {
-    roof: C.officeRoof, floor: C.concrete2, roofStairs: 'e', stairColor: C.concrete, capColor: C.officeRoof,
-    doors: [{ side: 'n', at: -3 }, { side: 'w', at: 1.5 }],
-    windows: [{ side: 'n', at: 2.5 }, { side: 'w', at: -2.5 }, { side: 's', at: -3 }, { side: 's', at: 3 }],
+    roof: C.officeRoof,
+    floor: C.concrete2,
+    roofStairs: "e",
+    stairColor: C.concrete,
+    capColor: C.officeRoof,
+    doors: [
+      { side: "n", at: -3 },
+      { side: "w", at: 1.5 },
+    ],
+    windows: [
+      { side: "n", at: 2.5 },
+      { side: "w", at: -2.5 },
+      { side: "s", at: -3 },
+      { side: "s", at: 3 },
+    ],
   });
   hut(17.5, -26.8, 5, 4.5, 2.6, C.office, {
-    y: 3.5, roof: C.officeRoof,
-    doors: [{ side: 'n', at: 0 }], windows: [{ side: 'w', at: 0 }, { side: 's', at: 0 }],
+    y: 3.5,
+    roof: C.officeRoof,
+    doors: [{ side: "n", at: 0 }],
+    windows: [
+      { side: "w", at: 0 },
+      { side: "s", at: 0 },
+    ],
   });
   crate(16, -28, 1.2, 1.1);
   box(21.5, -24, 2.5, 1, 0.9, C.wareRoof); // masa
@@ -671,11 +1146,16 @@ function scrapyard() {
   // ---------------- Doğu kuzey / güney: ezici makine ve köşe sığınakları ----------------
   box(32, 24, 5, 5, 4.2, C.rust);
   box(32, 24, 5.6, 5.6, 0.4, C.dark, { y: 4.2 });
-  stairs(32, 17.6, 'z', 1, 1.6, 3.6, 4.6, C.metal); // makinenin üstüne merdiven
-  for (const [x, z, door, crawl] of [[33, -34, 'n', 'w'], [-34, 34, 's', 'e']]) {
+  stairs(32, 17.6, "z", 1, 1.6, 3.6, 4.6, C.metal); // makinenin üstüne merdiven
+  for (const [x, z, door, crawl] of [
+    [33, -34, "n", "w"],
+    [-34, 34, "s", "e"],
+  ]) {
     // köşe sığınağı: bir kapı, diğer yanda eğilerek girilen delik
     hut(x, z, 6, 5, 2.6, C.concrete, {
-      roof: C.wallCap, doors: [{ side: door, at: 0 }], windows: [{ side: crawl, at: 0, w: 1.2, y0: 0, y1: CRAWL }],
+      roof: C.wallCap,
+      doors: [{ side: door, at: 0 }],
+      windows: [{ side: crawl, at: 0, w: 1.2, y0: 0, y1: CRAWL }],
     });
   }
   // dağınık siperler
@@ -694,23 +1174,76 @@ function scrapyard() {
 
   // Doğuş noktaları: haritanın her yerine dağılmış, ortaya bakar
   const pts = [
-    [-34, 0], [35, -2], [0, 36], [0, -36], [-18, 35], [17, 36], [-33, -22], [31, 11], [-12, -34], [12, -36],
-    [-35, 25], [36, -20], [-3, -15], [3, 15], [-15, 3], [15, -3],
+    [-34, 0],
+    [35, -2],
+    [0, 36],
+    [0, -36],
+    [-18, 35],
+    [17, 36],
+    [-33, -22],
+    [31, 11],
+    [-12, -34],
+    [12, -36],
+    [-35, 25],
+    [36, -20],
+    [-3, -15],
+    [3, 15],
+    [-15, 3],
+    [15, -3],
   ];
   const ffa = pts.map(([x, z]) => [x, 0.1, z, Math.atan2(x, z)]); // yaw: ortaya dön
   // Takım modları: kırmızı güney ucu, mavi kuzey ucu
-  const red = [[-8, -36], [-4, -37], [0, -36], [-6, -34], [-2, -34.5], [2, -34], [-10, -37.5], [8, -37.5]];
-  const blue = [[8, 36], [4, 37], [0, 36], [6, 34], [2, 34.5], [-2, 34], [10, 37.5], [-4, 37.5]];
+  const red = [
+    [-8, -36],
+    [-4, -37],
+    [0, -36],
+    [-6, -34],
+    [-2, -34.5],
+    [2, -34],
+    [-10, -37.5],
+    [8, -37.5],
+  ];
+  const blue = [
+    [8, 36],
+    [4, 37],
+    [0, 36],
+    [6, 34],
+    [2, 34.5],
+    [-2, 34],
+    [10, 37.5],
+    [-4, 37.5],
+  ];
   box(-2.5, -30.5, 11, 0.8, 2.2, C.concrete); // doğuş önü siper duvarları (iki uç birbirini görmesin)
   box(4, 30.5, 9, 0.8, 2.2, C.concrete);
   box(-2.5, -30.5, 11.3, 1, 0.15, C.wallCap, { y: 2.2, solid: false });
   box(4, 30.5, 9.3, 1, 0.15, C.wallCap, { y: 2.2, solid: false });
-  box(-1, -37, 18, 4, 0.03, '#e63946', { solid: false }); // doğuş alanları (dekor)
-  box(3, 36, 18, 4, 0.03, '#2a6fdb', { solid: false });
+  box(-1, -37, 18, 4, 0.03, "#e63946", { solid: false }); // doğuş alanları (dekor)
+  box(3, 36, 18, 4, 0.03, "#2a6fdb", { solid: false });
+
+  // Yer altı tünelleri (kavşaklı): batıdaki iskeleden depoya; ofisten kuzeydeki konteyner sahasına
+  tunnel({
+    axis: "x",
+    at: 2,
+    from: -20,
+    to: 25.5,
+    gaps: [[17.5, 20.5]],
+    color: "#7f8c8d",
+    wall: "#5c677d",
+  });
+  tunnel({
+    axis: "z",
+    at: 19,
+    from: -29.8,
+    to: 29,
+    gaps: [[0.5, 3.5]],
+    color: "#7f8c8d",
+    wall: "#5c677d",
+  });
+  finish();
 
   return {
-    id: 'scrap',
-    name: 'HURDALIK',
+    id: "scrap",
+    name: "HURDALIK",
     boxes,
     pads,
     spawns: {
@@ -719,24 +1252,35 @@ function scrapyard() {
       blue: blue.map(([x, z]) => [x, 0.1, z, 0]),
     },
     flags: { red: [0, 0.1, -38.2], blue: [2, 0.1, 38.2] },
+    botExits: exits,
     bounds: { x: B - 0.6, z: B - 0.6, minY: -5, maxY: 20 },
-    sky: '#f6bd60',
+    sky: "#f6bd60",
   };
 }
 
 export const MAPS = {
-  city: { id: 'city', sky: '#8ecae6', flags: flagsFrom(0, -40.4), ...CITY_ARENA, name: 'CITY ARENA' },
+  city: {
+    id: "city",
+    sky: "#8ecae6",
+    flags: flagsFrom(0, -40.4),
+    ...CITY_ARENA,
+    name: "CITY ARENA",
+  },
   pool: poolParty(),
   frost: frostArena(),
   scrap: scrapyard(),
 };
 export const MAP_IDS = Object.keys(MAPS);
-export const DEFAULT_MAP = 'city';
+export const DEFAULT_MAP = "city";
 
 const solidCache = new Map();
 /** Haritanın katı kutuları (isabet testi ve bomba fiziği için) */
 export function solidsOf(id) {
-  if (!solidCache.has(id)) solidCache.set(id, (MAPS[id] ?? MAPS[DEFAULT_MAP]).boxes.filter((b) => b.solid));
+  if (!solidCache.has(id))
+    solidCache.set(
+      id,
+      (MAPS[id] ?? MAPS[DEFAULT_MAP]).boxes.filter((b) => b.solid),
+    );
   return solidCache.get(id);
 }
 
