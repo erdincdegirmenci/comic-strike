@@ -132,6 +132,7 @@ export class Game {
     on(MSG.MARKED, this.onMarked);
     on(MSG.DROP, (d) => this.drops.add(d.id, d.p));
     on(MSG.PICKUP, this.onPickup);
+    on(MSG.REWARD, this.onReward);
   }
 
   onSnapshot(s) {
@@ -177,7 +178,7 @@ export class Game {
       this.switchBackAt = 0;
       this.protectedUntil = performance.now() + (d.pr ?? PLAYER.SPAWN_PROTECTION);
       const kr = this.killerId ? this.remotes.get(this.killerId) : null;
-      if (kr) kr.setFriendly(kr.team === this.team); // etiketi eski haline getir
+      if (kr) kr.setFriendly(this.mode !== 'ffa' && kr.team === this.team); // etiketi eski haline getir
       this.killerId = null;
       this.hud.respawn(null);
     } else {
@@ -227,6 +228,21 @@ export class Game {
     this.sfx.mark();
   }
 
+  /** Herkes Tek: öldürme ödülü (+can, +şarjör) ya da şarjör bitmesin diye verilen yedek */
+  onReward(d) {
+    if (d.reserve) Object.assign(this.weapon.reserve, d.reserve);
+    if (d.hp) this.hp = d.hp;
+    if (d.kill) {
+      this.hud.flagNotice('+25 CAN · +1 ŞARJÖR', 'good');
+      this.sfx.pickup();
+    }
+  }
+
+  /** Bu uzak oyuncu bize rakip mi (Herkes Tek'te herkes) */
+  isEnemy(rp) {
+    return this.mode === 'ffa' || rp.team !== this.team;
+  }
+
   onPickup(d) {
     const pos = this.drops.remove(d.id);
     if (d.by === this.myId && d.reserve) {
@@ -238,14 +254,14 @@ export class Game {
 
   /** E / orta tık: baktığın yeri takıma işaretle (rakip oyuncuya bakıyorsan "DÜŞMAN!") */
   mark(now) {
-    if (now - this.lastMark < MARK.COOLDOWN) return;
+    if (this.mode === 'ffa' || now - this.lastMark < MARK.COOLDOWN) return; // Herkes Tek'te takım yok
     this.aim();
     const hit = this.physics.raycast(_eye, _fwd, MARK.RANGE, this.local.collider);
     const far = hit ? hit.distance : MARK.RANGE;
     this.raycaster.set(_eye, _fwd);
     this.raycaster.far = far;
     const targets = [];
-    for (const rp of this.remotes.values()) if (rp.alive && rp.visible && rp.team !== this.team) targets.push(rp.body);
+    for (const rp of this.remotes.values()) if (rp.alive && rp.visible && this.isEnemy(rp)) targets.push(rp.body);
     const ph = targets.length ? this.raycaster.intersectObjects(targets, true)[0] : null;
     let p;
     let e = 0;
@@ -388,7 +404,7 @@ export class Game {
     this.weapon.visible = false;
     this.weapon.scope = 0;
     const names = new Map([...this.roster.values()].map((p) => [p.id, p.name]));
-    this.hud.end(d, this.team, names);
+    this.hud.end(d, this.team, names, this.myId);
     this.input.unlock();
   }
 
@@ -399,9 +415,12 @@ export class Game {
     this.world.load(info.map);
     this.solids = solidsOf(this.world.id);
     this.local.traction = this.world.map.traction ?? 1;
+    this.local.pads = this.world.map.pads ?? [];
+    this.local.onPad = () => this.sfx.boing();
     this.active = true;
     this.input.gameActive = true;
     this.myId = myId;
+    this.mode = info.mode ?? 'tdm';
     this.syncRoster(info.roster);
     this.scores = info.scores;
     this.scoreLimit = info.scoreLimit;
@@ -447,7 +466,7 @@ export class Game {
         r = new RemotePlayer(p, this.scene);
         this.remotes.set(p.id, r);
       } else r.setInfo(p);
-      r.setFriendly(p.team === this.team);
+      r.setFriendly(this.mode !== 'ffa' && p.team === this.team);
     }
     for (const [id, r] of this.remotes) {
       if (!this.roster.has(id)) {
@@ -524,7 +543,7 @@ export class Game {
     this.raycaster.set(_eye, _dir);
     this.raycaster.far = dist;
     const targets = [];
-    for (const rp of this.remotes.values()) if (rp.alive && rp.visible && rp.team !== this.team) targets.push(rp.body);
+    for (const rp of this.remotes.values()) if (rp.alive && rp.visible && this.isEnemy(rp)) targets.push(rp.body);
     const ph = targets.length ? this.raycaster.intersectObjects(targets, true)[0] : null;
     if (ph) dist = ph.distance;
     else if (hit) this.effects.impact(hit.point, hit.normal);
@@ -805,7 +824,16 @@ export class Game {
     hud.setStamina(this.alive && this.state !== 'ended' ? this.local.stamina / PLAYER.STAMINA_MAX : null, this.local.exhausted);
     hud.setPoison(this.alive ? this.effects.poisonDensity(this.camera.position) : 0);
     hud.setWeapons(wp.current, wp.owned, wp.nades, this.alive && this.state !== 'ended');
-    hud.setScores(this.scores.red, this.scores.blue, this.scoreLimit, this.mode);
+    if (this.mode === 'ffa') {
+      // Herkes Tek: solda benim öldürmelerim, sağda lider (lider bensem ikinci)
+      let lead = null;
+      for (const p of this.roster.values()) {
+        if (p.id === this.myId) continue;
+        const k = this.stats.get(p.id)?.k ?? 0;
+        if (!lead || k > lead.k) lead = { name: p.name, k };
+      }
+      hud.setFfaScores(this.stats.get(this.myId)?.k ?? 0, lead?.k ?? 0, lead?.name ?? '-', this.scoreLimit);
+    } else hud.setScores(this.scores.red, this.scores.blue, this.scoreLimit, this.mode);
     if (this.mode === 'ctf' && this.flagState) {
       const st = TEAMS.map((t, i) => this.flagState[i][0]);
       const carrying = this.flagState.some((f) => f[0] === FLAG_STATE.CARRIED && f[1] === this.myId);
@@ -853,7 +881,7 @@ export class Game {
         const s = this.stats.get(p.id) ?? { k: 0, d: 0, rtt: 0 };
         return { id: p.id, name: p.name, team: p.team, k: s.k, d: s.d, rtt: s.rtt, bot: p.bot };
       });
-      hud.scoreboard(true, rows, this.myId, this.scores);
+      hud.scoreboard(true, rows, this.myId, this.scores, this.mode);
     } else hud.scoreboard(false);
   }
 

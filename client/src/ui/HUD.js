@@ -131,7 +131,17 @@ export class HUD {
     });
   }
 
+  /** Herkes Tek skor çubuğu: benim öldürmelerim / en iyi rakip */
+  setFfaScores(mine, best, bestName, limit) {
+    this.set('scores', `ffa|${mine}|${best}|${bestName}|${limit}`, () => {
+      $('score-red').textContent = mine;
+      $('score-blue').textContent = best;
+      $('score-limit').textContent = `SEN · ${limit} KAZANIR · ${bestName}`;
+    });
+  }
+
   setMode(mode) {
+    $('topbar').classList.toggle('ffa', mode === 'ffa');
     $('flagbar').classList.toggle('hidden', mode !== 'ctf');
     if (mode !== 'ctf') $('flag-carry').classList.add('hidden');
   }
@@ -265,16 +275,16 @@ export class HUD {
   }
 
   /** rows: [{id, name, team, k, d, rtt}] */
-  scoreboard(visible, rows = [], myId = null, scores = null) {
+  scoreboard(visible, rows = [], myId = null, scores = null, mode = 'tdm') {
     const sb = $('scoreboard');
     sb.classList.toggle('hidden', !visible);
     if (!visible) return;
-    const key = JSON.stringify(rows) + JSON.stringify(scores);
+    const key = JSON.stringify(rows) + JSON.stringify(scores) + mode;
     this.set('sb', key, () => {
       sb.replaceChildren();
-      for (const team of ['red', 'blue']) {
+      for (const team of mode === 'ffa' ? ['ffa'] : ['red', 'blue']) {
         const box = el('div', `sb-team ${team}`);
-        box.append(el('h3', '', `${TEAM_INFO[team].name} — ${scores ? scores[team] : 0}`));
+        box.append(el('h3', '', team === 'ffa' ? 'HERKES TEK' : `${TEAM_INFO[team].name} — ${scores ? scores[team] : 0}`));
         const table = el('table');
         const head = el('tr');
         for (const h of ['NAME', 'K', 'D', 'PING']) head.append(el('th', '', h));
@@ -290,15 +300,27 @@ export class HUD {
     });
   }
 
-  end(data, myTeam, names) {
+  end(data, myTeam, names, myId = null) {
     const e = $('end-screen');
-    const title = data.winner === 'draw' ? 'BERABERE!' : `${TEAM_INFO[data.winner].name} WINS!`;
-    const won = data.winner === myTeam;
-    e.replaceChildren(
-      el('h1', `end-title ${data.winner}`, title),
-      el('p', 'end-sub', data.winner === 'draw' ? 'Kimse kazanamadı.' : won ? 'TAKIMIN KAZANDI!' : 'TAKIMIN KAYBETTİ!'),
-      el('p', 'end-score', `${data.scores.red} — ${data.scores.blue}`),
-    );
+    if (data.mode === 'ffa') {
+      // Herkes Tek: kazanan oyuncu
+      const w = data.players.find((p) => p.id === data.winnerId);
+      const me = data.winnerId && data.winnerId === myId;
+      const wName = w ? names.get(w.id) ?? w.name : '';
+      e.replaceChildren(
+        el('h1', `end-title ${w ? 'ffa' : 'draw'}`, !w ? 'BERABERE!' : me ? 'KAZANDIN!' : `${wName} KAZANDI!`),
+        el('p', 'end-sub', !w ? 'Kimse öne geçemedi.' : me ? 'HERKESİ ALT ETTİN!' : 'Bir dahaki sefere...'),
+        el('p', 'end-score', w ? `${w.kills} öldürme` : ''),
+      );
+    } else {
+      const title = data.winner === 'draw' ? 'BERABERE!' : `${TEAM_INFO[data.winner].name} WINS!`;
+      const won = data.winner === myTeam;
+      e.replaceChildren(
+        el('h1', `end-title ${data.winner}`, title),
+        el('p', 'end-sub', data.winner === 'draw' ? 'Kimse kazanamadı.' : won ? 'TAKIMIN KAZANDI!' : 'TAKIMIN KAYBETTİ!'),
+        el('p', 'end-score', `${data.scores.red} — ${data.scores.blue}`),
+      );
+    }
     // Maç sonu ödülleri
     const ICON = { kills: '💀', hs: '🎯', caps: '🚩', deaths: '🧲' };
     const UNIT = { kills: 'öldürme', hs: 'kafadan', caps: 'bayrak', deaths: 'ölüm' };

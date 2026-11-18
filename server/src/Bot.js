@@ -1,4 +1,4 @@
-import { PLAYER, WEAPONS, FLAG, FLAG_STATE, TEAMS } from '@comic-strike/shared/constants.js';
+import { PLAYER, WEAPONS, FLAG, FLAG_STATE, TEAMS, isEnemy } from '@comic-strike/shared/constants.js';
 import { castShot } from './HitScan.js';
 
 // Sunucu tarafında çalışan pratik botları.
@@ -211,6 +211,7 @@ function findPath(g, from, to) {
   return path;
 }
 
+const now = () => Date.now();
 const angleTo = (dx, dz) => Math.atan2(-dx, -dz); // istemcideki yaw ile aynı (ileri = -Z)
 
 /** Bir botun beyni. Room.tick içinde her sunucu adımında update çağrılır. */
@@ -322,14 +323,16 @@ export class BotBrain {
     let best = null;
     let bd = Infinity;
     for (const o of room.players.values()) {
-      if (!o.alive || o.team === p.team) continue;
+      if (!o.alive || !isEnemy(o, p)) continue;
       const d = Math.hypot(o.pos[0] - p.pos[0], o.pos[2] - p.pos[2]);
       if (d < bd) {
         bd = d;
         best = o.pos;
       }
     }
-    return best ?? room.map.spawns[p.team === 'red' ? 'blue' : 'red'][0];
+    if (best) return best;
+    const pts = room.spawnPoints(p);
+    return pts[Math.floor(now() / 8000 + this.skill * 10) % pts.length];
   }
 
   /** Belirtilen yöne dt kadar yürümeyi dene; engel varsa yana kaydır. Hareket ettiyse true */
@@ -362,7 +365,7 @@ export class BotBrain {
     let enemy = null;
     let ed = Infinity;
     for (const o of room.players.values()) {
-      if (!o.alive || o.team === p.team || now < o.protectedUntil) continue;
+      if (!o.alive || !isEnemy(o, p) || now < o.protectedUntil) continue;
       const d = Math.hypot(o.pos[0] - p.pos[0], o.pos[1] - p.pos[1], o.pos[2] - p.pos[2]);
       if (d < ed && this.canSee(o)) {
         ed = d;

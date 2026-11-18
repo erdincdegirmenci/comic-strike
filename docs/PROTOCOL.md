@@ -20,7 +20,7 @@ Mesaj isimleri `shared/protocol.js` içindedir.
 | `throw` | `{d:[x,y,z], c}` | Elindeki bombayı at. `c` 0..1: basılı tutma oranı (uzaklık) |
 | `spray` | `{p, n}` | Duvara sticker (nokta + yüzey normali) |
 | `set_loadout` | `{primary, pistol, nade}` | Silah seçimi. Doğuştan sonra 10 sn içinde ve ateş etmeden hemen, yoksa sonraki doğuşta |
-| `set_mode` | `'tdm' \| 'ctf'` | Oyun modu (sadece host, lobide) |
+| `set_mode` | `'tdm' \| 'ctf' \| 'ffa'` | Oyun modu (sadece host, lobide). Herkes Tek'te tüm oyuncuların takımı `ffa` olur; HURDALIK seçilince mod otomatik `ffa` |
 | `fall` | `{v}` | Yere sert iniş hızı (m/s). Hasarı sunucu hesaplar, üst sınırlı (`FALL` sabitleri) |
 
 ## Sunucu → İstemci
@@ -37,6 +37,7 @@ Mesaj isimleri `shared/protocol.js` içindedir.
 | `damaged` | `{hp, from}`: sadece vurulana |
 | `kill` | `{k, v, h, w, s}`: herkese, kill feed ve skor (`w` silah) |
 | `ammo` | `{w, ammo, res}`: reload tamamlandı |
+| `reward` | `{hp?, reserve, w, kill?}`: Herkes Tek öldürme ödülü (`kill:1`) ya da şarjör bitmesin diye verilen yedek |
 | `flag` | `{team, ev, by, s}`: CTF bayrak olayı — `ev`: `take` (kapıldı) · `drop` (taşıyıcı öldü) · `return` (üsse döndü) · `capture` (sayı). Snapshot'ta `f: [[durum, taşıyıcıId, x, y, z] ×2]` (durum 0 üste, 1 taşınıyor, 2 yerde) |
 | `grenade` | `{g, t, id, o, v}`: bomba atıldı; herkes `shared/grenade.js` ile aynı yörüngeyi hesaplar |
 | `boom` | `{g, t, p}`: bomba patladı / sis açıldı |

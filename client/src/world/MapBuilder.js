@@ -72,9 +72,64 @@ export function buildMap(map, scene, physics) {
   for (const g of [...colorGeos, ...outlineGeos, ...edgeGeos]) g.dispose();
 
   if (map.water) addWater(group, map.water);
+  if (map.pads) for (const p of map.pads) addPad(group, p);
   addClouds(group);
   scene.add(group);
   return group;
+}
+
+let _padTex;
+/** Ped yüzeyi: yukarıyı gösteren çizgi roman okları */
+function padTexture() {
+  if (_padTex) return _padTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#06d6a0';
+  g.beginPath();
+  g.arc(64, 64, 62, 0, Math.PI * 2);
+  g.fill();
+  g.lineWidth = 8;
+  g.strokeStyle = '#141414';
+  g.stroke();
+  g.fillStyle = '#fffbe6';
+  g.lineWidth = 6;
+  for (const y of [30, 62]) {
+    g.beginPath();
+    g.moveTo(64, y - 4);
+    g.lineTo(98, y + 30);
+    g.lineTo(80, y + 30);
+    g.lineTo(64, y + 14);
+    g.lineTo(48, y + 30);
+    g.lineTo(30, y + 30);
+    g.closePath();
+    g.fill();
+    g.stroke();
+  }
+  _padTex = new THREE.CanvasTexture(c);
+  _padTex.colorSpace = THREE.SRGBColorSpace;
+  return _padTex;
+}
+
+/** Zıplama pedi: oklu disk + hafif parlayan sütun (fizik yok, fırlatmayı oyuncu kodu yapar) */
+function addPad(group, p) {
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(p.r, p.r * 1.08, 0.1, 24), toon('#3d405b'));
+  base.position.set(p.c[0], p.c[1] + 0.05, p.c[2]);
+  addOutline(base, 0.03);
+  group.add(base);
+  const top = new THREE.Mesh(new THREE.CircleGeometry(p.r * 0.92, 28), new THREE.MeshBasicMaterial({ map: padTexture() }));
+  top.rotation.x = -Math.PI / 2;
+  // okların yönü fırlatma yönüne baksın
+  top.rotation.z = Math.atan2(p.v[0], -p.v[2]) + Math.PI;
+  top.position.set(p.c[0], p.c[1] + 0.105, p.c[2]);
+  group.add(top);
+  const glow = new THREE.Mesh(
+    new THREE.CylinderGeometry(p.r * 0.7, p.r * 0.9, 1.4, 20, 1, true),
+    new THREE.MeshBasicMaterial({ color: '#06d6a0', transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide }),
+  );
+  glow.position.set(p.c[0], p.c[1] + 0.8, p.c[2]);
+  glow.renderOrder = 2;
+  group.add(glow);
 }
 
 /** Yarı saydam su yüzeyi + çizgi roman parıltıları */

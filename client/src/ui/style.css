@@ -173,6 +173,21 @@ body.pointer-locked .fs-btn { display: none; }
 .kf-row.fade { opacity: 0; }
 .kf-name.red { color: var(--red); }
 .kf-name.blue { color: var(--blue); }
+.kf-name.ffa { color: #9b5de5; }
+/* Herkes Tek: skor çubuğu mor/sarı */
+#topbar.ffa .score.red { background: #9b5de5; }
+#topbar.ffa .score.blue { background: #3c096c; }
+.sb-team.ffa h3 { color: #9b5de5; }
+.end-title.ffa { color: #c77dff; }
+.award.ffa .award-name { color: #9b5de5; }
+.map-card.map-scrap { background: linear-gradient(180deg, #f6bd60 50%, #c2a878 50%); }
+.map-card small { display: block; font-size: 11px; letter-spacing: 0.5px; }
+/* Lobide Herkes Tek: tek liste */
+.teams.ffa { grid-template-columns: 1fr; }
+.teams.ffa .vs, .teams.ffa .team.blue, .teams.ffa #btn-red { display: none; }
+.teams.ffa .team.red { background: #f3e8ff; }
+.teams.ffa .team.red h3 { color: #9b5de5; }
+.teams.ffa ul { display: grid; grid-template-columns: 1fr 1fr; column-gap: 10px; }
 .kf-icon { color: var(--ink); }
 @keyframes slideIn { from { transform: translateX(40px); opacity: 0; } }
 
@@ -377,7 +392,8 @@ body.pointer-locked .fs-btn { display: none; }
 /* ---------------- Harita seçimi ---------------- */
 .map-row { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
 .map-row i { font-style: normal; color: #666; }
-#map-pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+#map-pick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+#mode-pick { grid-template-columns: repeat(3, 1fr) !important; }
 .map-card {
   font-family: var(--font); font-size: 18px; letter-spacing: 1px; cursor: pointer; color: var(--ink);
   border: 3px solid var(--ink); border-radius: 8px; padding: 18px 6px; opacity: 0.6;

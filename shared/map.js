@@ -36,6 +36,15 @@ const COL = {
 };
 
 const boxes = [];
+const pads = [];
+
+/** Zıplama pedi (aynalanır: karşı taraftaki pedin Z hızı ters) */
+function pad(cx, cz, v, o = {}) {
+  const y = o.y ?? 0;
+  const r = o.r ?? 1;
+  pads.push({ c: [cx, y, cz], r, v });
+  if (o.mirror ?? true) pads.push({ c: [cx, y, -cz], r, v: [v[0], v[1], -v[2]] });
+}
 
 function add(min, max, color, solid) {
   boxes.push({ min, max, color, solid });
@@ -364,12 +373,26 @@ box(-8, 0, 5.6, 2.4, 0.3, COL.roof, { y: 2.6, mirror: false });
 box(9.5, 0, 4, 1.6, 2.6, COL.b2, { mirror: false });
 box(9.5, 0, 4.6, 2.4, 0.3, COL.roof, { y: 2.6, mirror: false });
 
+// ---------------- ZIPLAMA PEDLERİ VE EĞİLEREK GEÇİLEN YERLER ----------------
+const CRAWL = 1.25; // ayakta geçilmez, çömelince geçilir
+// Tır dorsesi: altından eğilerek geçilir, üstüne pedle çıkılır
+box(9.5, -27, 7, 2.6, 1.95, '#e76f51', { y: CRAWL });
+box(9.5, -27, 7.08, 2.68, 0.18, COL.gold, { y: CRAWL + 1.2, solid: false });
+for (const x of [6.7, 7.6, 11.4, 12.3]) for (const z of [-28.15, -25.85]) box(x, z, 0.75, 0.3, 0.8, COL.tire, { y: 0.15, solid: false });
+box(6.3, -27, 0.15, 2, CRAWL, COL.metal, { solid: false }); // dorse ayağı (dekor)
+pad(9.5, -31, [0, 12, 4.4]); // dorsenin üstüne
+// Ara sokağı kapatan duvar: ortasında eğilerek geçilen delik
+wall('x', -14.8, -19, -15, 2.6, [{ a: -17.6, b: -16.4, y0: 0, y1: CRAWL }], COL.wall);
+// Ortadaki evin çatısına ped
+pad(-8.5, -19, [4.8, 16.75, 0]);
+
 // ---------------- SPAWN NOKTALARI ----------------
 const RED_SPAWNS = [[-6, -38], [-2, -39], [2, -39], [6, -38], [-10, -36.5], [10, -36.5], [-4, -35], [4, -35]];
 
 export const CITY_ARENA = {
   name: 'City Arena',
   boxes,
+  pads,
   // [x, y, z, yaw]  — yaw=π → +Z'ye bakar
   spawns: {
     red: RED_SPAWNS.map(([x, z]) => [x, 0.1, z, Math.PI]),

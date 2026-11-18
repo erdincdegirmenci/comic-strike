@@ -21,7 +21,13 @@ export const TEAMS = ['red', 'blue'];
 export const TEAM_INFO = {
   red: { name: 'RED', color: '#e63946', dark: '#8d0801' },
   blue: { name: 'BLUE', color: '#2a6fdb', dark: '#14325c' },
+  ffa: { name: 'FFA', color: '#9b5de5', dark: '#3c096c' }, // Herkes Tek: takım yok
 };
+
+/** a ve b birbirine rakip mi? (Herkes Tek modunda herkes herkese rakip) */
+export function isEnemy(a, b) {
+  return a !== b && (a.team === 'ffa' || b.team === 'ffa' || a.team !== b.team);
+}
 
 // ---- Oyuncu ----
 export const PLAYER = {
@@ -203,7 +209,17 @@ export const SPRAY = { RANGE: 4, SIZE: 1.2, COOLDOWN: 4000 };
 export const MODES = {
   tdm: { id: 'tdm', name: 'TAKIM SAVAŞI', desc: 'Öldüren takım puan alır' },
   ctf: { id: 'ctf', name: 'BAYRAK KAP', desc: 'Rakip bayrağını kendi üssüne getir' },
+  ffa: { id: 'ffa', name: 'HERKES TEK', desc: 'Takım yok, herkes herkese rakip' },
 };
+// Herkes Tek (FFA): öldürme ödülü ve kazanma şartı
+export const FFA = {
+  KILL_LIMIT: 20, // bu kadar öldüren kazanır
+  KILL_HP: 25, // öldürünce kazanılan can (en fazla MAX_HP)
+  KILL_MAGS: 1, // öldürünce kazanılan şarjör (öldürdüğün silaha)
+  MAX_MAGS: 10, // yedekte en fazla bu kadar şarjör birikir
+};
+// Zıplama pedi: üstüne basınca pedin hızıyla fırlatır (harita verisinde pads: [{c:[x,y,z], r, v:[vx,vy,vz]}])
+export const PAD = { COOLDOWN: 600, MAX_VY: 18 };
 export const MODE_IDS = Object.keys(MODES);
 export const DEFAULT_MODE = 'tdm';
 export const CTF = {

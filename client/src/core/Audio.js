@@ -160,6 +160,13 @@ export class Sfx {
     this.noiseBurst({ gain: 0.5, decay: 0.07, freq: 2200, type: 'highpass', delay: 1.5 });
   }
 
+  /** Zıplama pedi */
+  boing() {
+    if (!this.ready) return;
+    this.tone({ type: 'sine', from: 180, to: 880, gain: 0.3, decay: 0.32 });
+    this.tone({ type: 'triangle', from: 360, to: 1300, gain: 0.12, decay: 0.25, delay: 0.05 });
+  }
+
   /** Mermi kutusu alındı */
   pickup() {
     if (!this.ready) return;
