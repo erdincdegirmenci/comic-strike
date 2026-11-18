@@ -96,6 +96,7 @@ export class RoomManager {
     forward(MSG.SET_TEAM, 'onSetTeam');
     forward(MSG.SET_READY, 'onSetReady');
     forward(MSG.SET_MAP, 'onSetMap');
+    forward(MSG.SET_MODE, 'onSetMode');
     forward(MSG.START_MATCH, 'onStartMatch');
     forward(MSG.INPUT, 'onInput');
     forward(MSG.SHOOT, 'onShoot');
@@ -104,6 +105,10 @@ export class RoomManager {
     forward(MSG.THROW, 'onThrow');
     forward(MSG.SPRAY, 'onSpray');
     forward(MSG.SET_LOADOUT, 'onSetLoadout');
+    forward(MSG.FALL, 'onFall');
+    forward(MSG.MARK, 'onMark');
+    forward(MSG.ADD_BOT, 'onAddBot');
+    forward(MSG.REMOVE_BOT, 'onRemoveBot');
 
     socket.on('disconnect', () => {
       this.leave(socket);

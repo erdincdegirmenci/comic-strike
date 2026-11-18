@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { MSG } from '@comic-strike/shared/protocol.js';
 import {
-  PLAYER, GRENADE, WEAPONS, WEAPON_ORDER, SPRAY, CLIENT_SEND_RATE, INTERP_DELAY, TEAM_INFO,
+  PLAYER, GRENADE, WEAPONS, WEAPON_ORDER, SPRAY, CLIENT_SEND_RATE, INTERP_DELAY, TEAM_INFO, ADS, FALL, FLAG_STATE, TEAMS, MARK,
 } from '@comic-strike/shared/constants.js';
 import { solidsOf } from '@comic-strike/shared/maps.js';
 import { stepGrenade } from '@comic-strike/shared/grenade.js';
@@ -10,6 +10,10 @@ import { RemotePlayer } from './player/RemotePlayer.js';
 import { Weapon } from './player/Weapon.js';
 import { Effects } from './fx/Effects.js';
 import { part } from './fx/Toon.js';
+import { Trajectory } from './fx/Trajectory.js';
+import { Flags } from './fx/Flags.js';
+import { Drops } from './fx/Drops.js';
+import { Marks } from './fx/Marks.js';
 
 const r2 = (v) => Math.round(v * 100) / 100;
 const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -18,7 +22,9 @@ const SLOT_KEYS = { Digit1: 1, Digit2: 2, Digit3: 3, Digit4: 4 };
 const NADE_GEO = {
   he: new THREE.SphereGeometry(0.1, 10, 8),
   smoke: new THREE.CylinderGeometry(0.08, 0.08, 0.22, 10),
+  poison: new THREE.CylinderGeometry(0.08, 0.08, 0.22, 10),
 };
+const NADE_COLOR = { he: '#52b788', smoke: '#adb5bd', poison: '#7cb518' };
 
 const _eye = new THREE.Vector3();
 const _fwd = new THREE.Vector3();
@@ -44,6 +50,11 @@ export class Game {
     this.weapon = new Weapon(this.view.aspect);
     this.view.onResize((a) => this.weapon.setAspect(a));
     this.effects = new Effects(this.scene);
+    this.trajectory = new Trajectory(this.scene);
+    this.flags = new Flags(this.scene);
+    this.drops = new Drops(this.scene);
+    this.marks = new Marks(this.scene);
+    this.deathLook = new THREE.Vector3();
     this.remotes = new Map();
     this.grenades = new Map();
     this.raycaster = new THREE.Raycaster();
@@ -79,6 +90,12 @@ export class Game {
     this.switchBackAt = 0;
     this.chargeStart = 0; // bomba basılı tutuluyorsa başlangıç anı
     this.fov = null;
+    this.protectedUntil = 0; // doğuş koruması bitiş anı (performance.now)
+    this.mode = 'tdm';
+    this.flagState = null; // CTF: snapshot'taki bayrak durumu
+    this.killerId = null; // ölüm kamerası: bizi öldüren
+    this.killerHp = 0;
+    this.lastMark = 0;
   }
 
   // ---------------- Ağ olayları ----------------
@@ -95,7 +112,7 @@ export class Game {
     on(MSG.LOADOUT, (d) => {
       // Silah seçimi hemen uygulandıysa yeni silahları eline al
       if (d.now && this.alive) {
-        this.weapon.reset(d.ammo, d.nades, d.loadout);
+        this.weapon.reset(d.ammo, d.nades, d.loadout, d.reserve);
         this.switchBackAt = 0;
         this.sfx.draw();
       }
@@ -104,12 +121,17 @@ export class Game {
     on(MSG.AMMO, (d) => {
       const w = d.w ?? this.weapon.current;
       this.weapon.ammo[w] = d.ammo;
+      if (d.res !== undefined) this.weapon.reserve[w] = d.res;
       if (w === this.weapon.current) this.weapon.reloading = false;
     });
     on(MSG.GRENADE, this.onGrenade);
     on(MSG.BOOM, this.onBoom);
     on(MSG.SPRAYED, this.onSprayed);
     on(MSG.MATCH_END, this.onMatchEnd);
+    on(MSG.FLAG, this.onFlag);
+    on(MSG.MARKED, this.onMarked);
+    on(MSG.DROP, (d) => this.drops.add(d.id, d.p));
+    on(MSG.PICKUP, this.onPickup);
   }
 
   onSnapshot(s) {
@@ -121,6 +143,10 @@ export class Game {
     if (this.state !== 'ended') this.state = s.st;
     if (s.st === 'countdown') this.countdownEnd = performance.now() + s.cd;
     this.scores = { red: s.s[0], blue: s.s[1] };
+    if (s.f) {
+      this.flagState = s.f;
+      this.flags.setState(s.f);
+    }
     this.timeLeft = s.tl;
     this.timeStamp = performance.now();
 
@@ -145,9 +171,14 @@ export class Game {
       this.alive = true;
       this.hp = PLAYER.MAX_HP;
       this.deathT = 0;
-      this.weapon.reset(d.ammo, d.nades, d.loadout);
+      this.weapon.reset(d.ammo, d.nades, d.loadout, d.reserve);
+      this.local.resetStamina();
       this.weapon.visible = true;
       this.switchBackAt = 0;
+      this.protectedUntil = performance.now() + (d.pr ?? PLAYER.SPAWN_PROTECTION);
+      const kr = this.killerId ? this.remotes.get(this.killerId) : null;
+      if (kr) kr.setFriendly(kr.team === this.team); // etiketi eski haline getir
+      this.killerId = null;
       this.hud.respawn(null);
     } else {
       this.remotes.get(d.id)?.respawn(d.p, d.yaw);
@@ -179,16 +210,63 @@ export class Game {
     this.hud.hitmarker(d.k);
     this.sfx.hit();
     if (d.pt) this.effects.splat(d.pt);
+    // Uçuşan hasar sayısı: rakibin başının biraz üstünde
+    const r = this.remotes.get(d.v);
+    if (r && r.visible) _tmp.copy(r.root.position).setY(r.root.position.y + 2.0);
+    else if (d.pt) _tmp.set(d.pt[0], d.pt[1] + 0.4, d.pt[2]);
+    else return;
+    const dist = _tmp.distanceTo(this.camera.position);
+    this.effects.damageNumber(_tmp, d.d, d.h, d.k, Math.max(1, Math.min(4, dist * 0.14)));
+  }
+
+  /** Takım arkadaşının (veya kendi) işareti */
+  onMarked(d) {
+    const who = this.roster.get(d.id);
+    const name = d.id === this.myId ? 'SEN' : who?.name ?? '?';
+    this.marks.add(d.id, d.p, d.e === 1, name, TEAM_INFO[this.team].color);
+    this.sfx.mark();
+  }
+
+  onPickup(d) {
+    const pos = this.drops.remove(d.id);
+    if (d.by === this.myId && d.reserve) {
+      Object.assign(this.weapon.reserve, d.reserve);
+      this.sfx.pickup();
+      this.hud.flagNotice('+ MERMİ', 'good');
+    } else if (pos && d.by && pos.distanceTo(this.camera.position) < 12) this.sfx.pickup();
+  }
+
+  /** E / orta tık: baktığın yeri takıma işaretle (rakip oyuncuya bakıyorsan "DÜŞMAN!") */
+  mark(now) {
+    if (now - this.lastMark < MARK.COOLDOWN) return;
+    this.aim();
+    const hit = this.physics.raycast(_eye, _fwd, MARK.RANGE, this.local.collider);
+    const far = hit ? hit.distance : MARK.RANGE;
+    this.raycaster.set(_eye, _fwd);
+    this.raycaster.far = far;
+    const targets = [];
+    for (const rp of this.remotes.values()) if (rp.alive && rp.visible && rp.team !== this.team) targets.push(rp.body);
+    const ph = targets.length ? this.raycaster.intersectObjects(targets, true)[0] : null;
+    let p;
+    let e = 0;
+    if (ph) {
+      p = ph.point;
+      e = 1;
+    } else if (hit) p = hit.point;
+    else return; // gökyüzü
+    this.lastMark = now;
+    this.net.emit(MSG.MARK, { p: [r2(p.x), r2(p.y), r2(p.z)], e });
   }
 
   onDamaged(d) {
     this.hp = d.hp;
-    this.shake = 0.25;
+    this.shake = Math.max(this.shake, d.w === 'poison' ? 0.08 : 0.25);
     this.sfx.hurt();
     // Hasar yönü: saldırganın bize göre açısı
     const dx = d.from[0] - this.local.position.x;
     const dz = d.from[2] - this.local.position.z;
-    const angle = Math.atan2(dx, -dz) + this.local.yaw;
+    // Düşme hasarında yön yok (kaynak kendi konumumuz)
+    const angle = Math.hypot(dx, dz) < 0.3 ? null : Math.atan2(dx, -dz) + this.local.yaw;
     this.hud.damage(angle);
   }
 
@@ -198,7 +276,7 @@ export class Game {
     const victim = this.roster.get(d.v) ?? { name: '?', team: 'blue' };
     this.hud.killfeed(killer, victim, d.h, d.w);
 
-    const word = d.h ? 'HEADSHOT!' : d.w === 'knife' ? 'SHANKED!' : d.w === 'he' ? 'KABOOM!' : KILL_WORDS[Math.floor(Math.random() * KILL_WORDS.length)];
+    const word = d.h ? 'HEADSHOT!' : d.w === 'knife' ? 'SHANKED!' : d.w === 'he' ? 'KABOOM!' : d.w === 'fall' ? 'SPLAT!' : d.w === 'poison' ? 'TOXIC!' : KILL_WORDS[Math.floor(Math.random() * KILL_WORDS.length)];
     const r = this.remotes.get(d.v);
     if (r) {
       r.die();
@@ -210,8 +288,18 @@ export class Game {
       this.alive = false;
       this.weapon.visible = false;
       this.weapon.scope = 0;
+      this.weapon.aiming = false;
       this.chargeStart = 0;
+      this.protectedUntil = 0;
+      this.trajectory.hide();
       this.killedBy = d.k === d.v ? '' : killer.name;
+      this.killerId = d.k === d.v ? null : d.k;
+      // Ölüm kamerasında katilin isim etiketi görünsün
+      const kr = this.killerId ? this.remotes.get(this.killerId) : null;
+      if (kr) kr.tag.visible = true;
+      this.killerHp = d.kh ?? 0;
+      this.camera.getWorldDirection(_dir);
+      this.deathLook.copy(this.camera.position).addScaledVector(_dir, 5);
       this.respawnAt = performance.now() + PLAYER.RESPAWN_TIME;
     }
     if (d.k === this.myId && d.v !== this.myId) {
@@ -221,7 +309,7 @@ export class Game {
   }
 
   onGrenade(d) {
-    const mesh = part(NADE_GEO[d.t], d.t === 'he' ? '#52b788' : '#adb5bd', 0.02);
+    const mesh = part(NADE_GEO[d.t] ?? NADE_GEO.he, NADE_COLOR[d.t] ?? '#adb5bd', 0.02);
     mesh.position.set(d.o[0], d.o[1], d.o[2]);
     this.scene.add(mesh);
     this.grenades.set(d.g, { mesh, sim: { p: [...d.o], v: [...d.v] }, born: performance.now(), steps: 0, t: d.t, lastVy: d.v[1] });
@@ -244,7 +332,8 @@ export class Game {
       this.sfx.explosion(Math.max(0.05, 1 - dist / 70));
       if (dist < 14) this.shake = Math.max(this.shake, 0.5 * (1 - dist / 14));
     } else {
-      this.effects.smoke(_tmp, WEAPONS.smoke.RADIUS, WEAPONS.smoke.DURATION / 1000);
+      const w = WEAPONS[d.t] ?? WEAPONS.smoke;
+      this.effects.smoke(_tmp, w.RADIUS, w.DURATION / 1000, d.t === 'poison');
       this.sfx.smokePop(Math.max(0.05, 1 - dist / 50));
     }
   }
@@ -256,6 +345,42 @@ export class Game {
       _tmp.set(d.p[0], d.p[1], d.p[2]);
       if (_tmp.distanceTo(this.camera.position) < 12) this.sfx.spray();
     }
+  }
+
+  /** Bayrak olayı (CTF): duyuru + ses */
+  onFlag(d) {
+    if (d.s) this.scores = d.s;
+    const mine = d.team === this.team; // olay bizim bayrağımızla mı ilgili
+    const who = d.by ? this.roster.get(d.by)?.name ?? '?' : '';
+    const me = d.by === this.myId;
+    const enemyName = TEAM_INFO[d.team].name;
+    let text = '';
+    let good = !mine;
+    switch (d.ev) {
+      case 'take':
+        text = me ? 'BAYRAĞI KAPTIN! ÜSSÜNE GÖTÜR!' : mine ? `${who} BAYRAĞIMIZI ÇALDI!` : `${who} ${enemyName} BAYRAĞINI KAPTI!`;
+        break;
+      case 'drop':
+        text = mine ? 'BAYRAĞIMIZ DÜŞTÜ — GERİ AL!' : `${enemyName} BAYRAĞI YERE DÜŞTÜ!`;
+        good = !mine;
+        break;
+      case 'return':
+        text = mine ? 'BAYRAĞIMIZ ÜSSE DÖNDÜ' : `${enemyName} BAYRAĞI ÜSSÜNE DÖNDÜ`;
+        good = mine;
+        break;
+      case 'capture': {
+        // Bayrağı getiren takım, bayrağın sahibinin rakibidir
+        text = mine ? 'RAKİP SAYI ALDI!' : me ? 'SAYI! BAYRAĞI GETİRDİN!' : `${who} SAYIYI GETİRDİ!`;
+        this.sfx.capture(!mine);
+        this.hud.flagNotice(text, mine ? 'bad' : 'good');
+        if (!mine) this.hud.pop('CAPTURE!');
+        return;
+      }
+      default:
+        return;
+    }
+    this.sfx.flag(good);
+    this.hud.flagNotice(text, good ? 'good' : 'bad');
   }
 
   onMatchEnd(d) {
@@ -282,6 +407,9 @@ export class Game {
     this.scoreLimit = info.scoreLimit;
     this.timeLeft = info.timeLeft;
     this.state = info.countdown > 0 ? 'countdown' : 'playing';
+    this.mode = info.mode ?? 'tdm';
+    this.flags.setup(this.mode === 'ctf' ? info.flagBases : null);
+    this.hud.setMode(this.mode);
     this.countdownEnd = performance.now() + info.countdown;
     this.weapon.visible = false;
     this.applySettings();
@@ -296,6 +424,10 @@ export class Game {
     for (const g of this.grenades.values()) this.scene.remove(g.mesh);
     this.grenades.clear();
     this.effects.clear();
+    this.trajectory.hide();
+    this.flags.setup(null);
+    this.drops.clear();
+    this.marks.clear();
     this.weapon.visible = false;
     this.weapon.scope = 0;
     this.hud.hide();
@@ -345,6 +477,8 @@ export class Game {
     else if (l.moving) s = w.SPREAD_MOVE;
     else s = w.SPREAD_BASE;
     if (l.crouching && l.grounded) s *= 0.7;
+    // Sağ tık nişan: yerdeyken çok daha isabetli (koşarken nişan alınamaz, koşu sapması geçerli)
+    if (l.grounded && this.weapon.aiming) s *= ADS.SPREAD_MULT * (l.moving ? 1.6 : 1);
     return s;
   }
 
@@ -361,6 +495,7 @@ export class Game {
 
   fire(now, heavy = false) {
     const w = this.weapon.def;
+    this.protectedUntil = 0; // ateş eden doğuş korumasını kaybeder (sunucuyla aynı)
     this.weapon.fire(now, heavy);
     this.aim();
 
@@ -402,8 +537,9 @@ export class Game {
 
     // Geri tepme
     const l = this.local;
-    l.pitch += w.RECOIL * (0.6 + Math.random() * 0.4);
-    l.yaw += (Math.random() - 0.5) * w.RECOIL * 0.6;
+    const rk = this.weapon.aiming ? 0.7 : 1;
+    l.pitch += w.RECOIL * rk * (0.6 + Math.random() * 0.4);
+    l.yaw += (Math.random() - 0.5) * w.RECOIL * 0.6 * rk;
     l.clampPitch();
   }
 
@@ -416,6 +552,7 @@ export class Game {
     const c = r2(this.charge);
     this.chargeStart = 0;
     this.weapon.charge = 0;
+    this.protectedUntil = 0;
     this.weapon.throwNade(now);
     this.sfx.throw();
     this.aim();
@@ -475,6 +612,7 @@ export class Game {
     }
 
     if (input.pressed('KeyT')) this.spray(now);
+    if (input.pressed('KeyE') || input.middleClicked) this.mark(now);
 
     const w = wp.def;
     if (input.pressed('KeyR')) this.reload(now);
@@ -485,6 +623,8 @@ export class Game {
       this.sfx.scope();
     }
     if (w.kind === 'melee' && input.rightDown && !input.mouseDown && wp.canFire(now)) this.fire(now, true);
+    // Sağ tık basılı: nişan al (AWP dışındaki ateşli silahlar)
+    wp.aiming = wp.canAim && input.rightDown && !wp.reloading;
 
     if (w.kind === 'grenade') {
       // Basılı tut: güç dolar; bırakınca at. Sağ tık iptal eder.
@@ -521,14 +661,23 @@ export class Game {
     const look = input.locked ? input.consumeMouse() : (input.consumeMouse(), { dx: 0, dy: 0 });
     if (this.alive && this.state !== 'ended') {
       // Dürbünde hassasiyet yakınlaştırmaya göre düşer
-      const zoom = this.camera.fov / this.settings.fov;
+      const zoom = Math.min(1, this.camera.fov / this.settings.fov);
       this.local.look(look.dx, look.dy, this.settings.sensitivity * zoom);
       this.local.speedMult = this.weapon.def.SPEED_MULT;
       this.local.scoped = this.weapon.scope > 0;
+      this.local.aiming = this.weapon.aiming;
       this.local.update(dt, input, controls);
+      // Yere sert iniş: düşme hasarını sunucu hesaplar
+      if (this.local.landed > FALL.SAFE_SPEED && playing) {
+        this.net.emit(MSG.FALL, { v: r2(this.local.landed) });
+        this.shake = Math.max(this.shake, 0.2);
+      }
+      this.local.landed = 0;
     }
 
     if (controls) this.handleWeaponInput(now);
+    else this.weapon.aiming = false;
+    this.updateTrajectory(controls);
     if (input.locked && this.state !== 'ended' && input.pressed('KeyB')) this.onBuyMenu?.();
     this.weapon.update(dt, now, this.local, look);
 
@@ -553,8 +702,27 @@ export class Game {
 
     const renderT = Date.now() - (this.offset ?? 0) - INTERP_DELAY;
     for (const r of this.remotes.values()) r.update(renderT, dt);
+    this.flags.update(dt, (id) => this.remotes.get(id)?.root ?? null, this.myId);
+    this.drops.update(dt);
+    this.marks.update(this.camera);
     this.effects.update(dt);
     this.updateHud(now);
+  }
+
+  /** Elinde bomba varken nereye düşeceğini göster */
+  updateTrajectory(controls) {
+    const wp = this.weapon;
+    if (!controls || wp.def.kind !== 'grenade' || !(wp.nades[wp.current] > 0) || wp.throwT > 0) {
+      this.trajectory.hide();
+      return;
+    }
+    this.aim();
+    // Sunucudaki başlangıç noktasıyla aynı: gözden biraz ileride, duvarın dibindeysen gözden
+    const wall = this.physics.raycast(_eye, _fwd, 0.6, this.local.collider);
+    const ahead = Math.max(0, Math.min(0.5, (wall ? wall.distance : 0.6) - 0.15));
+    const o = [_eye.x + _fwd.x * ahead, _eye.y + _fwd.y * ahead - 0.1, _eye.z + _fwd.z * ahead];
+    const d = [r3(_fwd.x), r3(_fwd.y), r3(_fwd.z)];
+    this.trajectory.show(o, d, r2(this.charge), wp.current, this.solids, !!this.chargeStart);
   }
 
   /** Sunucuyla aynı sabit adımlı fizikle bombaları ilerlet */
@@ -589,11 +757,21 @@ export class Game {
       l.eye(cam.position);
       cam.rotation.set(l.pitch, l.yaw, 0);
     } else {
-      // Ölüm kamerası: yere düş ve yana yatır
+      // Ölüm kamerası: önce yere düş, sonra seni vuran oyuncuya dön
       this.deathT += dt;
       const k = Math.min(1, this.deathT / 0.5);
       cam.position.set(l.position.x, l.position.y + PLAYER.EYE - k * 1.2, l.position.z);
-      cam.rotation.set(l.pitch * (1 - k) + k * 0.3, l.yaw, k * 0.6);
+      const killer = this.killerId ? this.remotes.get(this.killerId) : null;
+      if (killer && killer.visible && this.deathT > 0.55 && this.state !== 'ended') {
+        const m = Math.min(1, (this.deathT - 0.55) / 0.7);
+        const ease = m * m * (3 - 2 * m);
+        cam.position.y += ease * 1.5; // ruh gibi biraz yüksel
+        _tmp.copy(killer.root.position);
+        _tmp.y += 1.3;
+        this.deathLook.lerp(_tmp, Math.min(1, dt * (2 + ease * 8)));
+        cam.lookAt(this.deathLook);
+        cam.rotation.z = 0.6 * (1 - ease);
+      } else cam.rotation.set(l.pitch * (1 - k) + k * 0.3, l.yaw, k * 0.6);
     }
     if (this.shake > 0) {
       this.shake = Math.max(0, this.shake - dt);
@@ -602,10 +780,17 @@ export class Game {
       cam.position.y += (Math.random() - 0.5) * s;
     }
 
-    // Dürbün yakınlaştırması
-    const scope = this.alive ? this.weapon.scope : 0;
-    const fov = scope > 0 ? WEAPONS.awp.ZOOM_FOV[scope - 1] : this.settings.fov;
-    if (fov !== this.fov) {
+    // Dürbün / nişan yakınlaştırması, hızlı koşuda hafif FOV açılması
+    const wp = this.weapon;
+    const scope = this.alive ? wp.scope : 0;
+    let fov;
+    if (scope > 0) fov = WEAPONS.awp.ZOOM_FOV[scope - 1];
+    else {
+      const ads = this.alive ? wp.adsT : 0;
+      const sprint = this.alive ? wp.sprint : 0;
+      fov = this.settings.fov * (1 - (1 - ADS.FOV_MULT) * ads) * (1 + 0.08 * sprint);
+    }
+    if (this.fov === null || Math.abs(fov - this.fov) > 0.01) {
       this.fov = fov;
       cam.fov = fov;
       cam.updateProjectionMatrix();
@@ -616,9 +801,17 @@ export class Game {
     const hud = this.hud;
     const wp = this.weapon;
     hud.setHealth(this.alive ? this.hp : 0);
-    hud.setAmmo(wp.def, wp.count, wp.reloading);
+    hud.setAmmo(wp.def, wp.count, wp.reloading, wp.reserveCount);
+    hud.setStamina(this.alive && this.state !== 'ended' ? this.local.stamina / PLAYER.STAMINA_MAX : null, this.local.exhausted);
+    hud.setPoison(this.alive ? this.effects.poisonDensity(this.camera.position) : 0);
     hud.setWeapons(wp.current, wp.owned, wp.nades, this.alive && this.state !== 'ended');
-    hud.setScores(this.scores.red, this.scores.blue, this.scoreLimit);
+    hud.setScores(this.scores.red, this.scores.blue, this.scoreLimit, this.mode);
+    if (this.mode === 'ctf' && this.flagState) {
+      const st = TEAMS.map((t, i) => this.flagState[i][0]);
+      const carrying = this.flagState.some((f) => f[0] === FLAG_STATE.CARRIED && f[1] === this.myId);
+      const ownHome = st[TEAMS.indexOf(this.team)] === FLAG_STATE.BASE;
+      hud.setFlags(st, this.alive && carrying, ownHome);
+    } else hud.setFlags(null);
     hud.setPing(this.myPing);
     const elapsed = this.state === 'playing' ? now - this.timeStamp : 0;
     hud.setTime(this.timeLeft - elapsed);
@@ -646,15 +839,19 @@ export class Game {
       hud.center('FIGHT!', 'fight');
     } else hud.center('');
 
+    // Doğuş koruması geri sayımı
+    const prot = this.alive && this.state === 'playing' && now < this.protectedUntil;
+    hud.setProtection(prot ? Math.ceil((this.protectedUntil - now) / 1000) : null);
+
     if (!this.alive && this.state === 'playing') {
-      hud.respawn(Math.max(0, Math.ceil((this.respawnAt - now) / 1000)), this.killedBy);
+      hud.respawn(Math.max(0, Math.ceil((this.respawnAt - now) / 1000)), this.killedBy, this.killerHp);
     } else hud.respawn(null);
 
     const showBoard = this.input.down('Tab') && this.state !== 'ended';
     if (showBoard) {
       const rows = [...this.roster.values()].map((p) => {
         const s = this.stats.get(p.id) ?? { k: 0, d: 0, rtt: 0 };
-        return { id: p.id, name: p.name, team: p.team, k: s.k, d: s.d, rtt: s.rtt };
+        return { id: p.id, name: p.name, team: p.team, k: s.k, d: s.d, rtt: s.rtt, bot: p.bot };
       });
       hud.scoreboard(true, rows, this.myId, this.scores);
     } else hud.scoreboard(false);

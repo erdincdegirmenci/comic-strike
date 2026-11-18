@@ -22,6 +22,7 @@ const G = {
   crest: new THREE.BoxGeometry(0.07, 0.12, 0.32),
   shadow: new THREE.CircleGeometry(0.42, 20),
 };
+const NADE_COLOR = { he: '#52b788', smoke: '#adb5bd', poison: '#7cb518' };
 const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false });
 
 function lerpAngle(a, b, k) {
@@ -168,7 +169,7 @@ export class RemotePlayer {
     const lmg = simple(0.75, '#5c6b3a', -0.97, -0.12, 0.11);
     const popper = simple(0.2, '#3d405b', -0.42, -0.08, 0.06);
     const cannon = simple(0.26, '#c0c6cf', -0.48, -0.08, 0.07);
-    this.guns = { rifle, awp, knife, he: nade, smoke: nade, carbine, smg, lmg, popper, cannon };
+    this.guns = { rifle, awp, knife, he: nade, smoke: nade, poison: nade, carbine, smg, lmg, popper, cannon };
     rifle.visible = true;
     this.gunTip = rifle.tip;
     this.arms.add(armR, armL);
@@ -228,7 +229,7 @@ export class RemotePlayer {
     const g = this.guns[w];
     g.visible = true;
     this.gunTip = g.tip;
-    if (w === 'he' || w === 'smoke') this.nadeMesh.material = toon(w === 'he' ? '#52b788' : '#adb5bd');
+    if (NADE_COLOR[w]) this.nadeMesh.material = toon(NADE_COLOR[w]);
   }
 
   push(t, x, y, z, yaw, pitch, alive, flags) {
@@ -269,6 +270,7 @@ export class RemotePlayer {
       const k = Math.min(1, this.deadT / 0.35);
       this.body.rotation.x = k * 1.45;
       this.shadow.visible = false;
+      this.body.visible = true;
       if (this.deadT > 2.5) this.root.visible = false;
       return;
     }
@@ -318,6 +320,10 @@ export class RemotePlayer {
     const legScale = 1 - 0.59 * this.crouch;
     for (const leg of this.legs) leg.scale.y = legScale;
     this.tag.position.y = 2.1 - 0.46 * this.crouch;
+
+    // Doğuş koruması: karakter yanıp söner (vurulamaz)
+    const prot = (b.flags & FLAG.PROTECTED) !== 0;
+    this.body.visible = !prot || Math.floor(performance.now() / 110) % 2 === 0;
   }
 
   muzzleWorld(target) {

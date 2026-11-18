@@ -9,6 +9,7 @@ export const DEFAULTS = {
   fov: 80,
   volume: 0.6,
   quality: 'high',
+  autoFullscreen: 'on', // oyuna tıklayınca tam ekrana geç (Ctrl+W koruması da bununla çalışır)
 };
 
 export function loadSettings() {

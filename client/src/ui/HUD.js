@@ -1,7 +1,7 @@
-import { TEAM_INFO, WEAPONS, SLOT_OF_CAT } from '@comic-strike/shared/constants.js';
+import { TEAM_INFO, WEAPONS, SLOT_OF_CAT, FLAG_STATE, TEAMS } from '@comic-strike/shared/constants.js';
 
 const KF_ICON = {
-  rifle: '▬▬', carbine: '▬▬', smg: '▬', lmg: '▬▬▬', awp: '━━⊕', popper: '⌐', cannon: '⌐■', knife: '🔪', he: '💣', smoke: '☁',
+  rifle: '▬▬', carbine: '▬▬', smg: '▬', lmg: '▬▬▬', awp: '━━⊕', popper: '⌐', cannon: '⌐■', knife: '🔪', he: '💣', smoke: '☁', poison: '☠', fall: '⤓',
 };
 
 const $ = (id) => document.getElementById(id);
@@ -32,6 +32,8 @@ export class HUD {
     $('killfeed').replaceChildren();
     this.hideEnd();
     this.respawn(null);
+    this.setProtection(null);
+    this.setFlags(null);
     this.center('');
   }
 
@@ -48,14 +50,35 @@ export class HUD {
     });
   }
 
-  /** def: silah tanımı, count: mermi / bomba sayısı (bıçakta null) */
-  setAmmo(def, count, reloading) {
-    this.set('ammo', `${def.id}|${count}|${reloading}`, () => {
+  /** def: silah tanımı, count: şarjördeki mermi / bomba sayısı (bıçakta null), reserve: yedek mermi */
+  setAmmo(def, count, reloading, reserve = null) {
+    this.set('ammo', `${def.id}|${count}|${reloading}|${reserve}`, () => {
+      const gun = def.kind === 'gun';
+      const dry = gun && count <= 0 && !(reserve > 0);
       $('weapon-name').textContent = def.NAME;
       $('ammo-val').textContent = count === null ? '∞' : count;
-      $('ammo-max').textContent = def.kind === 'gun' ? `/ ${def.MAG_SIZE}` : def.kind === 'grenade' ? 'ADET' : '';
-      $('ammo').classList.toggle('low', def.kind === 'gun' && count <= Math.max(1, Math.floor(def.MAG_SIZE / 6)));
+      $('ammo-max').textContent = gun ? `/ ${reserve ?? 0}` : def.kind === 'grenade' ? 'ADET' : '';
+      $('ammo').classList.toggle('low', gun && count <= Math.max(1, Math.floor(def.MAG_SIZE / 6)));
+      $('ammo').classList.toggle('dry', dry);
       $('reload-msg').classList.toggle('hidden', !reloading);
+      $('noammo-msg').classList.toggle('hidden', !dry);
+    });
+  }
+
+  /** k: 0..1 stamina (null: gizle), tired: tamamen bitti, dolması bekleniyor */
+  setStamina(k, tired) {
+    const v = k === null ? null : Math.round(k * 50) / 50;
+    this.set('stam', `${v}|${tired}`, () => {
+      $('stamina').classList.toggle('hidden', v === null);
+      $('stamina').classList.toggle('tired', !!tired);
+      if (v !== null) $('stam-bar').style.width = `${v * 100}%`;
+    });
+  }
+
+  setPoison(density) {
+    const d = Math.round(density * 20) / 20;
+    this.set('poison', d, () => {
+      $('poison-veil').style.opacity = d;
     });
   }
 
@@ -100,12 +123,43 @@ export class HUD {
     });
   }
 
-  setScores(red, blue, limit) {
-    this.set('scores', `${red}|${blue}|${limit}`, () => {
+  setScores(red, blue, limit, mode = 'tdm') {
+    this.set('scores', `${red}|${blue}|${limit}|${mode}`, () => {
       $('score-red').textContent = red;
       $('score-blue').textContent = blue;
-      $('score-limit').textContent = `FIRST TO ${limit}`;
+      $('score-limit').textContent = mode === 'ctf' ? `${limit} BAYRAK KAZANIR` : `FIRST TO ${limit}`;
     });
+  }
+
+  setMode(mode) {
+    $('flagbar').classList.toggle('hidden', mode !== 'ctf');
+    if (mode !== 'ctf') $('flag-carry').classList.add('hidden');
+  }
+
+  /** states: [red, blue] FLAG_STATE (null: gizle), carrying: bayrak bende, ownHome: kendi bayrağımız üste mi */
+  setFlags(states, carrying = false, ownHome = true) {
+    const key = states ? `${states.join()}|${carrying}|${ownHome}` : 'none';
+    this.set('flags', key, () => {
+      $('flagbar').classList.toggle('hidden', !states);
+      $('flag-carry').classList.toggle('hidden', !states || !carrying);
+      if (!states) return;
+      const label = ['ÜSTE', 'ALINDI!', 'YERDE'];
+      TEAMS.forEach((t, i) => {
+        const chip = $(`flag-${t}`);
+        chip.textContent = `🚩 ${TEAM_INFO[t].name}: ${label[states[i]]}`;
+        chip.classList.toggle('taken', states[i] === FLAG_STATE.CARRIED);
+        chip.classList.toggle('dropped', states[i] === FLAG_STATE.DROPPED);
+      });
+      $('flag-carry-hint').textContent = ownHome ? 'Kendi üssündeki halkaya gir' : 'Sayı için önce kendi bayrağınız üsse dönmeli!';
+    });
+  }
+
+  flagNotice(text, cls = '') {
+    const m = $('flag-msg');
+    m.textContent = text;
+    m.classList.remove('good', 'bad');
+    if (cls) m.classList.add(cls);
+    this.restart(m, 'show');
   }
 
   setTime(ms) {
@@ -164,6 +218,7 @@ export class HUD {
 
   damage(angle) {
     this.restart($('damage-flash'), 'show');
+    if (angle === null) return; // yönsüz hasar (düşme)
     const d = $('damage-dir');
     d.style.transform = `translate(-50%, -50%) rotate(${angle}rad)`;
     this.restart(d, 'show');
@@ -184,15 +239,27 @@ export class HUD {
     });
   }
 
-  respawn(seconds, killer) {
+  /** Doğuş koruması geri sayımı (null: gizle) */
+  setProtection(seconds) {
+    this.set('protect', seconds, () => {
+      const p = $('protect');
+      p.classList.toggle('hidden', seconds === null);
+      if (seconds === null) return;
+      $('protect-time').textContent = seconds;
+      this.restart(p, 'tick');
+    });
+  }
+
+  respawn(seconds, killer, killerHp = 0) {
     const r = $('respawn');
     if (seconds === null) {
       this.set('respawn', null, () => r.classList.add('hidden'));
       return;
     }
-    this.set('respawn', `${seconds}|${killer}`, () => {
+    this.set('respawn', `${seconds}|${killer}|${killerHp}`, () => {
       r.classList.remove('hidden');
       $('respawn-by').textContent = killer ? `${killer} SENİ VURDU!` : 'ÖLDÜN!';
+      $('respawn-hp').textContent = killer ? (killerHp > 0 ? `Canı kaldı: ${killerHp}` : 'O da öldü!') : '';
       $('respawn-time').textContent = seconds > 0 ? `${seconds}` : '...';
     });
   }
@@ -214,7 +281,7 @@ export class HUD {
         table.append(head);
         for (const r of rows.filter((x) => x.team === team).sort((a, b) => b.k - a.k || a.d - b.d)) {
           const tr = el('tr', r.id === myId ? 'me' : '');
-          tr.append(el('td', '', r.name), el('td', '', r.k), el('td', '', r.d), el('td', '', r.rtt));
+          tr.append(el('td', '', (r.bot ? '🤖 ' : '') + r.name), el('td', '', r.k), el('td', '', r.d), el('td', '', r.bot ? 'BOT' : r.rtt));
           table.append(tr);
         }
         box.append(table);
@@ -232,8 +299,26 @@ export class HUD {
       el('p', 'end-sub', data.winner === 'draw' ? 'Kimse kazanamadı.' : won ? 'TAKIMIN KAZANDI!' : 'TAKIMIN KAYBETTİ!'),
       el('p', 'end-score', `${data.scores.red} — ${data.scores.blue}`),
     );
-    const best = [...data.players].sort((a, b) => b.kills - a.kills)[0];
-    if (best && best.kills > 0) e.append(el('p', 'end-mvp', `MVP: ${names.get(best.id) ?? best.name} (${best.kills} kill)`));
+    // Maç sonu ödülleri
+    const ICON = { kills: '💀', hs: '🎯', caps: '🚩', deaths: '🧲' };
+    const UNIT = { kills: 'öldürme', hs: 'kafadan', caps: 'bayrak', deaths: 'ölüm' };
+    if (data.awards?.length) {
+      const row = el('div', 'awards');
+      data.awards.forEach((a, i) => {
+        const team = data.players.find((p) => p.id === a.id)?.team ?? 'red';
+        const card = el('div', `award ${a.key} ${team}`);
+        card.style.animationDelay = `${0.3 + i * 0.25}s`;
+        card.append(
+          el('span', 'award-icon', ICON[a.key] ?? '★'),
+          el('b', 'award-title', a.title),
+          el('span', 'award-name', names.get(a.id) ?? a.name),
+          el('span', 'award-val', `${a.value} ${UNIT[a.key] ?? ''}`),
+          el('small', 'award-desc', a.desc),
+        );
+        row.append(card);
+      });
+      e.append(row);
+    }
     e.append(el('p', 'end-note', 'Lobiye dönülüyor...'));
     e.classList.remove('hidden');
   }

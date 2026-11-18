@@ -1,6 +1,6 @@
 # COMIC STRIKE WEB
 
-Tarayıcıda oynanan, çizgi roman görünümlü multiplayer FPS. 4v4 Team Deathmatch, oda kodu ile lobi, sunucu doğrulamalı hasar ve skor.
+Tarayıcıda oynanan, çizgi roman görünümlü multiplayer FPS. 4v4 Takım Savaşı veya Bayrak Kapmaca, pratik botları, oda kodu ile lobi, sunucu doğrulamalı hasar ve skor.
 
 Oyna
 
@@ -24,12 +24,11 @@ npm run dev
 ```
 Tarayıcıda **http://localhost:5173** aç → isim yaz → **CREATE ROOM** → **START MATCH** → **CLICK TO FIGHT**.
 
-### Tek başına test (botlarla)
-Lobideyken ikinci bir PowerShell penceresi aç:
-```powershell
-npm run bots -- ODAKODU 3
-```
-3 bot odaya katılıp hazır olur. Botlar spawn çevresinde gezinir ve görüş hattındaki rakiplere ateş eder.
+### Tek başına pratik (botlarla)
+Lobide host olarak **+ BOT EKLE** düğmesine bas; her basışta az kalabalık takıma bir bot eklenir (en fazla 8 oyuncu). **− BOT ÇIKAR** ile çıkarırsın.
+Botlar sunucuda çalışır: haritada yol bulur (A*), gördüğü rakibe ateş eder; Bayrak Kap modunda bir kısmı saldırır, bir kısmı üssü korur.
+
+Eski yöntem (ayrı süreçte basit test botları) hâlâ çalışır: `npm run bots -- ODAKODU 3`
 
 ### Aynı ağdaki arkadaşlarla oynamak
 ```powershell
@@ -54,18 +53,25 @@ Sen **http://localhost:3000**, arkadaşların **http://BILGISAYAR_IP:3000** adre
 |---|---|
 | WASD | Hareket |
 | Fare | Bakış |
-| Shift | Koş |
+| Shift | Hızlı koş (stamina harcar) |
 | Space | Zıpla |
 | Ctrl / C | Çömel |
 | Sol tık | Ateş · bombada basılı tut (ne kadar uzun, o kadar uzağa), bırakınca atar |
-| Sağ tık | AWP dürbünü (2 seviye) · bıçakta ağır saldırı |
+| Sağ tık | Nişan al · AWP dürbünü (2 seviye) · bıçakta ağır saldırı |
 | 1 / 2 / 3 / 4 | Ana silah / tabanca / bıçak / bomba |
 | B | Silah seçimi (ana silah + tabanca + bomba) |
 | Fare tekeri, Q | Silah değiştir / son silah |
 | T | Karakterine özel sticker'ı duvara yapıştır |
+| E / orta tık | Takıma işaret ("BURADA!", rakibe bakıyorsan "DÜŞMAN!") |
 | R | Şarjör değiştir |
 | Tab | Skor tablosu |
 | Esc | Menü (duraklat) |
+
+## Oyun modları
+- **Takım Savaşı** (varsayılan): 30 öldürmeye ilk ulaşan takım kazanır.
+- **Bayrak Kap**: rakip bayrağını kendi üssündeki halkaya getir; 3 bayrak getiren kazanır. Taşıyan ölürse bayrak düşer, sahibi dokunursa üsse döner (20 sn sonra kendiliğinden döner). Lobide host seçer.
+
+Maç sonunda ödüller: TERMİNATÖR (en çok öldüren), KESKİN NİŞANCI (en çok kafadan vuruş), BAYRAK USTASI (Bayrak Kap'ta en çok bayrak getiren) ve en çok ölene KURŞUN MIKNATISI.
 
 ## Ayarlanabilir değerler
 Oyun dengesi `shared/constants.js` içinde: can, hız, silah hasarı, ateş hızı, şarjör, skor limiti, maç süresi, spawn koruması.
@@ -101,4 +107,4 @@ Ayrıntılar: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/PROTOCOL.md]
 ## Bilinen sınırlamalar (ilk sürüm)
 - Oyuncular birbirinin içinden geçebilir (oyuncu-oyuncu çarpışması yok).
 - Sunucu hareket hızını ve harita sınırlarını kontrol eder, ama duvar içinden geçmeyi kontrol etmez.
-- Tek silah, tek harita.
+- Botlar merdiven çıkmaz, çatılara ve surlara çıkmazlar; zemin katta dolaşırlar.

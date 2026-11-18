@@ -161,6 +161,111 @@ function house(cx, cz, w, d, h, color, stairs) {
   box(stairX + stairs * 0.62, cz, 0.06, d - 0.2, 0.06, COL.metal, { y: top + 0.9, solid: false });
 }
 
+/** İki köşesi verilen yatay dikdörtgen kutu (ayna dahil) */
+function rect(xa, xb, za, zb, y, h, color, o = {}) {
+  const x0 = Math.min(xa, xb);
+  const x1 = Math.max(xa, xb);
+  const z0 = Math.min(za, zb);
+  const z1 = Math.max(za, zb);
+  if (x1 - x0 < 0.01 || z1 - z0 < 0.01) return;
+  box((x0 + x1) / 2, (z0 + z1) / 2, x1 - x0, z1 - z0, h, color, { ...o, y });
+}
+
+/**
+ * İçine girilebilen apartman: dışı building() ile aynı görünür (pencereler, dükkanlar),
+ * içi tek katlı yüksek bir merdiven boşluğu. Uzun duvar boyunca çıkan merdiven çatıdaki
+ * kapaktan çatıya açılır. Kapılar: sokağa bakan X yüzünde ve meydana bakan Z yüzünde.
+ * Merdiven her zaman haritanın dış kenarına doğru çıkar (cx'in işaretine göre).
+ */
+function apartment(cx, cz, w, d, h, color) {
+  const T = WALL_T;
+  const x0 = cx - w / 2;
+  const x1 = cx + w / 2;
+  const z0 = cz - d / 2; // merdiven bu duvar boyunca
+  const z1 = cz + d / 2; // ön kapı bu yüzde
+  const out = Math.sign(cx) || 1; // merdivenin çıktığı yön (+1: +X)
+  const xin = out > 0 ? x0 : x1; // sokağa bakan yüz
+  const xout = out > 0 ? x1 : x0;
+  const ROOF_T = 0.45;
+  const top = h + ROOF_T;
+
+  box(cx, cz, w + 3, d + 3, 0.15, COL.sidewalk);
+  box(cx, cz, w - 0.6, d - 0.6, 0.02, COL.door, { y: 0.15, solid: false }); // iç zemin
+
+  // Kapılar
+  const frontX = cx - out * (w / 4); // ön yüz kapısı (sokak tarafına yakın)
+  const sideZ = cz + 0.55; // sokak yüzü kapısı (merdiven bandından uzakta)
+  const doorW = 1.6;
+  wall('z', z1 - T / 2, x0, x1, h, [{ a: frontX - doorW / 2, b: frontX + doorW / 2, y0: 0, y1: 2.5 }], color);
+  wall('z', z0 + T / 2, x0, x1, h, [], color);
+  wall('x', xin + out * T / 2, z0 + T, z1 - T, h, [{ a: sideZ - doorW / 2, b: sideZ + doorW / 2, y0: 0, y1: 2.5 }], color);
+  wall('x', xout - out * T / 2, z0 + T, z1 - T, h, [], color);
+  // Kapı üstü saçak (dekor)
+  box(frontX, z1 + 0.15, doorW + 0.5, 0.5, 0.12, COL.wallCap, { y: 2.55, solid: false });
+  box(xin - out * 0.15, sideZ, 0.5, doorW + 0.5, 0.12, COL.wallCap, { y: 2.55, solid: false });
+
+  // Merdiven: z0 duvarı boyunca, sokak tarafından dış tarafa doğru çıkar; son basamak çatı seviyesinde
+  const SW = 1.3; // merdiven genişliği
+  const zb0 = z0 + T;
+  const zb1 = zb0 + SW;
+  const LANDING = 1.2; // sokak kapısının önünde merdivene yaklaşmak için boşluk
+  const len = w - 2 * T - LANDING;
+  const n = Math.ceil((top - 0.15) / 0.4);
+  const depth = len / n;
+  const xs = xin + out * (T + LANDING); // ilk basamağın başladığı x
+  let holeFrom = null; // çatıda kafa boşluğu açılacak yerin başlangıcı
+  for (let i = 0; i < n; i++) {
+    const st = 0.15 + ((i + 1) * (top - 0.15)) / n;
+    const a = xs + out * i * depth;
+    rect(a, a + out * depth, zb0, zb1, 0, st, COL.concrete);
+    // Basamağın üstünde ayakta duran oyuncunun kafası çatıya değiyorsa buradan itibaren çatı açık
+    if (holeFrom === null && st + 1.95 > h) holeFrom = a - out * depth; // bir basamak pay
+  }
+  // Merdiven korkuluğu (dekor)
+  box(cx + out * LANDING / 2, zb1 + 0.04, len, 0.06, 0.06, COL.metal, { y: top * 0.5 + 0.9, solid: false });
+
+  // Çatı: merdivenin üstünde kapak boşluğu bırakan parçalar
+  const rx0 = x0 - 0.25;
+  const rx1 = x1 + 0.25;
+  const rinAt = out > 0 ? rx0 : rx1;
+  rect(rx0, rx1, zb1, z1 + 0.25, h, ROOF_T, COL.roof); // merdiven bandının önü
+  rect(rx0, rx1, z0 - 0.25, zb0, h, ROOF_T, COL.roof); // merdiven bandının arkası
+  rect(rinAt, holeFrom, zb0, zb1, h, ROOF_T, COL.roof); // bandın kapalı kısmı
+  rect(xout - out * T, xout + out * 0.25, zb0, zb1, h, ROOF_T, COL.roof); // dış duvarın üstü
+  // Çatı kapağı çevresinde alçak korkuluk (kapağa düşmeyi zorlaştırır, sokak tarafı açık)
+  // (merdivenin çıktığı son 1.4 m açık: oradan çatıya çıkılır)
+  const railEnd = xout - out * (T + 1.4);
+  if ((railEnd - holeFrom) * out > 0.3) rect(holeFrom, railEnd, zb1 + 0.02, zb1 + 0.14, top, 0.5, COL.wallCap);
+  rect(holeFrom - out * 0.12, holeFrom, zb0, zb1, top, 0.5, COL.wallCap);
+  // Çatı kenarında alçak siper (ön ve iki yan)
+  box(cx, z1 + 0.15, w + 0.5, 0.2, 0.6, COL.wallCap, { y: top });
+  box(rinAt + out * 0.1, cz + 0.1, 0.2, d + 0.3, 0.6, COL.wallCap, { y: top });
+
+  // Cephe süsleri (kapıların üstüne gelmeyecek şekilde)
+  const rows = [];
+  for (let y = 3.3; y + 1.5 < h - 0.5; y += 2.8) rows.push(y);
+  const deco = { solid: false };
+  for (const s of [-1, 1]) {
+    const z = s > 0 ? z1 + 0.04 : z0 - 0.04;
+    let i = 0;
+    for (let x = cx - w / 2 + 1.6; x <= cx + w / 2 - 1.59; x += 2.6, i++) {
+      for (const y of rows) box(x, z, 1.2, 0.12, 1.5, COL.window, { ...deco, y });
+      if (s > 0 && Math.abs(x - frontX) < 1.7) continue;
+      box(x, z, 1.7, 0.12, 1.2, COL.shop, { ...deco, y: 0.9 });
+    }
+  }
+  for (const s of [-1, 1]) {
+    const x = s > 0 ? x1 + 0.04 : x0 - 0.04;
+    for (let z = cz - d / 2 + 1.6; z <= cz + d / 2 - 1.59; z += 2.6) {
+      for (const y of rows) box(x, z, 0.12, 1.2, 1.5, COL.window, { ...deco, y });
+      if (s === -out && Math.abs(z - sideZ) < 1.7) continue; // sokak yüzündeki kapı
+      box(x, z, 0.12, 1.7, 1.2, COL.shop, { ...deco, y: 0.9 });
+    }
+  }
+  // İçeride siper sandığı
+  crate(cx - out * 1.2, z1 - 1.1, 1.1, 1.0);
+}
+
 function crate(cx, cz, s, h) {
   box(cx, cz, s, s, h, COL.crate);
 }
@@ -219,9 +324,9 @@ box(0, -38, 12, 5, 0.03, COL.red, { solid: false, mirrorColor: COL.blue });
 
 // ---------------- BİNALAR (kırmızı yarı, aynalanır) ----------------
 building(-19.5, -21.5, 11, 5, 9, COL.b1); // sol blok A
-building(-19.5, -12.5, 11, 5, 7, COL.b2); // sol blok B (aradaki geçit 4m)
+apartment(-19.5, -12.5, 11, 5, 7, COL.b2); // sol blok B (aradaki geçit 4m): içinden merdivenle çatıya çıkılır
 building(19.5, -25, 11, 6, 11, COL.b4); // sağ blok A
-building(19.5, -15, 11, 6, 8, COL.b5); // sağ blok B
+apartment(19.5, -15, 11, 6, 8, COL.b5); // sağ blok B: içinden merdivenle çatıya çıkılır
 house(0, -19, 10, 6, 5, COL.b3, 1); // orta blok: içine girilir, çatıya çıkılır
 house(-22, -38.5, 12, 7, 6, COL.b6, 1); // spawn köşe evleri: içine girilir, çatıya çıkılır
 house(22, -38.5, 12, 7, 6, COL.b1, -1);

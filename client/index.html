@@ -38,6 +38,9 @@
         </div>
       </section>
 
+      <!-- Köşede tam ekran düğmesi (menülerde görünür) -->
+      <button id="btn-fs" class="fs-btn fs-label" data-action="fullscreen" title="Tam ekran">⛶ TAM EKRAN</button>
+
       <!-- ODAYA KATIL -->
       <section id="screen-join" class="screen hidden">
         <div class="panel menu">
@@ -67,6 +70,13 @@
               <option value="high">HIGH (gölgeler açık)</option>
               <option value="low">LOW (daha hızlı)</option>
             </select>
+          </label>
+          <label class="field">TAM EKRAN
+            <select id="set-autofs">
+              <option value="on">OYUNA GİRİNCE OTOMATİK</option>
+              <option value="off">KAPALI (pencerede oyna)</option>
+            </select>
+            <small>Tam ekranda Ctrl+W sekmeyi kapatamaz</small>
           </label>
           <button class="btn alt" data-action="back">BACK</button>
         </div>
@@ -120,8 +130,17 @@
             </div>
           </div>
           <div class="map-row">
+            <span class="small">MOD · <i id="mode-hint"></i></span>
+            <div id="mode-pick"></div>
+          </div>
+          <div class="map-row">
             <span class="small">MAP · <i id="map-hint"></i></span>
             <div id="map-pick"></div>
+          </div>
+          <div id="bot-row" class="bot-row hidden">
+            <span class="small">🤖 PRATİK BOTLARI</span>
+            <button id="btn-addbot" class="btn small" data-action="add-bot">+ BOT EKLE</button>
+            <button id="btn-rmbot" class="btn small alt" data-action="remove-bot">− BOT ÇIKAR</button>
           </div>
           <p id="lobby-status" class="status"></p>
           <div class="lobby-actions">
@@ -139,6 +158,7 @@
           <h2 id="pause-title">PAUSED</h2>
           <button id="btn-resume" class="btn big" data-action="resume">RESUME</button>
           <button class="btn" data-action="loadout">SİLAH SEÇ (B)</button>
+          <button class="btn alt fs-label" data-action="fullscreen">⛶ TAM EKRAN</button>
           <button class="btn alt" data-action="settings">SETTINGS</button>
           <button class="btn alt" data-action="leave-match">LEAVE MATCH</button>
         </div>
@@ -150,6 +170,7 @@
     <!-- OYUN İÇİ ARAYÜZ -->
     <div id="hud" class="hidden">
       <div id="smoke-veil"></div>
+      <div id="poison-veil"></div>
       <div id="scope" class="hidden"><i class="h"></i><i class="v"></i></div>
       <div id="crosshair"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i></div>
       <div id="hitmarker"></div>
@@ -163,6 +184,13 @@
         <div class="mid"><div id="timer">8:00</div><div id="score-limit">FIRST TO 30</div></div>
         <div id="score-blue" class="score blue">0</div>
       </div>
+      <!-- Bayrak kapmaca: bayrak durumları, duyuru ve taşıyıcı uyarısı -->
+      <div id="flagbar" class="hidden">
+        <span id="flag-red" class="flagchip red"></span>
+        <span id="flag-blue" class="flagchip blue"></span>
+      </div>
+      <div id="flag-msg"></div>
+      <div id="flag-carry" class="hidden">🚩 BAYRAK SENDE — ÜSSÜNE GÖTÜR! <small id="flag-carry-hint"></small></div>
 
       <div id="killfeed"></div>
       <div id="ping"></div>
@@ -170,18 +198,25 @@
       <div id="health" class="hud-box">
         <span class="label">HP</span><b id="hp-val">100</b>
         <div class="bar"><div id="hp-bar"></div></div>
+        <div id="stamina" class="bar stam" title="Stamina"><div id="stam-bar"></div></div>
       </div>
       <div id="weapons"></div>
       <div id="ammo" class="hud-box">
         <span id="weapon-name">INK-47</span>
         <b id="ammo-val">30</b><span id="ammo-max">/ 30</span>
         <div id="reload-msg" class="hidden">RELOADING...</div>
+        <div id="noammo-msg" class="hidden">MERMİ BİTTİ!</div>
       </div>
 
       <div id="center-msg"></div>
       <div id="comic-pop"></div>
+      <div id="protect" class="hidden">
+        <p>🛡 KORUMA <b id="protect-time">5</b></p>
+        <small>Ateş edersen koruma biter</small>
+      </div>
       <div id="respawn" class="hidden">
         <p id="respawn-by"></p>
+        <p id="respawn-hp"></p>
         <p>RESPAWN <b id="respawn-time">3</b></p>
       </div>
       <div id="scoreboard" class="hidden"></div>

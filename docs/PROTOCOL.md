@@ -20,6 +20,8 @@ Mesaj isimleri `shared/protocol.js` içindedir.
 | `throw` | `{d:[x,y,z], c}` | Elindeki bombayı at. `c` 0..1: basılı tutma oranı (uzaklık) |
 | `spray` | `{p, n}` | Duvara sticker (nokta + yüzey normali) |
 | `set_loadout` | `{primary, pistol, nade}` | Silah seçimi. Doğuştan sonra 10 sn içinde ve ateş etmeden hemen, yoksa sonraki doğuşta |
+| `set_mode` | `'tdm' \| 'ctf'` | Oyun modu (sadece host, lobide) |
+| `fall` | `{v}` | Yere sert iniş hızı (m/s). Hasarı sunucu hesaplar, üst sınırlı (`FALL` sabitleri) |
 
 ## Sunucu → İstemci
 | Mesaj | Veri |
@@ -28,13 +30,14 @@ Mesaj isimleri `shared/protocol.js` içindedir.
 | `notice` | metin (ör. "Herkes hazır değil.") |
 | `match_start` | `{map, roster, scores, scoreLimit, timeLeft, countdown}` |
 | `snapshot` | 20/sn: `{t, st, tl, cd, s:[red,blue], p:[[id,x,y,z,yaw,pitch,hp,alive,flags,rtt,kills,deaths,weaponIndex], ...]}` |
-| `respawn` | `{id, p, yaw, life, ammo:{rifle,awp}, nades:{he,smoke}}` |
+| `respawn` | `{id, p, yaw, life, ammo:{rifle,awp}, reserve:{rifle,awp}, nades:{he,smoke}, pr}` — `pr`: kalan doğuş koruması (ms). Snapshot bayraklarında `32` = korumalı |
 | `correction` | `{p, l}`: sunucu hareketini kabul etmedi, bu konuma dön |
 | `shot` | `{id, o, e, w}`: başka bir oyuncu ateş etti (iz ve ses için) |
 | `hit` | `{v, d, h, k, pt}`: sadece ateş edene, isabet onayı |
 | `damaged` | `{hp, from}`: sadece vurulana |
 | `kill` | `{k, v, h, w, s}`: herkese, kill feed ve skor (`w` silah) |
-| `ammo` | `{w, ammo}`: reload tamamlandı |
+| `ammo` | `{w, ammo, res}`: reload tamamlandı |
+| `flag` | `{team, ev, by, s}`: CTF bayrak olayı — `ev`: `take` (kapıldı) · `drop` (taşıyıcı öldü) · `return` (üsse döndü) · `capture` (sayı). Snapshot'ta `f: [[durum, taşıyıcıId, x, y, z] ×2]` (durum 0 üste, 1 taşınıyor, 2 yerde) |
 | `grenade` | `{g, t, id, o, v}`: bomba atıldı; herkes `shared/grenade.js` ile aynı yörüngeyi hesaplar |
 | `boom` | `{g, t, p}`: bomba patladı / sis açıldı |
 | `sprayed` | `{id, c, p, n}`: sticker yapıştırıldı |
