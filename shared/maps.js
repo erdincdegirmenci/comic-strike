@@ -472,7 +472,8 @@ function frostArena() {
 }
 
 // ======================================================================
-// HURDALIK — sadece HERKES TEK modunda oynanan büyük harita (aynalanmaz).
+// HURDALIK — en büyük harita, tüm modlarda oynanır (aynalanmaz).
+// Takım modlarında kırmızı güneyde (-Z), mavi kuzeyde (+Z) doğar; bayraklar iki uçta.
 // Ortada yüksek platform ve iki yanına uzanan köprüler, doğuda içine girilen depo,
 // batıda iskele, kuzeyde konteyner sahası, güneyde boru rafı ve iki katlı ofis,
 // güneybatıda basamaklı hurda tepesi. Zıplama pedleri ve eğilerek geçilen yerler her bölgede.
@@ -697,14 +698,27 @@ function scrapyard() {
     [-35, 25], [36, -20], [-3, -15], [3, 15], [-15, 3], [15, -3],
   ];
   const ffa = pts.map(([x, z]) => [x, 0.1, z, Math.atan2(x, z)]); // yaw: ortaya dön
+  // Takım modları: kırmızı güney ucu, mavi kuzey ucu
+  const red = [[-8, -36], [-4, -37], [0, -36], [-6, -34], [-2, -34.5], [2, -34], [-10, -37.5], [8, -37.5]];
+  const blue = [[8, 36], [4, 37], [0, 36], [6, 34], [2, 34.5], [-2, 34], [10, 37.5], [-4, 37.5]];
+  box(-2.5, -30.5, 11, 0.8, 2.2, C.concrete); // doğuş önü siper duvarları (iki uç birbirini görmesin)
+  box(4, 30.5, 9, 0.8, 2.2, C.concrete);
+  box(-2.5, -30.5, 11.3, 1, 0.15, C.wallCap, { y: 2.2, solid: false });
+  box(4, 30.5, 9.3, 1, 0.15, C.wallCap, { y: 2.2, solid: false });
+  box(-1, -37, 18, 4, 0.03, '#e63946', { solid: false }); // doğuş alanları (dekor)
+  box(3, 36, 18, 4, 0.03, '#2a6fdb', { solid: false });
 
   return {
     id: 'scrap',
     name: 'HURDALIK',
-    ffaOnly: true,
     boxes,
     pads,
-    spawns: { ffa, red: ffa.slice(0, 8), blue: ffa.slice(8) },
+    spawns: {
+      ffa,
+      red: red.map(([x, z]) => [x, 0.1, z, Math.PI]),
+      blue: blue.map(([x, z]) => [x, 0.1, z, 0]),
+    },
+    flags: { red: [0, 0.1, -38.2], blue: [2, 0.1, 38.2] },
     bounds: { x: B - 0.6, z: B - 0.6, minY: -5, maxY: 20 },
     sky: '#f6bd60',
   };
@@ -714,7 +728,7 @@ export const MAPS = {
   city: { id: 'city', sky: '#8ecae6', flags: flagsFrom(0, -40.4), ...CITY_ARENA, name: 'CITY ARENA' },
   pool: poolParty(),
   frost: frostArena(),
-  scrap: scrapyard(), // sadece HERKES TEK
+  scrap: scrapyard(),
 };
 export const MAP_IDS = Object.keys(MAPS);
 export const DEFAULT_MAP = 'city';

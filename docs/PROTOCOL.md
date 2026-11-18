@@ -20,7 +20,7 @@ Mesaj isimleri `shared/protocol.js` içindedir.
 | `throw` | `{d:[x,y,z], c}` | Elindeki bombayı at. `c` 0..1: basılı tutma oranı (uzaklık) |
 | `spray` | `{p, n}` | Duvara sticker (nokta + yüzey normali) |
 | `set_loadout` | `{primary, pistol, nade}` | Silah seçimi. Doğuştan sonra 10 sn içinde ve ateş etmeden hemen, yoksa sonraki doğuşta |
-| `set_mode` | `'tdm' \| 'ctf' \| 'ffa'` | Oyun modu (sadece host, lobide). Herkes Tek'te tüm oyuncuların takımı `ffa` olur; HURDALIK seçilince mod otomatik `ffa` |
+| `set_mode` | `'tdm' \| 'ctf' \| 'ffa'` | Oyun modu (sadece host, lobide). Herkes Tek'te tüm oyuncuların takımı `ffa` olur |
 | `fall` | `{v}` | Yere sert iniş hızı (m/s). Hasarı sunucu hesaplar, üst sınırlı (`FALL` sabitleri) |
 
 ## Sunucu → İstemci
