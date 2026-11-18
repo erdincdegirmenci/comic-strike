@@ -1,5 +1,5 @@
 import { MSG } from '@comic-strike/shared/protocol.js';
-import { TEAM_INFO, CHARACTERS, CHARACTER_IDS, WEAPONS, LOADOUT_OPTIONS, cleanLoadout } from '@comic-strike/shared/constants.js';
+import { TEAM_INFO, CHARACTERS, CHARACTER_IDS, WEAPONS, LOADOUT_OPTIONS, cleanLoadout, MODES, MODE_IDS } from '@comic-strike/shared/constants.js';
 import { MAPS, MAP_IDS } from '@comic-strike/shared/maps.js';
 import { saveSettings } from './settings.js';
 import { drawSpray } from '../fx/Sprays.js';
@@ -11,15 +11,15 @@ const $ = (id) => document.getElementById(id);
 const CONTROLS = [
   ['HAREKET'],
   ['İLERİ', 'W', ''], ['GERİ', 'S', ''], ['SOL', 'A', ''], ['SAĞ', 'D', ''],
-  ['ZIPLA', 'SPACE', ''], ['KOŞ', 'LEFT SHIFT', ''], ['ÇÖMEL', 'LEFT CTRL / C', ''],
+  ['ZIPLA', 'SPACE', ''], ['HIZLI KOŞ (STAMINA)', 'LEFT SHIFT', ''], ['ÇÖMEL', 'LEFT CTRL / C', ''],
   ['SAVAŞ'],
-  ['ATEŞ / BOMBA AT', '', 'LEFT MOUSE BUTTON'], ['DÜRBÜN / AĞIR BIÇAK', '', 'RIGHT MOUSE BUTTON'],
+  ['ATEŞ / BOMBA AT', '', 'LEFT MOUSE BUTTON'], ['NİŞAN AL / DÜRBÜN / AĞIR BIÇAK', '', 'RIGHT MOUSE BUTTON'],
   ['ŞARJÖR DEĞİŞTİR', 'R', ''],
   ['ANA SİLAH', '1', ''], ['TABANCA', '2', ''], ['BIÇAK', '3', ''], ['BOMBA', '4', ''],
   ['ÖNCEKİ SİLAH', 'Q', 'MOUSE WHEEL UP'], ['SONRAKİ SİLAH', '', 'MOUSE WHEEL DOWN'],
   ['SİLAH SEÇİMİ', 'B', ''],
   ['DİĞER'],
-  ['STICKER YAPIŞTIR', 'T', ''], ['SKOR TABLOSU', 'TAB', ''], ['MENÜ / DURAKLAT', 'ESC', ''],
+  ['STICKER YAPIŞTIR', 'T', ''], ['TAKIMA İŞARET', 'E', 'MIDDLE MOUSE BUTTON'], ['SKOR TABLOSU', 'TAB', ''], ['MENÜ / DURAKLAT', 'ESC', ''],
 ];
 
 /**
@@ -52,6 +52,7 @@ export class Menu {
     this.input.onLockChange = (locked) => this.onLockChange(locked);
     $('inp-name').value = this.settings.name;
     this.buildCharacters();
+    this.buildModes();
     this.buildMaps();
     this.buildControls();
     this.preview = new WeaponPreview($('lo-canvas'));
@@ -99,8 +100,9 @@ export class Menu {
         desc.textContent = w.DESC ?? '';
         const stats = document.createElement('i');
         stats.textContent = w.kind === 'gun'
-          ? `HASAR ${w.DAMAGE} · ŞARJÖR ${w.MAG_SIZE} · ${Math.round(60000 / w.FIRE_INTERVAL)} RPM`
-          : w.id === 'he' ? `HASAR ${w.DAMAGE} · ${w.RADIUS} m` : `${w.DURATION / 1000} sn sis`;
+          ? `HASAR ${w.DAMAGE} · ŞARJÖR ${w.MAG_SIZE}+${w.RESERVE} · ${Math.round(60000 / w.FIRE_INTERVAL)} RPM`
+          : w.id === 'he' ? `HASAR ${w.DAMAGE} · ${w.RADIUS} m`
+            : w.id === 'poison' ? `${(w.DAMAGE_TICK * 1000) / w.TICK} HASAR/sn · ${w.DURATION / 1000} sn` : `${w.DURATION / 1000} sn sis`;
         b.append(name, desc, stats);
         b.addEventListener('click', () => {
           this.sfx.ensure();
@@ -123,8 +125,10 @@ export class Menu {
     $('lo-name').textContent = w.NAME;
     $('lo-desc').textContent = w.DESC ?? '';
     $('lo-stats').textContent = w.kind === 'gun'
-      ? `HASAR ${w.DAMAGE} · KAFA x${w.HEADSHOT_MULT} · ŞARJÖR ${w.MAG_SIZE} · ${Math.round(60000 / w.FIRE_INTERVAL)} RPM`
-      : w.id === 'he' ? `HASAR ${w.DAMAGE} · ETKİ ALANI ${w.RADIUS} m · basılı tut, uzağa at` : `${w.DURATION / 1000} sn görüş kapatır · basılı tut, uzağa at`;
+      ? `HASAR ${w.DAMAGE} · KAFA x${w.HEADSHOT_MULT} · ŞARJÖR ${w.MAG_SIZE} · YEDEK ${w.RESERVE} · ${Math.round(60000 / w.FIRE_INTERVAL)} RPM`
+      : w.id === 'he' ? `HASAR ${w.DAMAGE} · ETKİ ALANI ${w.RADIUS} m · basılı tut, uzağa at`
+        : w.id === 'poison' ? `${w.DURATION / 1000} sn zehirli sis · içindekiler saniyede ${(w.DAMAGE_TICK * 1000) / w.TICK} can kaybeder · basılı tut, uzağa at`
+          : `${w.DURATION / 1000} sn görüş kapatır · basılı tut, uzağa at`;
   }
 
   renderLoadout() {
@@ -142,6 +146,23 @@ export class Menu {
   }
 
   /** Lobide harita seçimi (sadece host değiştirebilir) */
+  buildModes() {
+    const box = $('mode-pick');
+    for (const id of MODE_IDS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'mode-card';
+      b.dataset.action = `mode-${id}`;
+      b.dataset.mode = id;
+      const name = document.createElement('b');
+      name.textContent = MODES[id].name;
+      const desc = document.createElement('small');
+      desc.textContent = MODES[id].desc;
+      b.append(name, desc);
+      box.append(b);
+    }
+  }
+
   buildMaps() {
     const box = $('map-pick');
     for (const id of MAP_IDS) {
@@ -250,6 +271,10 @@ export class Menu {
       }
       case 'start':
         return this.net.emit(MSG.START_MATCH);
+      case 'add-bot':
+        return this.net.emit(MSG.ADD_BOT);
+      case 'remove-bot':
+        return this.net.emit(MSG.REMOVE_BOT);
       case 'copy':
         navigator.clipboard?.writeText(this.room?.code ?? '').catch(() => {});
         return this.msg('lobby-msg', 'Oda kodu kopyalandı!', false);
@@ -259,11 +284,13 @@ export class Menu {
         this.room = null;
         if (this.game.active) this.game.stop();
         this.input.unlock();
+        this.input.releaseKeyboard();
         return this.show('main');
       case 'resume':
         return this.resume();
       default:
         if (a.startsWith('map-')) this.net.emit(MSG.SET_MAP, a.slice(4));
+        else if (a.startsWith('mode-')) this.net.emit(MSG.SET_MODE, a.slice(5));
     }
   }
 
@@ -314,6 +341,7 @@ export class Menu {
     this.net.on('disconnect', () => {
       if (this.game.active) this.game.stop();
       this.input.unlock();
+      this.input.releaseKeyboard();
       this.room = null;
       this.show('main');
       this.msg('main-msg', 'Sunucu bağlantısı koptu. Yeniden bağlanılıyor...');
@@ -337,6 +365,11 @@ export class Menu {
       b.disabled = !isHost || rs.state !== 'lobby';
     }
     $('map-hint').textContent = isHost ? 'Haritayı seç' : 'Haritayı host seçer';
+    for (const b of $('mode-pick').children) {
+      b.classList.toggle('active', b.dataset.mode === (rs.mode ?? 'tdm'));
+      b.disabled = !isHost || rs.state !== 'lobby';
+    }
+    $('mode-hint').textContent = isHost ? 'Oyun modunu seç' : 'Modu host seçer';
     if (!this.game.active && rs.map) this.game.world.load(rs.map);
     $('lobby-type').textContent = rs.isPublic ? 'PUBLIC ROOM' : 'PRIVATE ROOM';
     for (const team of ['red', 'blue']) {
@@ -347,10 +380,10 @@ export class Menu {
         const li = document.createElement('li');
         if (p.id === myId) li.classList.add('me');
         const name = document.createElement('span');
-        name.textContent = (p.id === rs.hostId ? '★ ' : '') + p.name;
+        name.textContent = (p.id === rs.hostId ? '★ ' : p.bot ? '🤖 ' : '') + p.name;
         const status = document.createElement('span');
         status.className = p.ready || p.id === rs.hostId ? 'ok' : 'wait';
-        status.textContent = p.id === rs.hostId ? 'HOST' : p.ready ? 'READY' : '...';
+        status.textContent = p.id === rs.hostId ? 'HOST' : p.bot ? 'BOT' : p.ready ? 'READY' : '...';
         li.append(name, status);
         list.append(li);
       }
@@ -362,6 +395,11 @@ export class Menu {
       }
       $(`btn-${team}`).disabled = me?.team === team || members.length >= rs.maxPerTeam || rs.state !== 'lobby';
     }
+
+    // Pratik botları (sadece host)
+    $('bot-row').classList.toggle('hidden', !isHost);
+    $('btn-addbot').disabled = rs.players.length >= rs.maxPlayers;
+    $('btn-rmbot').disabled = !rs.players.some((p) => p.bot);
 
     const ready = $('btn-ready');
     ready.classList.toggle('hidden', isHost);

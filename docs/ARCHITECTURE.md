@@ -56,4 +56,4 @@
 | `client/src/ui/HUD.js` | Can, mühimmat, skor, süre, kill feed, skor tablosu |
 | `client/src/world/MapBuilder.js` | Haritayı görsel + fizik olarak kurar |
 | `client/src/player/*` | Yerel oyuncu, uzak oyuncular, silah |
-| `client/src/fx/*` | Toon materyaller, efektler |
+| `client/src/fx/*` | Toon materyaller, efektler, bomba yörünge önizlemesi (`Trajectory.js`) |

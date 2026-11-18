@@ -12,8 +12,9 @@ export class Player {
     this.spawnedAt = 0;
     this.fired = false; // doğduktan sonra ateş etti mi (silah değiştirme süresi için)
     this.ready = false;
-    this.kills = 0;
-    this.deaths = 0;
+    this.resetStats();
+    this.isBot = !!socket.isBot;
+    this.bot = null; // BotBrain (botsa)
 
     this.pos = [0, 0, 0]; // ayak pozisyonu
     this.yaw = 0;
@@ -28,6 +29,7 @@ export class Player {
     this.weapon = 'rifle';
     this.ammo = {};
     this.nades = {};
+    this.reserve = {};
     this.reloadUntil = 0;
     this.lastShot = 0;
     this.lastSpray = 0;
@@ -41,6 +43,8 @@ export class Player {
   resetStats() {
     this.kills = 0;
     this.deaths = 0;
+    this.hs = 0; // kafadan vuruşla öldürme
+    this.caps = 0; // CTF: getirilen bayrak
   }
 
   get crouching() {
@@ -56,6 +60,8 @@ export class Player {
     const l = this.loadout;
     this.weapon = l.primary;
     this.ammo = { [l.primary]: WEAPONS[l.primary].MAG_SIZE, [l.pistol]: WEAPONS[l.pistol].MAG_SIZE };
+    // Yedek mermi: şarjör değiştirince buradan alınır, bitince o silahla ateş edilemez (doğuşta dolar)
+    this.reserve = { [l.primary]: WEAPONS[l.primary].RESERVE ?? 0, [l.pistol]: WEAPONS[l.pistol].RESERVE ?? 0 };
     this.nades = { [l.nade]: WEAPONS[l.nade].COUNT };
     this.reloadUntil = 0;
     this.lastShot = 0;
@@ -92,6 +98,9 @@ export class Player {
   }
 
   info() {
-    return { id: this.id, name: this.name, team: this.team, char: this.char, ready: this.ready, kills: this.kills, deaths: this.deaths };
+    return {
+      id: this.id, name: this.name, team: this.team, char: this.char, ready: this.ready, kills: this.kills, deaths: this.deaths,
+      hs: this.hs, caps: this.caps, bot: this.isBot,
+    };
   }
 }

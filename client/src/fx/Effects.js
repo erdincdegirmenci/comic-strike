@@ -159,6 +159,29 @@ function fireTexture() {
 }
 
 const wordCache = new Map();
+const numCache = new Map();
+/** Uçuşan hasar sayısı dokusu: kalın konturlu çizgi roman rakamı */
+function numberTexture(text, color) {
+  const key = text + color;
+  if (!numCache.has(key)) {
+    numCache.set(
+      key,
+      canvasTexture(256, 128, (g, w, h) => {
+        g.font = '96px Bangers, Impact, sans-serif';
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.lineJoin = 'round';
+        g.lineWidth = 16;
+        g.strokeStyle = '#141414';
+        g.strokeText(text, w / 2, h / 2 + 4);
+        g.fillStyle = color;
+        g.fillText(text, w / 2, h / 2 + 4);
+      }),
+    );
+  }
+  return numCache.get(key);
+}
+
 function wordTexture(text, color) {
   const key = text + color;
   if (!wordCache.has(key)) {
@@ -278,10 +301,10 @@ export class Effects {
     this.items.push({ obj: m, life: 12, max: 12, scorch: true });
   }
 
-  /** Sis bombası: süre boyunca görüşü kapatan bulut */
-  smoke(pos, radius, seconds) {
+  /** Sis bombası: süre boyunca görüşü kapatan bulut. poison=true ise yeşil zehir bulutu */
+  smoke(pos, radius, seconds, poison = false) {
     const center = new THREE.Vector3(pos.x, pos.y, pos.z);
-    this.smokes.push({ pos: center, radius, until: performance.now() + seconds * 1000 });
+    this.smokes.push({ pos: center, radius, until: performance.now() + seconds * 1000, poison });
     const count = 34;
     for (let i = 0; i < count; i++) {
       // Yarım küre içinde rastgele noktalar
@@ -292,6 +315,7 @@ export class Effects {
       const size = 2.6 + Math.random() * 1.6;
       const mat = new THREE.SpriteMaterial({
         map: smokeTexture(), transparent: true, depthWrite: false, opacity: 0, rotation: Math.random() * Math.PI * 2,
+        color: poison ? (Math.random() < 0.5 ? '#9bd94a' : '#b5e36b') : '#ffffff',
       });
       const sp = new THREE.Sprite(mat);
       sp.position.copy(_p);
@@ -303,8 +327,13 @@ export class Effects {
     }
   }
 
-  /** Kamera sis bulutunun içinde mi? 0..1 yoğunluk */
-  smokeDensity(pos) {
+  /** Kamera zehir bulutunun içinde mi? 0..1 */
+  poisonDensity(pos) {
+    return this.smokeDensity(pos, true);
+  }
+
+  /** Kamera sis bulutunun içinde mi? 0..1 yoğunluk (onlyPoison: sadece zehir bulutları) */
+  smokeDensity(pos, onlyPoison = false) {
     const now = performance.now();
     let best = 0;
     for (let i = this.smokes.length - 1; i >= 0; i--) {
@@ -313,6 +342,7 @@ export class Effects {
         this.smokes.splice(i, 1);
         continue;
       }
+      if (onlyPoison && !s.poison) continue;
       const dx = pos.x - s.pos.x;
       const dz = pos.z - s.pos.z;
       const dy = Math.max(0, pos.y - s.pos.y - s.radius * 0.6);
@@ -364,6 +394,21 @@ export class Effects {
       const vel = new THREE.Vector3((Math.random() - 0.5) * 1.5, 0.8 + Math.random(), (Math.random() - 0.5) * 1.5);
       this.sprite(puffTexture(), _p, 0.6, 0.6, 0.7, { grow: 1.4, vel });
     }
+  }
+
+  /** Vurulan rakibin üstünde yükselip kaybolan hasar sayısı. scale: kameraya uzaklığa göre büyütme */
+  damageNumber(pos, dmg, head, kill, scale = 1) {
+    const text = `-${dmg}${head ? '!' : ''}`;
+    const color = kill ? '#e63946' : head ? '#ffd23f' : '#ffffff';
+    const k = (head || kill ? 1.35 : 1) * scale;
+    _p.set(pos.x + (Math.random() - 0.5) * 0.5 * scale, pos.y, pos.z + (Math.random() - 0.5) * 0.5 * scale);
+    this.sprite(numberTexture(text, color), _p, 0.9 * k, 0.45 * k, 0.85, {
+      depthTest: false,
+      rot: (Math.random() - 0.5) * 0.3,
+      vel: new THREE.Vector3((Math.random() - 0.5) * 0.4 * scale, 1.1 * scale, 0),
+      order: 21,
+      pop: true,
+    });
   }
 
   word(pos, text, color = '#e63946') {

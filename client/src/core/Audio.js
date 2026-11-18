@@ -160,6 +160,34 @@ export class Sfx {
     this.noiseBurst({ gain: 0.5, decay: 0.07, freq: 2200, type: 'highpass', delay: 1.5 });
   }
 
+  /** Mermi kutusu alındı */
+  pickup() {
+    if (!this.ready) return;
+    this.tone({ type: 'square', from: 660, to: 990, gain: 0.12, decay: 0.12 });
+    this.tone({ type: 'square', from: 990, gain: 0.1, decay: 0.1, delay: 0.08 });
+  }
+
+  /** Takım işareti */
+  mark() {
+    if (!this.ready) return;
+    this.tone({ type: 'sine', from: 1200, to: 900, gain: 0.2, decay: 0.18 });
+    this.tone({ type: 'sine', from: 1500, gain: 0.12, decay: 0.15, delay: 0.1 });
+  }
+
+  /** Bayrak olayları: good=true bizim lehimize (yükselen), false aleyhimize (alçalan) */
+  flag(good = true) {
+    if (!this.ready) return;
+    const notes = good ? [523, 659, 784] : [523, 415, 330];
+    notes.forEach((f, i) => this.tone({ type: 'triangle', from: f, gain: 0.18, decay: 0.16, delay: i * 0.09 }));
+  }
+
+  /** Sayı! kısa fanfar */
+  capture(good = true) {
+    if (!this.ready) return;
+    const notes = good ? [523, 659, 784, 1047, 784, 1047] : [392, 370, 349, 262];
+    notes.forEach((f, i) => this.tone({ type: 'square', from: f, gain: 0.12, decay: 0.18, delay: i * 0.11 }));
+  }
+
   countdown(final = false) {
     if (!this.ready) return;
     this.tone({ type: 'square', from: final ? 880 : 440, gain: 0.12, decay: final ? 0.4 : 0.15 });

@@ -35,6 +35,7 @@ export class Weapon {
     this.buildKnife();
     this.buildGrenade('he', '#52b788');
     this.buildGrenade('smoke', '#adb5bd');
+    this.buildGrenade('poison', '#7cb518');
     this.buildCarbine();
     this.buildSmg();
     this.buildLmg();
@@ -49,6 +50,7 @@ export class Weapon {
     this.current = this.loadout.primary;
     this.previous = 'knife';
     this.ammo = {};
+    this.reserve = {}; // yedek mermi (şarjör değiştirince buradan alınır)
     this.nades = {};
     this.reloading = false;
     this.reloadStart = 0;
@@ -65,6 +67,8 @@ export class Weapon {
     this.bobT = 0;
     this.sway = new THREE.Vector2();
     this.sprint = 0;
+    this.aiming = false; // sağ tık nişan (AWP dışı ateşli silahlar)
+    this.adsT = 0; // nişan geçişi 0..1
     this.reset();
   }
 
@@ -282,6 +286,16 @@ export class Weapon {
     this.hand = h === 'left' ? -1 : 1;
   }
 
+  /** HUD için: elindeki silahın yedek mermisi (silah değilse null) */
+  get reserveCount() {
+    return this.def.kind === 'gun' ? this.reserve[this.current] ?? 0 : null;
+  }
+
+  /** Elindeki silahın hem şarjörü hem yedeği bitti mi */
+  get dry() {
+    return this.def.kind === 'gun' && !(this.ammo[this.current] > 0) && !(this.reserve[this.current] > 0);
+  }
+
   /** HUD için: elindeki silahın mermisi / bomba sayısı (bıçakta null) */
   get count() {
     if (this.def.kind === 'gun') return this.ammo[this.current];
@@ -295,12 +309,16 @@ export class Weapon {
   }
 
   /** Doğuşta / silah seçimi uygulanınca: sunucunun verdiği mermi ve bombalarla */
-  reset(ammo, nades, loadout) {
+  reset(ammo, nades, loadout, reserve) {
     if (loadout) this.loadout = { ...loadout };
     const l = this.loadout;
     this.ammo = {
       [l.primary]: ammo?.[l.primary] ?? WEAPONS[l.primary].MAG_SIZE,
       [l.pistol]: ammo?.[l.pistol] ?? WEAPONS[l.pistol].MAG_SIZE,
+    };
+    this.reserve = {
+      [l.primary]: reserve?.[l.primary] ?? WEAPONS[l.primary].RESERVE ?? 0,
+      [l.pistol]: reserve?.[l.pistol] ?? WEAPONS[l.pistol].RESERVE ?? 0,
     };
     this.nades = { [l.nade]: nades?.[l.nade] ?? WEAPONS[l.nade].COUNT };
     this.reloading = false;
@@ -311,6 +329,8 @@ export class Weapon {
     this.nextFire = 0;
     this.scope = 0;
     this.resumeScope = 0;
+    this.aiming = false;
+    this.adsT = 0;
     this.current = l.primary;
     this.previous = l.pistol;
     this.drawStart = performance.now();
@@ -325,6 +345,7 @@ export class Weapon {
     this.reloading = false;
     this.scope = 0;
     this.resumeScope = 0;
+    this.aiming = false;
     this.throwT = 0;
     this.swing = 0;
     this.drawStart = now;
@@ -387,6 +408,11 @@ export class Weapon {
     this.throwT = 1;
   }
 
+  /** Bu silahla sağ tık nişan alınabilir mi (AWP'nin kendi dürbünü var) */
+  get canAim() {
+    return this.def.kind === 'gun' && this.current !== 'awp';
+  }
+
   /** Dürbün seviyesini değiştir (sadece AWP) */
   toggleScope() {
     if (this.current !== 'awp' || this.reloading) return;
@@ -396,7 +422,7 @@ export class Weapon {
 
   startReload(now) {
     const d = this.def;
-    if (d.kind !== 'gun' || this.reloading || this.ammo[this.current] >= d.MAG_SIZE) return false;
+    if (d.kind !== 'gun' || this.reloading || this.ammo[this.current] >= d.MAG_SIZE || !(this.reserve[this.current] > 0)) return false;
     this.reloading = true;
     this.reloadStart = now;
     this.scope = 0;
@@ -407,8 +433,11 @@ export class Weapon {
   update(dt, now, player, look) {
     const d = this.def;
     if (this.reloading && now - this.reloadStart >= d.RELOAD_TIME) {
+      // Tahmin: yedekten şarjöre aktar (sunucunun AMMO mesajı kesin değeri getirir)
       this.reloading = false;
-      this.ammo[this.current] = d.MAG_SIZE;
+      const take = Math.max(0, Math.min(d.MAG_SIZE - this.ammo[this.current], this.reserve[this.current] ?? 0));
+      this.ammo[this.current] += take;
+      this.reserve[this.current] = (this.reserve[this.current] ?? 0) - take;
     }
     if (this.resumeScope && now >= this.nextFire) {
       this.scope = this.resumeScope;
@@ -461,14 +490,24 @@ export class Weapon {
 
     const air = player.grounded ? 0 : 0.015;
     const h = this.hand;
+    // Nişan: silah ekranın ortasına, gez-arpacık hizasına gelir; sallantı azalır
+    this.adsT += ((this.aiming && !this.reloading ? 1 : 0) - this.adsT) * Math.min(1, dt * 14);
+    const a = this.adsT;
+    const calm = 1 - 0.8 * a;
+    const pistol = d.cat === 'pistol';
+    const adsX = pistol ? 0.072 : 0; // tabanca modeli el içinde biraz solda duruyor
+    const adsY = pistol ? -0.158 : -0.08;
+    const adsZ = pistol ? -0.4 : -0.34;
+    const hipX = (this.base.x + bobX - this.sprint * 0.06 + swingX) * h + this.sway.x;
+    const hipY = this.base.y + bobY + this.sway.y - reloadDip * 0.12 - this.sprint * 0.04 + air - draw * 0.25 + th * 0.08;
     this.root.position.set(
-      (this.base.x + bobX - this.sprint * 0.06 + swingX) * h + this.sway.x,
-      this.base.y + bobY + this.sway.y - reloadDip * 0.12 - this.sprint * 0.04 + air - draw * 0.25 + th * 0.08,
-      this.base.z + this.kick * 0.06 + swingZ - th * 0.15,
+      hipX + (adsX + (bobX * 0.2 + this.sway.x * 0.3) - hipX) * a,
+      hipY + (adsY + (bobY * 0.2 + this.sway.y * 0.3) - draw * 0.25 - hipY) * a,
+      this.base.z + this.kick * 0.06 * calm + swingZ - th * 0.15 + (adsZ - this.base.z) * a,
     );
     this.root.rotation.set(
-      this.kick * 0.09 - reloadDip * 0.5 - this.sprint * 0.25 + swingRotX - draw * 0.6 - th * 0.6,
-      (this.sprint * 0.5 + swingRotY) * h,
+      this.kick * 0.09 * calm - reloadDip * 0.5 - this.sprint * 0.25 + swingRotX - draw * 0.6 - th * 0.6,
+      (this.sprint * 0.5 + swingRotY) * h * (1 - a),
       reloadDip * 0.6 * h,
     );
     if (m.mag) {
