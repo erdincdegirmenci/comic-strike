@@ -65,6 +65,14 @@ body.in-menu #halftone {
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn.big { font-size: 34px; background: var(--red); color: var(--paper); -webkit-text-stroke: 1.5px var(--ink); }
 .btn.alt { background: #fff; font-size: 22px; }
+/* Köşedeki tam ekran düğmesi: menülerde görünür, oyun sırasında (fare kilitliyken) gizlenir */
+.fs-btn {
+  position: fixed; top: 12px; right: 12px; z-index: 20; pointer-events: auto; cursor: pointer;
+  font-family: var(--font); font-size: 16px; letter-spacing: 1px; color: var(--ink);
+  background: var(--paper); border: 3px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); padding: 4px 10px;
+}
+.fs-btn:hover { background: var(--yellow); }
+body.pointer-locked .fs-btn { display: none; }
 .btn.small { font-size: 18px; padding: 4px 12px; box-shadow: 3px 3px 0 var(--ink); border-width: 3px; }
 .btn.active { background: var(--green); color: var(--paper); }
 

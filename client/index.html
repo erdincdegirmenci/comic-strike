@@ -38,6 +38,9 @@
         </div>
       </section>
 
+      <!-- Köşede tam ekran düğmesi (menülerde görünür) -->
+      <button id="btn-fs" class="fs-btn fs-label" data-action="fullscreen" title="Tam ekran">⛶ TAM EKRAN</button>
+
       <!-- ODAYA KATIL -->
       <section id="screen-join" class="screen hidden">
         <div class="panel menu">
@@ -67,6 +70,13 @@
               <option value="high">HIGH (gölgeler açık)</option>
               <option value="low">LOW (daha hızlı)</option>
             </select>
+          </label>
+          <label class="field">TAM EKRAN
+            <select id="set-autofs">
+              <option value="on">OYUNA GİRİNCE OTOMATİK</option>
+              <option value="off">KAPALI (pencerede oyna)</option>
+            </select>
+            <small>Tam ekranda Ctrl+W sekmeyi kapatamaz</small>
           </label>
           <button class="btn alt" data-action="back">BACK</button>
         </div>
@@ -148,6 +158,7 @@
           <h2 id="pause-title">PAUSED</h2>
           <button id="btn-resume" class="btn big" data-action="resume">RESUME</button>
           <button class="btn" data-action="loadout">SİLAH SEÇ (B)</button>
+          <button class="btn alt fs-label" data-action="fullscreen">⛶ TAM EKRAN</button>
           <button class="btn alt" data-action="settings">SETTINGS</button>
           <button class="btn alt" data-action="leave-match">LEAVE MATCH</button>
         </div>

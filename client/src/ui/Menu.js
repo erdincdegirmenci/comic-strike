@@ -49,7 +49,17 @@ export class Menu {
 
     this.bindSettings();
     this.bindNet();
-    this.input.onLockChange = (locked) => this.onLockChange(locked);
+    this.input.onLockChange = (locked) => {
+      document.body.classList.toggle('pointer-locked', locked);
+      this.onLockChange(locked);
+    };
+    this.input.autoFullscreen = this.settings.autoFullscreen !== 'off';
+    const fsLabels = () => {
+      for (const b of document.querySelectorAll('.fs-label')) b.textContent = document.fullscreenElement ? '🗗 PENCERE' : '⛶ TAM EKRAN';
+    };
+    document.addEventListener('fullscreenchange', fsLabels);
+    fsLabels();
+    if (!document.documentElement.requestFullscreen) for (const b of document.querySelectorAll('.fs-label')) b.classList.add('hidden');
     $('inp-name').value = this.settings.name;
     this.buildCharacters();
     this.buildModes();
@@ -288,6 +298,14 @@ export class Menu {
         return this.show('main');
       case 'resume':
         return this.resume();
+      case 'fullscreen': {
+        // Düğmeyle seçilen durum ayar olarak da kalsın (sonraki girişlerde aynı davranış)
+        const goFull = !this.input.fullscreen;
+        this.settings.autoFullscreen = goFull ? 'on' : 'off';
+        $('set-autofs').value = this.settings.autoFullscreen;
+        this.applySettings();
+        return this.input.toggleFullscreen();
+      }
       default:
         if (a.startsWith('map-')) this.net.emit(MSG.SET_MAP, a.slice(4));
         else if (a.startsWith('mode-')) this.net.emit(MSG.SET_MODE, a.slice(5));
@@ -441,10 +459,12 @@ export class Menu {
     bind('set-vol', 'volume', (v) => `${Math.round(v * 100)}%`);
     bind('set-quality', 'quality', (v) => v, String);
     bind('set-hand', 'hand', (v) => v, String);
+    bind('set-autofs', 'autoFullscreen', (v) => v, String);
   }
 
   applySettings() {
     saveSettings(this.settings);
+    this.input.autoFullscreen = this.settings.autoFullscreen !== 'off';
     this.sfx.setVolume(this.settings.volume);
     this.view.applyQuality(this.settings.quality);
     if (this.game.active) this.game.applySettings();

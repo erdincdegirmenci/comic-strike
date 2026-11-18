@@ -20,6 +20,7 @@ export class Input {
     this.dy = 0;
     this.locked = false;
     this.gameActive = false;
+    this.autoFullscreen = true; // oyuna girince tam ekran (ayarlardan kapatılabilir)
     this.onLockChange = null;
 
     const isTyping = (e) => e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement;
@@ -120,11 +121,31 @@ export class Input {
       navigator.keyboard?.lock?.(GAME_KEYS)?.catch?.(() => {});
     };
     try {
-      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+      if (!document.fullscreenElement && this.autoFullscreen && document.documentElement.requestFullscreen) {
         document.documentElement.requestFullscreen({ navigationUI: 'hide' }).then(lockKeys, () => {});
       } else lockKeys();
     } catch {
       /* tam ekran desteklenmiyor: beforeunload onayı yine korur */
+    }
+  }
+
+  get fullscreen() {
+    return !!document.fullscreenElement;
+  }
+
+  /** Tam ekran aç / kapat (kullanıcı tıklaması içinde çağrılmalı) */
+  toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) {
+        navigator.keyboard?.unlock?.();
+        document.exitFullscreen().catch(() => {});
+      } else {
+        document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).then(() => {
+          if (this.gameActive) navigator.keyboard?.lock?.(GAME_KEYS)?.catch?.(() => {});
+        }, () => {});
+      }
+    } catch {
+      /* tarayıcı desteklemiyor */
     }
   }
 
