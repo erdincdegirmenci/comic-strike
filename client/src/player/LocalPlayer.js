@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
-import { PLAYER, FLAG, ADS } from '@comic-strike/shared/constants.js';
+import { PLAYER, FLAG, ADS, PAD } from '@comic-strike/shared/constants.js';
 
 const CENTER = PLAYER.HEIGHT / 2; // kapsül merkezi, ayak noktasından yukarı
 const HALF = PLAYER.HEIGHT / 2 - PLAYER.RADIUS;
@@ -40,6 +40,10 @@ export class LocalPlayer {
     this.aiming = false; // sağ tık nişan (diğer silahlar)
     this.stamina = PLAYER.STAMINA_MAX;
     this.exhausted = false; // stamina bitti: MIN_TO_SPRINT'e kadar koşulamaz
+    this.pads = []; // haritanın zıplama pedleri
+    this.padFlight = false; // pedden fırlatıldı, henüz yere inmedi (düşme hasarı yok)
+    this.padAt = 0;
+    this.onPad = null; // fırlatılınca çağrılır (ses)
     this.landed = 0; // bu karede yere sert çarptıysa çarpma hızı (m/s), Game okuyup sıfırlar
   }
 
@@ -69,6 +73,7 @@ export class LocalPlayer {
     this.collider.setTranslation({ x: p[0], y: p[1] + CENTER, z: p[2] });
     this.velocity.set(0, 0, 0);
     this.landed = 0;
+    this.padFlight = false;
     if (yaw !== undefined) {
       this.yaw = yaw;
       this.pitch = 0;
@@ -136,9 +141,24 @@ export class LocalPlayer {
     speed *= this.speedMult;
 
     if (this.grounded || len > 0) {
-      const k = Math.min(1, (this.grounded ? 14 * this.traction : 2.5) * dt);
+      // Havada az kontrol; pedden uçarken daha da az (hedefe ulaşsın)
+      const k = Math.min(1, (this.grounded ? 14 * this.traction : this.padFlight ? 1.2 : 2.5) * dt);
       this.velocity.x += (wx * speed - this.velocity.x) * k;
       this.velocity.z += (wz * speed - this.velocity.z) * k;
+    }
+
+    // Zıplama pedi: üstüne basınca fırlat
+    if (enabled && this.grounded && this.pads.length && performance.now() - this.padAt > PAD.COOLDOWN) {
+      for (const pad of this.pads) {
+        if (Math.hypot(this.position.x - pad.c[0], this.position.z - pad.c[2]) < pad.r && Math.abs(this.position.y - pad.c[1]) < 0.45) {
+          this.velocity.set(pad.v[0], pad.v[1], pad.v[2]);
+          this.grounded = false;
+          this.padFlight = true;
+          this.padAt = performance.now();
+          this.onPad?.();
+          break;
+        }
+      }
     }
 
     if (enabled && this.grounded && !this.crouching && input.pressed('Space')) {
@@ -161,7 +181,10 @@ export class LocalPlayer {
 
     this.grounded = this.kcc.computedGrounded();
     // Yere sert iniş → düşme hasarı için bildir
-    if (!wasGrounded && this.grounded && fallSpeed > 0) this.landed = Math.max(this.landed, fallSpeed);
+    if (!wasGrounded && this.grounded && fallSpeed > 0) {
+      if (this.padFlight) this.padFlight = false; // pedden inişte düşme hasarı yok
+      else this.landed = Math.max(this.landed, fallSpeed);
+    }
     if (this.grounded && this.velocity.y < 0) this.velocity.y = 0;
     if (this.velocity.y > 0 && mv.y < desired.y * 0.5) this.velocity.y = 0; // tavana çarptı
 

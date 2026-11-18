@@ -70,12 +70,16 @@ Sen **http://localhost:3000**, arkadaşların **http://BILGISAYAR_IP:3000** adre
 ## Oyun modları
 - **Takım Savaşı** (varsayılan): 30 öldürmeye ilk ulaşan takım kazanır.
 - **Bayrak Kap**: rakip bayrağını kendi üssündeki halkaya getir; 3 bayrak getiren kazanır. Taşıyan ölürse bayrak düşer, sahibi dokunursa üsse döner (20 sn sonra kendiliğinden döner). Lobide host seçer.
+- **Herkes Tek** (FFA): takım yok, herkes herkese rakip; 20 öldürmeye ilk ulaşan kazanır. Her öldürmede **+25 can** (100'ü geçmez) ve öldürdüğün silaha **+1 şarjör**. Şarjör hiç tamamen bitmez: son mermiyi atınca bir şarjör yedek gelir. Ölünce can ve mermi başlangıca döner. Her haritada oynanabilir.
+
+**Zıplama pedleri** (yeşil oklu diskler): üstüne basınca seni çatılara, platformlara ve konteynerlerin üstüne fırlatır; pedden inişte düşme hasarı yok.
+**Eğilerek geçilen yerler**: tır dorsesinin altı, çit kemerleri, kale duvarındaki gizli delik, boru rafı, havada duran konteyner, havalandırma deliği… Ayakta geçilmez, **Ctrl / C** ile çömelince geçilir.
 
 Maç sonunda ödüller: TERMİNATÖR (en çok öldüren), KESKİN NİŞANCI (en çok kafadan vuruş), BAYRAK USTASI (Bayrak Kap'ta en çok bayrak getiren) ve en çok ölene KURŞUN MIKNATISI.
 
 ## Ayarlanabilir değerler
 Oyun dengesi `shared/constants.js` içinde: can, hız, silah hasarı, ateş hızı, şarjör, skor limiti, maç süresi, spawn koruması.
-Haritalar `shared/maps.js` içinde (City Arena `shared/map.js`): kutu listesi + spawn noktaları. Lobide host haritayı seçer: CITY ARENA, POOL PARTY, FROST ARENA (buz zemini kaygan).
+Haritalar `shared/maps.js` içinde (City Arena `shared/map.js`): kutu listesi, doğuş noktaları, bayrak üsleri ve zıplama pedleri. Lobide host haritayı seçer: CITY ARENA, POOL PARTY, FROST ARENA (buz zemini kaygan) ve HURDALIK (en büyük harita, tüm modlarda; takım modlarında kırmızı güneyde, mavi kuzeyde doğar: yüksek platform ve köprüler, depo, iskele, konteyner sahası, boru rafı, iki katlı ofis, basamaklı hurda tepesi).
 
 Sunucu ortam değişkenleri:
 - `PORT`: varsayılan 3000

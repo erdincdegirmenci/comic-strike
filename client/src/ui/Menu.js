@@ -182,6 +182,11 @@ export class Menu {
       b.dataset.action = `map-${id}`;
       b.dataset.map = id;
       b.textContent = MAPS[id].name;
+      if (MAPS[id].ffaOnly) {
+        const tag = document.createElement('small');
+        tag.textContent = 'SADECE HERKES TEK';
+        b.append(tag);
+      }
       box.append(b);
     }
   }
@@ -390,10 +395,14 @@ export class Menu {
     $('mode-hint').textContent = isHost ? 'Oyun modunu seç' : 'Modu host seçer';
     if (!this.game.active && rs.map) this.game.world.load(rs.map);
     $('lobby-type').textContent = rs.isPublic ? 'PUBLIC ROOM' : 'PRIVATE ROOM';
+    // Herkes Tek: takım yok, herkes tek listede
+    const ffa = rs.mode === 'ffa';
+    document.querySelector('#screen-lobby .teams').classList.toggle('ffa', ffa);
+    document.querySelector('#screen-lobby .team.red h3').textContent = ffa ? 'OYUNCULAR — HERKES HERKESE RAKİP' : 'RED TEAM';
     for (const team of ['red', 'blue']) {
       const list = $(`list-${team}`);
       list.replaceChildren();
-      const members = rs.players.filter((p) => p.team === team);
+      const members = ffa ? (team === 'red' ? rs.players : []) : rs.players.filter((p) => p.team === team);
       for (const p of members) {
         const li = document.createElement('li');
         if (p.id === myId) li.classList.add('me');
@@ -405,7 +414,7 @@ export class Menu {
         li.append(name, status);
         list.append(li);
       }
-      for (let i = members.length; i < rs.maxPerTeam; i++) {
+      for (let i = members.length; i < (ffa ? (team === 'red' ? rs.maxPlayers : 0) : rs.maxPerTeam); i++) {
         const li = document.createElement('li');
         li.className = 'empty';
         li.textContent = 'boş';

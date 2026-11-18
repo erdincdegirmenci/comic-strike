@@ -43,6 +43,7 @@ export const MSG = {
   MARKED: 'marked', // {id, p, e}: takım arkadaşının işareti
   DROP: 'drop', // {id, p}: mermi kutusu düştü
   PICKUP: 'pickup', // {id, by, reserve?}: mermi kutusu alındı / süresi doldu (by=null)
+  REWARD: 'reward', // {hp?, reserve, kill?}: FFA öldürme ödülü / şarjör bitmesin diye verilen yedek
   MATCH_END: 'match_end',
   SPING: 'sping', // sunucunun ping ölçümü (ack ile)
 };
