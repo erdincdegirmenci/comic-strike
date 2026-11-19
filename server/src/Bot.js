@@ -259,6 +259,20 @@ function findPath(g, from, to) {
   return path;
 }
 
+// Bot zorluğu: daha yavaş tepki, daha dağınık nişan, daha az kafa vuruşu ve seri atış arası nefes payı
+const BOT = {
+  REACTION: 650, // hedefi gördükten sonra ateşe başlamadan önce bekleme (ms)
+  SKILL_MIN: 0.45, // nişan becerisi aralığı (0..1)
+  SKILL_RANGE: 0.3,
+  AIM_ERR: 0.038, // temel nişan sapması
+  AIM_ERR_MOVING: 0.024, // hareket ederken eklenen sapma
+  HEAD_CHANCE: 0.08, // kafaya nişan alma olasılığı
+  EXTRA_INTERVAL: 1.25, // otomatik silahlarda atış aralığı çarpanı
+  BURST: 5, // en fazla bu kadar mermilik seri, sonra kısa ara
+  BURST_PAUSE: [350, 650], // seri arası bekleme (ms)
+  TRACK_LAG: 0.2, // hedefin hareketini takip ederken gecikme (s)
+};
+
 const now = () => Date.now();
 const angleTo = (dx, dz) => Math.atan2(-dx, -dz); // istemcideki yaw ile aynı (ileri = -Z)
 
@@ -280,7 +294,9 @@ export class BotBrain {
     this.target = null;
     this.strafe = Math.random() < 0.5 ? 1 : -1;
     this.strafeFlip = 0;
-    this.skill = 0.6 + Math.random() * 0.3; // nişan becerisi
+    this.skill = BOT.SKILL_MIN + Math.random() * BOT.SKILL_RANGE; // nişan becerisi
+    this.burst = 0; // mevcut seride atılan mermi
+    this.aimPos = null; // gecikmeli takip edilen hedef noktası
     this.role = Math.random() < 0.3 ? "defend" : "attack"; // CTF'de
   }
 
@@ -410,6 +426,23 @@ export class BotBrain {
     return pts[Math.floor(now() / 8000 + this.skill * 10) % pts.length];
   }
 
+  /**
+   * (x, z)'ye gidince başka bir canlı oyuncunun gövdesine girer mi? Zaten iç içeyse (aynı anda doğma)
+   * sadece daha da yaklaşmak engellenir, uzaklaşmaya izin verilir.
+   */
+  bumpsPlayer(x, z) {
+    const p = this.p;
+    const D = R * 2;
+    for (const o of this.room.players.values()) {
+      if (o === p || !o.alive || Math.abs(o.pos[1] - p.pos[1]) > BODY) continue;
+      const d = Math.hypot(o.pos[0] - x, o.pos[2] - z);
+      if (d >= D) continue;
+      const now = Math.hypot(o.pos[0] - p.pos[0], o.pos[2] - p.pos[2]);
+      if (d < now || now >= D) return true;
+    }
+    return false;
+  }
+
   /** Belirtilen yöne dt kadar yürümeyi dene; engel varsa yana kaydır. Hareket ettiyse true */
   tryMove(dx, dz, dist) {
     const p = this.p;
@@ -418,6 +451,7 @@ export class BotBrain {
     const nz = p.pos[2] + dz * dist;
     const step = (x, z) => {
       if (hitsBody(s, x, p.pos[1], z)) return false;
+      if (this.bumpsPlayer(x, z)) return false; // oyuncuların içinden geçilmez
       // Uçurumdan / havuz kenarından kendiliğinden düşme
       if (this.vy === 0 && groundBelow(s, x, p.pos[1], z) < p.pos[1] - 0.7)
         return false;
@@ -458,6 +492,12 @@ export class BotBrain {
     if (enemy !== this.target) {
       this.target = enemy;
       this.seenAt = now;
+      this.burst = 0;
+      this.aimPos = enemy ? [...enemy.pos] : null;
+    } else if (enemy) {
+      // Nişan hedefi gerçek konumu gecikmeli izler: hareket eden oyuncuyu vurmak zorlaşır
+      const k = Math.min(1, dt / BOT.TRACK_LAG);
+      for (let i = 0; i < 3; i++) this.aimPos[i] += (enemy.pos[i] - this.aimPos[i]) * k;
     }
 
     // --- Hareket ---
@@ -593,21 +633,38 @@ export class BotBrain {
     const w = WEAPONS[p.weapon];
     if (w.kind === "gun" && !(p.ammo[w.id] > 0) && !p.reloadUntil)
       room.onReload(p.id);
-    if (!enemy || now - this.seenAt < 450 || now < p.lastShot || p.reloadUntil)
+    if (
+      !enemy ||
+      now - this.seenAt < BOT.REACTION ||
+      now < p.lastShot ||
+      now < (this.pauseUntil ?? 0) ||
+      p.reloadUntil
+    )
       return;
     if (w.kind !== "gun" || !(p.ammo[w.id] > 0)) return;
     const e = this.eye();
+    const a = this.aimPos ?? enemy.pos;
     const t = [
-      enemy.pos[0],
-      enemy.pos[1] + (Math.random() < 0.15 ? 1.5 : 1.0),
-      enemy.pos[2],
+      a[0],
+      a[1] + (Math.random() < BOT.HEAD_CHANCE ? 1.5 : 1.0),
+      a[2],
     ];
     const d = [t[0] - e[0], t[1] - e[1], t[2] - e[2]];
     const len = Math.hypot(d[0], d[1], d[2]);
     // Nişan hatası: uzaklık, hareket ve beceriye göre
-    const err = (0.032 + (moved ? 0.02 : 0)) * (1.6 - this.skill);
+    const err =
+      (BOT.AIM_ERR + (moved ? BOT.AIM_ERR_MOVING : 0)) * (1.6 - this.skill);
     for (let i = 0; i < 3; i++)
       d[i] = d[i] / len + (Math.random() - 0.5) * 2 * err;
     room.onShoot(p.id, { d });
+    // Otomatik silahlarda biraz daha yavaş ateş + kısa seriler halinde
+    if (w.AUTO) {
+      p.lastShot = now + w.FIRE_INTERVAL * BOT.EXTRA_INTERVAL;
+      if (++this.burst >= BOT.BURST) {
+        this.burst = 0;
+        const [lo, hi] = BOT.BURST_PAUSE;
+        this.pauseUntil = now + lo + Math.random() * (hi - lo);
+      }
+    }
   }
 }

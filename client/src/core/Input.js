@@ -44,6 +44,9 @@ export class Input {
     });
     document.addEventListener('fullscreenchange', () => {
       if (!document.fullscreenElement) navigator.keyboard?.unlock?.();
+      // Tam ekrana geçiş fare kilidini düşürdüyse (ya da kilit henüz alınamadıysa) yeniden iste:
+      // tam ekrandaki sayfa için tarayıcı ek tıklama istemez
+      else if (this.wantLock && !this.locked && this.gameActive) this.requestLock();
     });
 
     document.addEventListener('mousedown', (e) => {
@@ -78,6 +81,7 @@ export class Input {
     });
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === this.canvas;
+      if (this.locked) this.wantLock = false;
       if (!this.locked) this.clear();
       this.onLockChange?.(this.locked);
     });
@@ -161,7 +165,14 @@ export class Input {
 
   /** Pointer Lock ister. Kullanıcı tıklaması içinde çağrılmalı. */
   lock() {
+    // Sıra önemli: tarayıcı tam ekran isteğinde tıklama iznini "harcıyor". Önce tam ekran istenince
+    // fare kilidi reddediliyor ve oyuncu bir kez daha tıklamak zorunda kalıyordu. Önce fare kilidi.
+    this.wantLock = true;
+    this.requestLock();
     if (this.gameActive) this.lockKeyboard();
+  }
+
+  requestLock() {
     try {
       const p = this.canvas.requestPointerLock({ unadjustedMovement: true });
       if (p && p.catch) {
@@ -180,6 +191,7 @@ export class Input {
   }
 
   unlock() {
+    this.wantLock = false;
     if (document.pointerLockElement) document.exitPointerLock();
   }
 }

@@ -1,4 +1,4 @@
-import { PLAYER, WEAPONS, FLAG, DEFAULT_LOADOUT } from '@comic-strike/shared/constants.js';
+import { PLAYER, WEAPONS, FLAG, DEFAULT_LOADOUT, playerScore } from '@comic-strike/shared/constants.js';
 
 /** Sunucu tarafında bir oyuncunun tüm durumu. */
 export class Player {
@@ -35,6 +35,7 @@ export class Player {
     this.lastSpray = 0;
     this.resetLoadout();
 
+    this.dmgBy = new Map(); // bu canında bana hasar verenler: id -> {t, w} (asist için)
     this.lastInput = 0;
     this.rtt = 80;
     this.history = []; // lag compensation için son ~1 saniyenin pozisyonları
@@ -42,9 +43,16 @@ export class Player {
 
   resetStats() {
     this.kills = 0;
+    this.tks = 0; // takım arkadaşı öldürme (takım ateşi açıkken)
+    this.assists = 0;
     this.deaths = 0;
     this.hs = 0; // kafadan vuruşla öldürme
     this.caps = 0; // CTF: getirilen bayrak
+  }
+
+  /** Puan: öldürme +3, asist +1, ölüm -1 */
+  get score() {
+    return playerScore(this);
   }
 
   get crouching() {
@@ -100,7 +108,7 @@ export class Player {
   info() {
     return {
       id: this.id, name: this.name, team: this.team, char: this.char, ready: this.ready, kills: this.kills, deaths: this.deaths,
-      hs: this.hs, caps: this.caps, bot: this.isBot,
+      assists: this.assists, tks: this.tks, score: this.score, hs: this.hs, caps: this.caps, bot: this.isBot,
     };
   }
 }

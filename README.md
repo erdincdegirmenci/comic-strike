@@ -26,6 +26,13 @@ npm run dev
 
 Tarayıcıda **http://localhost:5173** aç → isim yaz → **CREATE ROOM** → **START MATCH** → **CLICK TO FIGHT**.
 
+### Odalar
+
+Ana menünün yanında **AÇIK ODALAR** listesi var: aktif odalar (mod, harita, oyuncu sayısı, lobide / maçta) görünür, tıklayınca girilir. 🔒 olan odalar şifrelidir, girerken şifre sorulur.
+**CREATE ROOM** ile oda kurarken **herkese açık** ya da **şifreli** seçilir; **takım ateşi** (takım arkadaşını da vurabilme, arkadaş öldürmek −3 puan) açılıp kapatılabilir. Host lobide takım ateşini değiştirebilir, botları **sürükleyip** diğer takıma bırakabilir.
+
+**Maçı baştan başlatma:** host maç sırasında Esc menüsündeki **↺ MAÇI BAŞTAN BAŞLAT** ile oylama açar (sonradan gelenler puanda geride kalmasın diye). Herkesin ekranına oylama çıkar; oyuncuların (botlar hariç) yarısından fazlası EVET derse puanlar sıfırlanır ve maç baştan başlar. 20 saniyede çoğunluk çıkmazsa oylama reddedilir.
+
 ### Tek başına pratik (botlarla)
 
 Lobide host olarak **+ BOT EKLE** düğmesine bas; her basışta az kalabalık takıma bir bot eklenir (en fazla 8 oyuncu). **− BOT ÇIKAR** ile çıkarırsın.
@@ -67,18 +74,30 @@ Sen **http://localhost:3000**, arkadaşların **http://BILGISAYAR_IP:3000** adre
 | Sağ tık        | Nişan al · AWP dürbünü (2 seviye) · bıçakta ağır saldırı                 |
 | 1 / 2 / 3 / 4  | Ana silah / tabanca / bıçak / bomba                                      |
 | B              | Silah seçimi (ana silah + tabanca + bomba)                               |
-| Fare tekeri, Q | Silah değiştir / son silah                                               |
+| Fare tekeri    | Silah değiştir                                                           |
+| Q              | Son seçilen iki silah arasında hızlı geçiş (daha kısa çekme süresi)     |
 | T              | Karakterine özel sticker'ı duvara yapıştır                               |
 | E / orta tık   | Takıma işaret ("BURADA!", rakibe bakıyorsan "DÜŞMAN!")                   |
 | R              | Şarjör değiştir                                                          |
-| Tab            | Skor tablosu                                                             |
+| Tab            | Skor tablosu (öldürme / asist / ölüm / puan)                             |
+| Enter          | Sohbet (herkese)                                                         |
+| Y              | Takım sohbeti                                                            |
+| F1 / F2        | Baştan başlatma oylamasında EVET / HAYIR                                 |
 | Esc            | Menü (duraklat)                                                          |
+
+## Puanlama ve maç sonu
+
+- **Öldürme +3, asist +1, ölüm −1.** Asist: rakibi vurdun ama öldüremedin, rakip 5 saniye içinde başkasının elinden öldü.
+- Sağ üstteki öldürme akışında öldürenin silahının resmi gösterilir; ölene son 5 saniyede hasar veren başka oyuncular da kendi silahlarının resmiyle "+ isim" olarak yazılır.
+- Lobide host **bitiş puanını** (Bayrak Kap'ta bayrak sayısını) ve **süreyi** seçer; hangisine önce ulaşılırsa maç biter. Takım Savaşı'nda takım puanı, Herkes Tek'te oyuncu puanı sayılır.
 
 ## Oyun modları
 
 - **Takım Savaşı** (varsayılan): 30 öldürmeye ilk ulaşan takım kazanır.
 - **Bayrak Kap**: rakip bayrağını kendi üssündeki halkaya getir; 3 bayrak getiren kazanır. Taşıyan ölürse bayrak düşer, sahibi dokunursa üsse döner (20 sn sonra kendiliğinden döner). Lobide host seçer.
 - **Herkes Tek** (FFA): takım yok, herkes herkese rakip; 20 öldürmeye ilk ulaşan kazanır. Her öldürmede **+25 can** (100'ü geçmez) ve öldürdüğün silaha **+1 şarjör**. Şarjör hiç tamamen bitmez: son mermiyi atınca bir şarjör yedek gelir. Ölünce can ve mermi başlangıca döner. Her haritada oynanabilir.
+
+Sol üstte oyuncuyla birlikte dönen **mini harita** var: takım arkadaşları her zaman, rakipler ateş ettikten sonra kısa süre görünür. Oyuncular birbirinin içinden geçemez.
 
 **Zıplama pedleri** (yeşil oklu diskler): üstüne basınca seni çatılara, platformlara ve konteynerlerin üstüne fırlatır; pedden inişte düşme hasarı yok.
 **Eğilerek geçilen yerler**: tır dorsesinin altı, çit kemerleri, kale duvarındaki gizli delik, boru rafı, havada duran konteyner, havalandırma deliği… Ayakta geçilmez, **Ctrl / C** ile çömelince geçilir.
@@ -90,7 +109,9 @@ Maç sonunda ödüller: TERMİNATÖR (en çok öldüren), KESKİN NİŞANCI (en 
 Oyun dengesi `shared/constants.js` içinde: can, hız, silah hasarı, ateş hızı, şarjör, skor limiti, maç süresi, spawn koruması.
 Haritalar `shared/maps.js` içinde (City Arena `shared/map.js`): kutu listesi, doğuş noktaları, bayrak üsleri ve zıplama pedleri. Lobide host haritayı seçer: CITY ARENA, POOL PARTY, FROST ARENA (buz zemini kaygan) ve HURDALIK (en büyük harita, tüm modlarda; takım modlarında kırmızı güneyde, mavi kuzeyde doğar: yüksek platform ve köprüler, depo, iskele, konteyner sahası, boru rafı, iki katlı ofis, basamaklı hurda tepesi).
 
-Her haritada **yer altı tünelleri** var (`shared/tunnel.js`): sarı korkuluklu merdivenle inilir, aydınlatmalı koridordan karşı tarafa geçilir. City: köşe evi ↔ köşe evi ve yol ↔ yol; Pool Party: havuzun iki yanındaki yollar; Frost: iglu ↔ iglu (iki tane); Hurdalık: iskele ↔ depo ve ofis ↔ konteyner sahası (ortada kavşak). Botlar tünel kullanmaz, düşerlerse en yakın merdivenden çıkar.
+Eğlence haritaları (`shared/funmaps.js`): **NİŞANCI DÜELLOSU** (uzun vadi, sadece AWP), **NİŞAN ARENASI** (küçük simetrik avlu, hızlı çatışma), **AVLU** (karşılıklı iki ev ve aradaki pazar avlusu), **DEV ODA** (minicik oyuncular dev bir masanın çevresinde; kitap merdivenle masanın üstüne çıkılır).
+
+Her klasik haritada **yer altı tünelleri** var (`shared/tunnel.js`): sarı korkuluklu merdivenle inilir, aydınlatmalı koridordan karşı tarafa geçilir. City: köşe evi ↔ köşe evi ve yol ↔ yol; Pool Party: havuzun iki yanındaki yollar; Frost: iglu ↔ iglu (iki tane); Hurdalık: iskele ↔ depo ve ofis ↔ konteyner sahası (ortada kavşak). Botlar tünel kullanmaz, düşerlerse en yakın merdivenden çıkar.
 
 Sunucu ortam değişkenleri:
 
@@ -125,6 +146,5 @@ Ayrıntılar: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/PROTOCOL.md]
 
 ## Bilinen sınırlamalar (ilk sürüm)
 
-- Oyuncular birbirinin içinden geçebilir (oyuncu-oyuncu çarpışması yok).
 - Sunucu hareket hızını ve harita sınırlarını kontrol eder, ama duvar içinden geçmeyi kontrol etmez.
 - Botlar merdiven çıkmaz, çatılara ve surlara çıkmazlar; zemin katta dolaşırlar.

@@ -25,17 +25,46 @@ function starPath(g, cx, cy, spikes, outer, inner, jitter = 0) {
   g.closePath();
 }
 
+/** El çizimi kontur: aynı şekli iki kez, biri kalın biri ince ve hafif kaymış çizer */
+function sketchStroke(g, width, drawPath) {
+  g.lineJoin = 'round';
+  g.lineCap = 'round';
+  g.strokeStyle = '#141414';
+  g.lineWidth = width;
+  drawPath(0);
+  g.stroke();
+  g.lineWidth = Math.max(1.5, width * 0.45);
+  g.save();
+  g.translate((Math.random() - 0.5) * width * 0.6, (Math.random() - 0.5) * width * 0.6);
+  drawPath(1);
+  g.stroke();
+  g.restore();
+}
+
+/** Titrek daire yolu (elle çizilmiş gibi, uçları üst üste biner) */
+function wobblyCircle(g, cx, cy, r, wobble = 0.05, overlap = 0.12) {
+  const n = 28;
+  const ph = Math.random() * Math.PI * 2;
+  g.beginPath();
+  for (let i = 0; i <= n * (1 + overlap); i++) {
+    const a = ph + (i / n) * Math.PI * 2;
+    const rr = r * (1 + Math.sin(a * 3 + ph) * wobble * 0.5 + (Math.random() - 0.5) * wobble);
+    const x = cx + Math.cos(a) * rr;
+    const y = cy + Math.sin(a) * rr;
+    if (i === 0) g.moveTo(x, y);
+    else g.lineTo(x, y);
+  }
+}
+
 let _star;
 export function starTexture() {
   if (!_star) {
     _star = canvasTexture(128, 128, (g, s) => {
-      starPath(g, s / 2, s / 2, 10, s * 0.46, s * 0.2);
+      starPath(g, s / 2, s / 2, 10, s * 0.46, s * 0.2, 0.25);
       g.fillStyle = '#ffd23f';
       g.fill();
-      g.lineWidth = 6;
-      g.strokeStyle = '#141414';
-      g.stroke();
-      starPath(g, s / 2, s / 2, 10, s * 0.26, s * 0.12);
+      sketchStroke(g, 6, () => starPath(g, s / 2, s / 2, 10, s * 0.46, s * 0.2, 0.25));
+      starPath(g, s / 2, s / 2, 10, s * 0.26, s * 0.12, 0.3);
       g.fillStyle = '#fffbe6';
       g.fill();
     });
@@ -47,13 +76,10 @@ let _puff;
 function puffTexture() {
   if (!_puff) {
     _puff = canvasTexture(128, 128, (g, s) => {
-      g.beginPath();
-      g.arc(s / 2, s / 2, s * 0.42, 0, Math.PI * 2);
+      wobblyCircle(g, s / 2, s / 2, s * 0.41, 0.06, 0);
       g.fillStyle = '#f4f4f4';
       g.fill();
-      g.lineWidth = 7;
-      g.strokeStyle = '#141414';
-      g.stroke();
+      sketchStroke(g, 7, () => wobblyCircle(g, s / 2, s / 2, s * 0.41, 0.06));
       g.beginPath();
       g.arc(s * 0.58, s * 0.6, s * 0.22, 0.2, Math.PI * 0.9);
       g.lineWidth = 5;
@@ -131,6 +157,15 @@ function smokeTexture() {
       g.beginPath();
       g.arc(s * 0.44, s * 0.44, s * 0.12, 0, Math.PI * 2);
       g.fill();
+      // Kurşun kalem gölge çizgileri
+      g.strokeStyle = 'rgba(80, 80, 80, 0.45)';
+      g.lineWidth = 2;
+      for (let i = 0; i < 7; i++) {
+        g.beginPath();
+        g.moveTo(s * (0.3 + i * 0.05), s * 0.78);
+        g.lineTo(s * (0.38 + i * 0.05), s * 0.62);
+        g.stroke();
+      }
     });
   }
   return _smoke;
@@ -143,9 +178,7 @@ function fireTexture() {
       starPath(g, s / 2, s / 2, 12, s * 0.48, s * 0.26, 0.3);
       g.fillStyle = '#ff6d00';
       g.fill();
-      g.lineWidth = 8;
-      g.strokeStyle = '#141414';
-      g.stroke();
+      sketchStroke(g, 8, () => starPath(g, s / 2, s / 2, 12, s * 0.48, s * 0.26, 0.3));
       starPath(g, s / 2, s / 2, 10, s * 0.32, s * 0.18, 0.3);
       g.fillStyle = '#ffd23f';
       g.fill();
@@ -190,12 +223,10 @@ function wordTexture(text, color) {
       canvasTexture(512, 256, (g, w, h) => {
         // Yassı patlama balonu (y ekseninde yarıya sıkıştırılmış yıldız)
         g.setTransform(1, 0, 0, 0.5, 0, h / 4);
-        starPath(g, w / 2, h / 2, 14, 250, 170, 0.25);
+        starPath(g, w / 2, h / 2, 14, 240, 165, 0.25);
         g.fillStyle = '#fff3b0';
         g.fill();
-        g.lineWidth = 10;
-        g.strokeStyle = '#141414';
-        g.stroke();
+        sketchStroke(g, 10, () => starPath(g, w / 2, h / 2, 14, 240, 165, 0.25));
         g.setTransform(1, 0, 0, 1, 0, 0);
         g.font = '110px Bangers, Impact, sans-serif';
         g.textAlign = 'center';
@@ -228,26 +259,51 @@ export class Effects {
       polygonOffset: true,
       polygonOffsetFactor: -4,
     });
-    this.tracerMat = new THREE.LineBasicMaterial({ color: '#fff3b0', transparent: true });
+    // Havuzlar: efekt nesneleri ve materyalleri yeniden kullanılır. Eskiden her atışta yeni materyal
+    // oluşturulup sonra dispose ediliyordu; son kullanıcı giden shader programı silinip bir sonraki
+    // atışta yeniden derleniyordu (çatışma anında takılmalar).
+    this.spritePool = [];
+    this.tracerPool = [];
+    this.scorchPool = [];
+    this.scorchGeo = new THREE.CircleGeometry(1.4, 20);
     this.sprays = new Map(); // oyuncu id -> sticker mesh (her oyuncunun tek sticker'ı olur)
     this.sprayGeo = new THREE.PlaneGeometry(SPRAY.SIZE, SPRAY.SIZE);
     this.smokes = []; // {pos, radius, until}
   }
 
+  /** Havuzdan bir sprite al (yoksa oluştur) */
+  takeSprite() {
+    let s = this.spritePool.pop();
+    if (!s) {
+      s = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTexture(), transparent: true, depthWrite: false }));
+      this.scene.add(s);
+    }
+    s.visible = true;
+    return s;
+  }
+
   sprite(tex, pos, sx, sy, life, o = {}) {
-    const mat = new THREE.SpriteMaterial({
-      map: tex,
-      transparent: true,
-      depthWrite: false,
-      depthTest: o.depthTest ?? true,
-      rotation: o.rot ?? Math.random() * Math.PI * 2,
-    });
-    const s = new THREE.Sprite(mat);
+    const s = this.takeSprite();
+    const mat = s.material;
+    mat.map = tex;
+    mat.depthTest = o.depthTest ?? true;
+    mat.rotation = o.rot ?? Math.random() * Math.PI * 2;
+    mat.opacity = 1;
+    mat.color.set(o.color ?? 0xffffff);
     s.position.copy(pos);
     s.scale.set(sx, sy, 1);
     s.renderOrder = o.order ?? 10;
-    this.scene.add(s);
-    this.items.push({ obj: s, life, max: life, sx, sy, grow: o.grow ?? 0, vel: o.vel ?? null, pop: o.pop ?? false });
+    const it = { obj: s, life, max: life, sx, sy, grow: o.grow ?? 0, vel: o.vel ?? null, pop: o.pop ?? false, kind: 'sprite' };
+    this.items.push(it);
+    return it;
+  }
+
+  /** Bitmiş efekti havuza geri koy */
+  release(it) {
+    it.obj.visible = false;
+    if (it.kind === 'sprite') this.spritePool.push(it.obj);
+    else if (it.kind === 'line') this.tracerPool.push(it.obj);
+    else if (it.kind === 'scorch') this.scorchPool.push(it.obj);
   }
 
   impact(point, normal) {
@@ -292,13 +348,18 @@ export class Effects {
     _p.set(pos.x, pos.y + 2.4, pos.z);
     this.word(_p, 'KABOOM!', '#ff6d00');
     // Yerde yanık izi
-    const m = new THREE.Mesh(new THREE.CircleGeometry(1.4, 20), new THREE.MeshBasicMaterial({
-      map: inkTexture(), color: '#333', transparent: true, opacity: 0.6, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4,
-    }));
-    m.rotation.x = -Math.PI / 2;
+    let m = this.scorchPool.pop();
+    if (!m) {
+      m = new THREE.Mesh(this.scorchGeo, new THREE.MeshBasicMaterial({
+        map: inkTexture(), color: '#333', transparent: true, opacity: 0.6, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4,
+      }));
+      m.rotation.x = -Math.PI / 2;
+      this.scene.add(m);
+    }
+    m.visible = true;
+    m.rotation.z = Math.random() * Math.PI * 2;
     m.position.set(pos.x, pos.y + 0.02, pos.z);
-    this.scene.add(m);
-    this.items.push({ obj: m, life: 12, max: 12, scorch: true });
+    this.items.push({ obj: m, life: 12, max: 12, scorch: true, kind: 'scorch' });
   }
 
   /** Sis bombası: süre boyunca görüşü kapatan bulut. poison=true ise yeşil zehir bulutu */
@@ -313,17 +374,16 @@ export class Effects {
       const h = 0.4 + Math.random() * radius * 0.65;
       _p.set(center.x + Math.cos(a) * d, center.y + h, center.z + Math.sin(a) * d);
       const size = 2.6 + Math.random() * 1.6;
-      const mat = new THREE.SpriteMaterial({
-        map: smokeTexture(), transparent: true, depthWrite: false, opacity: 0, rotation: Math.random() * Math.PI * 2,
+      const life = seconds + Math.random() * 1.5;
+      const it = this.sprite(smokeTexture(), _p, 0.1, 0.1, life, {
+        order: 8,
         color: poison ? (Math.random() < 0.5 ? '#9bd94a' : '#b5e36b') : '#ffffff',
       });
-      const sp = new THREE.Sprite(mat);
-      sp.position.copy(_p);
-      sp.scale.set(0.1, 0.1, 1);
-      sp.renderOrder = 8;
-      this.scene.add(sp);
-      const life = seconds + Math.random() * 1.5;
-      this.items.push({ obj: sp, life, max: life, sx: size, sy: size, smoke: true, delay: (i / count) * 0.5 });
+      it.obj.material.opacity = 0;
+      it.sx = size;
+      it.sy = size;
+      it.smoke = true;
+      it.delay = (i / count) * 0.5;
     }
   }
 
@@ -381,11 +441,22 @@ export class Effects {
   }
 
   tracer(from, to) {
-    const g = new THREE.BufferGeometry().setFromPoints([from.clone(), to.clone()]);
-    const l = new THREE.Line(g, this.tracerMat.clone());
-    l.renderOrder = 9;
-    this.scene.add(l);
-    this.items.push({ obj: l, life: 0.07, max: 0.07, line: true });
+    let l = this.tracerPool.pop();
+    if (!l) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+      l = new THREE.Line(g, new THREE.LineBasicMaterial({ color: '#fff3b0', transparent: true }));
+      l.frustumCulled = false; // iki noktalı çizgi; sınır küresini her seferinde hesaplamaya gerek yok
+      l.renderOrder = 9;
+      this.scene.add(l);
+    }
+    const a = l.geometry.attributes.position;
+    a.setXYZ(0, from.x, from.y, from.z);
+    a.setXYZ(1, to.x, to.y, to.z);
+    a.needsUpdate = true;
+    l.material.opacity = 1;
+    l.visible = true;
+    this.items.push({ obj: l, life: 0.07, max: 0.07, line: true, kind: 'line' });
   }
 
   poof(pos) {
@@ -399,7 +470,7 @@ export class Effects {
   /** Vurulan rakibin üstünde yükselip kaybolan hasar sayısı. scale: kameraya uzaklığa göre büyütme */
   damageNumber(pos, dmg, head, kill, scale = 1) {
     const text = `-${dmg}${head ? '!' : ''}`;
-    const color = kill ? '#e63946' : head ? '#ffd23f' : '#ffffff';
+    const color = kill ? '#c4493d' : head ? '#ffd23f' : '#ffffff';
     const k = (head || kill ? 1.35 : 1) * scale;
     _p.set(pos.x + (Math.random() - 0.5) * 0.5 * scale, pos.y, pos.z + (Math.random() - 0.5) * 0.5 * scale);
     this.sprite(numberTexture(text, color), _p, 0.9 * k, 0.45 * k, 0.85, {
@@ -411,7 +482,7 @@ export class Effects {
     });
   }
 
-  word(pos, text, color = '#e63946') {
+  word(pos, text, color = '#c4493d') {
     this.sprite(wordTexture(text, color), pos, 2.4, 1.2, 0.9, {
       depthTest: false,
       rot: (Math.random() - 0.5) * 0.4,
@@ -445,20 +516,40 @@ export class Effects {
         if (it.vel) it.obj.position.addScaledVector(it.vel, dt);
       }
       if (it.life <= 0) {
-        this.scene.remove(it.obj);
-        it.obj.material.dispose();
-        if (it.line || it.scorch) it.obj.geometry.dispose();
-        this.items.splice(i, 1);
+        this.release(it);
+        // Sıra önemli değil: sondakini buraya taşı (splice'tan ucuz)
+        const last = this.items.pop();
+        if (last !== it) this.items[i] = last;
       }
     }
   }
 
+  /**
+   * Maç başında efektlerin shader'larını önceden derle: ilk atışta / ilk patlamada
+   * derleme yüzünden oluşan takılmayı önler. Havuzlar da önceden doldurulur.
+   */
+  warmup(renderer, camera) {
+    const temp = [];
+    for (let i = 0; i < 24; i++) temp.push({ obj: this.takeSprite(), kind: 'sprite' });
+    _p.set(0, -100, 0);
+    this.tracer(_p, _p);
+    this.explosion(_p);
+    this.decal(_p, { x: 0, y: 1, z: 0 });
+    for (const o of this.items) o.obj.visible = true;
+    renderer.compile(this.scene, camera);
+    // Dokuları da GPU'ya şimdi yükle (ilk patlamada büyük doku yüklemesi takılma yapmasın)
+    const texs = new Set([smokeTexture(), puffTexture(), inkTexture(), starTexture(), fireTexture(), decalTexture()]);
+    for (const it of this.items) if (it.obj.material.map) texs.add(it.obj.material.map);
+    for (const w of ['HEADSHOT!', 'SHANKED!', 'KAPOW!']) texs.add(wordTexture(w, '#c4493d'));
+    for (const t of texs) renderer.initTexture(t);
+    for (const it of temp) this.release(it);
+    for (const it of this.items) this.release(it);
+    this.items.length = 0;
+    for (const d of this.decals) if (d) d.visible = false;
+  }
+
   clear() {
-    for (const it of this.items) {
-      this.scene.remove(it.obj);
-      it.obj.material.dispose();
-      if (it.line || it.scorch) it.obj.geometry.dispose();
-    }
+    for (const it of this.items) this.release(it);
     this.items.length = 0;
     this.smokes.length = 0;
     for (const m of this.sprays.values()) {

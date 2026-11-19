@@ -3,6 +3,7 @@
 // Kırmızı takım -Z, mavi takım +Z tarafında; haritalar Z=0'a göre aynalanır.
 import { CITY_ARENA } from "./map.js";
 import { addTunnel, carve, tunnelExits } from "./tunnel.js";
+import { sniperDuel, aimArena, courtyard, giantRoom } from "./funmaps.js";
 
 /** Kutu ekleme yardımcıları ve hazır yapılar (kulübe, merdiven, duvar). */
 function builder(defaults = {}) {
@@ -378,7 +379,7 @@ function poolParty() {
   box(0, -28.2, 3, 2, 0.04, C.wallCap, { solid: false });
   for (const sx of [-1, 1]) {
     box(sx * 2.8, -28.2, 1.2, 2.4, 1.1, C.planter);
-    box(sx * 2.8, -28.2, 1, 2.2, 0.4, C.hedge, { y: 1.1, solid: false });
+    box(sx * 2.8, -28.2, 1, 2.2, 0.4, C.hedge, { y: 1.1 });
   }
   // Duşlar (spawn önü siper)
   for (const sx of [-1, 1]) {
@@ -711,7 +712,9 @@ function frostArena() {
     });
     box(x, z, 3.4, 3.4, 0.4, C.igloo, { y: 2.5, solid: false });
     box(x, z, 2, 2, 0.35, C.igloo, { y: 2.9, solid: false });
-    box(x, z - 2.6, 1.6, 1, 1.6, C.snow2, { y: 0, solid: false }); // giriş tüneli (dekor)
+    // Giriş tüneli: iki yan duvar + tavan (içinden geçilir, yanlarından geçilmez)
+    for (const sx of [-1, 1]) box(x + sx * 0.7, z - 2.6, 0.2, 1, 2.0, C.snow2);
+    box(x, z - 2.6, 1.6, 1, 0.25, C.snow2, { y: 2.0 });
   }
 
   // ---- Orta alan ----
@@ -748,7 +751,7 @@ function frostArena() {
   box(-17, -10.5, 2.2, 4.4, 1.2, C.cat, { y: 0.4 });
   box(-17, -11, 2, 2.2, 0.8, C.glass, { y: 1.6 });
   for (const sx of [-1, 1])
-    box(-17 + sx * 1.05, -10.5, 0.35, 4.6, 0.6, C.catDark, { solid: false });
+    box(-17 + sx * 1.05, -10.5, 0.35, 4.6, 0.6, C.catDark);
   // Kaya ve kasalar
   box(-3.5, -16.5, 2.2, 1.6, 1.2, C.rock);
   box(13.5, -4.5, 1.5, 1.5, 1.5, C.crate);
@@ -950,7 +953,7 @@ function scrapyard() {
     const [w, d] = alongX ? [4.2, 2] : [2, 4.2];
     box(x, z, w, d, 0.9, color, { y: 0.3 });
     box(x, z, alongX ? 2.2 : 1.8, alongX ? 1.8 : 2.2, 0.6, C.glass, { y: 1.2 });
-    box(x, z, w + 0.1, d + 0.1, 0.3, C.tire, { solid: false });
+    box(x, z, w + 0.1, d + 0.1, 0.3, C.tire);
   };
 
   // ---------------- MERKEZ: yüksek platform (üstü 4 m) ----------------
@@ -1096,7 +1099,7 @@ function scrapyard() {
     [RZ - 0.6, C.pipe],
     [RZ + 0.6, C.pipe2],
   ])
-    rect(-24, 4, z - 0.25, z + 0.25, CRAWL + 0.3, 0.5, col, { solid: false });
+    rect(-24, 4, z - 0.25, z + 0.25, CRAWL + 0.3, 0.4, col); // borular katı; alçak, üstüne basılır
   stairs(-26.6, RZ, "x", 1, 2.2, 2.6, CRAWL + 0.3, C.metal); // batı ucundan rafa çıkış
   pad(-10, RZ - 3, [0, 9, 4.5]); // rafın üstüne
   pad(-10, RZ + 3, [0, 9, -4.5]);
@@ -1188,7 +1191,7 @@ function scrapyard() {
     [36, -20],
     [-3, -15],
     [3, 15],
-    [-15, 3],
+    [-14.4, 3.8],
     [15, -3],
   ];
   const ffa = pts.map(([x, z]) => [x, 0.1, z, Math.atan2(x, z)]); // yaw: ortaya dön
@@ -1269,6 +1272,11 @@ export const MAPS = {
   pool: poolParty(),
   frost: frostArena(),
   scrap: scrapyard(),
+  // Eğlence haritaları (shared/funmaps.js)
+  sniper: sniperDuel(builder),
+  aim: aimArena(builder),
+  yard: courtyard(builder),
+  giant: giantRoom(builder),
 };
 export const MAP_IDS = Object.keys(MAPS);
 export const DEFAULT_MAP = "city";

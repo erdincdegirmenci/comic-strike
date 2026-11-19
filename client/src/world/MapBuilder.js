@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { gradientMap, INK, toon, addOutline } from '../fx/Toon.js';
+import { toon, addOutline, sketchToon, sketchOutline, sketchSegments } from '../fx/Toon.js';
 
 /**
  * Harita verisinden (kutu listesi) görsel ve fizik dünyası oluşturur.
  * Performans için tüm kutular tek bir mesh'te birleştirilir:
  *  1) renkli toon mesh, 2) siyah kontur mesh'i, 3) ince kenar çizgileri → toplam 3 draw call.
+ * Görünüm el çizimi: kontur titrer ve kalınlığı değişir, kenarlar iki kez taşarak çizilir.
  */
 export function buildMap(map, scene, physics) {
   const colorGeos = [];
@@ -36,7 +37,7 @@ export function buildMap(map, scene, physics) {
 
     const minDim = Math.min(w, h, d);
     if (!huge && h > 0.05) {
-      const t = minDim < 0.2 ? 0.025 : 0.06;
+      const t = minDim < 0.2 ? 0.01 : 0.024; // ince, yumuşak mürekkep çizgisi
       const og = new THREE.BoxGeometry(w + t * 2, h + t * 2, d + t * 2);
       og.deleteAttribute('uv');
       og.deleteAttribute('normal');
@@ -46,6 +47,9 @@ export function buildMap(map, scene, physics) {
     if (!huge && minDim > 0.15) {
       const eg = new THREE.EdgesGeometry(g);
       eg.translate(cx, cy, cz);
+      // Fırça darbesi: tek çizgi, uçları çok az taşar, hafif sapma
+      const pos = sketchSegments(eg.attributes.position.array, edgeGeos.length + 1, Math.min(0.012, minDim * 0.04), Math.min(0.06, minDim * 0.12), 1);
+      eg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
       edgeGeos.push(eg);
     }
 
@@ -58,22 +62,22 @@ export function buildMap(map, scene, physics) {
   const group = new THREE.Group();
   group.name = 'map';
 
-  const mesh = new THREE.Mesh(mergeGeometries(colorGeos), new THREE.MeshToonMaterial({ vertexColors: true, gradientMap }));
+  const mesh = new THREE.Mesh(mergeGeometries(colorGeos), sketchToon({ vertexColors: true }));
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   group.add(mesh);
 
-  const outline = new THREE.Mesh(mergeGeometries(outlineGeos), new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide }));
+  const outline = new THREE.Mesh(mergeGeometries(outlineGeos), sketchOutline(0.008, 1.3));
   group.add(outline);
 
-  const edges = new THREE.LineSegments(mergeGeometries(edgeGeos), new THREE.LineBasicMaterial({ color: INK }));
+  const edges = new THREE.LineSegments(mergeGeometries(edgeGeos), new THREE.LineBasicMaterial({ color: '#7d6b59' }));
   group.add(edges);
 
   for (const g of [...colorGeos, ...outlineGeos, ...edgeGeos]) g.dispose();
 
   if (map.water) addWater(group, map.water);
   if (map.pads) for (const p of map.pads) addPad(group, p);
-  addClouds(group);
+  if (!map.indoor) addClouds(group); // kapalı mekânda (dev oda) bulut yok
   scene.add(group);
   return group;
 }
@@ -85,26 +89,50 @@ function padTexture() {
   const c = document.createElement('canvas');
   c.width = c.height = 128;
   const g = c.getContext('2d');
+  let seed = 9;
+  const j = (a = 2.5) => (((seed = (seed * 16807) % 2147483647) / 2147483647) - 0.5) * a * 2;
+  // Keçeli kalemle boyanmış disk
   g.fillStyle = '#06d6a0';
   g.beginPath();
-  g.arc(64, 64, 62, 0, Math.PI * 2);
+  g.arc(64, 64, 60, 0, Math.PI * 2);
   g.fill();
-  g.lineWidth = 8;
-  g.strokeStyle = '#141414';
-  g.stroke();
-  g.fillStyle = '#fffbe6';
-  g.lineWidth = 6;
-  for (const y of [30, 62]) {
+  g.strokeStyle = 'rgba(4, 120, 90, 0.35)';
+  g.lineWidth = 5;
+  for (let i = 0; i < 9; i++) {
     g.beginPath();
-    g.moveTo(64, y - 4);
-    g.lineTo(98, y + 30);
-    g.lineTo(80, y + 30);
-    g.lineTo(64, y + 14);
-    g.lineTo(48, y + 30);
-    g.lineTo(30, y + 30);
+    g.moveTo(14 + j(4), 30 + i * 9 + j(3));
+    g.lineTo(114 + j(4), 26 + i * 9 + j(3));
+    g.stroke();
+  }
+  // Konturu iki kez, hafif kayarak çiz
+  g.strokeStyle = '#141414';
+  for (let k = 0; k < 2; k++) {
+    g.lineWidth = k ? 3 : 6;
+    g.beginPath();
+    for (let a = 0; a <= 1.04; a += 0.04) {
+      const r = 61 + j(1.6);
+      const x = 64 + Math.cos(a * Math.PI * 2 + k * 0.3) * r;
+      const y = 64 + Math.sin(a * Math.PI * 2 + k * 0.3) * r;
+      if (a === 0) g.moveTo(x, y);
+      else g.lineTo(x, y);
+    }
+    g.stroke();
+  }
+  g.fillStyle = '#fffbe6';
+  g.lineJoin = 'round';
+  for (const y of [30, 62]) {
+    const pts = [[64, y - 4], [98, y + 30], [80, y + 30], [64, y + 14], [48, y + 30], [30, y + 30]];
+    g.beginPath();
+    pts.forEach(([x, yy], i) => (i ? g.lineTo(x + j(), yy + j()) : g.moveTo(x + j(), yy + j())));
     g.closePath();
     g.fill();
-    g.stroke();
+    for (let k = 0; k < 2; k++) {
+      g.lineWidth = k ? 2.5 : 5;
+      g.beginPath();
+      pts.forEach(([x, yy], i) => (i ? g.lineTo(x + j(), yy + j()) : g.moveTo(x + j(), yy + j())));
+      g.closePath();
+      g.stroke();
+    }
   }
   _padTex = new THREE.CanvasTexture(c);
   _padTex.colorSpace = THREE.SRGBColorSpace;
@@ -168,9 +196,8 @@ export function disposeMap(group, scene, physics) {
 /** Çizgi roman bulutları (birkaç küre + kontur) */
 function addClouds(group) {
   const geo = new THREE.SphereGeometry(1, 14, 10);
-  const mat = toon('#ffffff').clone();
-  mat.fog = false;
-  const outlineMat = new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide, fog: false });
+  const mat = sketchToon({ color: '#ffffff', fog: false });
+  const outlineMat = sketchOutline(0.08, 0.12, { fog: false });
   let seed = 3;
   const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   for (let i = 0; i < 12; i++) {
@@ -184,7 +211,7 @@ function addClouds(group) {
       const s = 5 + rand() * 5;
       m.scale.set(s * 1.4, s, s);
       m.position.set((j - puffs / 2) * 7 + rand() * 3, rand() * 3, rand() * 4);
-      addOutline(m, 0.08, outlineMat);
+      addOutline(m, 0.06, outlineMat);
       cloud.add(m);
     }
     cloud.lookAt(0, cloud.position.y, 0);

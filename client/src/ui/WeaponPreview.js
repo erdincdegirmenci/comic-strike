@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { WEAPONS } from '@comic-strike/shared/constants.js';
+import { WEAPONS, TEAM_INFO } from '@comic-strike/shared/constants.js';
 import { Weapon } from '../player/Weapon.js';
 import { toon } from '../fx/Toon.js';
 
-const HIDE = new Set(['#f1c27d', '#e63946']); // el (ten) ve kol (takım rengi) parçaları önizlemede gizlenir
+const HIDE = new Set(['#f1c27d', TEAM_INFO.red.color]); // el (ten) ve kol (takım rengi) parçaları önizlemede gizlenir
 
 /**
  * Silah seçim ekranında 3 boyutlu, kendi etrafında dönen silah önizlemesi.
@@ -27,7 +27,7 @@ export class WeaponPreview {
     this.current = null;
     this.running = false;
     this.angle = 0;
-    this.hideMats = new Set([...HIDE].map((c) => toon(c)));
+    this.hideMats = new Set([...HIDE].map((c) => toon(c, 'view')));
   }
 
   show(id) {

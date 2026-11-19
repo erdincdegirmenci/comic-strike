@@ -1,8 +1,8 @@
 import { TEAM_INFO, WEAPONS, SLOT_OF_CAT, FLAG_STATE, TEAMS } from '@comic-strike/shared/constants.js';
 
-const KF_ICON = {
-  rifle: '▬▬', carbine: '▬▬', smg: '▬', lmg: '▬▬▬', awp: '━━⊕', popper: '⌐', cannon: '⌐■', knife: '🔪', he: '💣', smoke: '☁', poison: '☠', fall: '⤓',
-};
+// Silah resmi yoksa (düşme vb.) gösterilecek metin
+const KF_TEXT = { fall: '⤓ DÜŞTÜ' };
+const CHAT_LIFE = 10000; // sohbet satırı bu kadar ms sonra solar
 
 const $ = (id) => document.getElementById(id);
 
@@ -18,6 +18,23 @@ export class HUD {
   constructor() {
     this.root = $('hud');
     this.cache = {};
+    this.icons = {}; // silah id -> resim (dataURL), bkz. weaponIcons.js
+  }
+
+  setWeaponIcons(icons) {
+    this.icons = icons;
+  }
+
+  /** Öldürme akışı için silah resmi (resim yoksa yazı) */
+  weaponIcon(id, small = false) {
+    const src = this.icons[id];
+    if (!src) return el('span', 'kf-icon', KF_TEXT[id] ?? WEAPONS[id]?.NAME ?? '✹');
+    const img = document.createElement('img');
+    img.className = small ? 'kf-gun small' : 'kf-gun';
+    img.src = src;
+    img.alt = WEAPONS[id]?.NAME ?? id;
+    img.title = img.alt;
+    return img;
   }
 
   set(key, value, apply) {
@@ -30,6 +47,7 @@ export class HUD {
     this.root.classList.remove('hidden');
     this.cache = {};
     $('killfeed').replaceChildren();
+    $('chat-log').replaceChildren();
     this.hideEnd();
     this.respawn(null);
     this.setProtection(null);
@@ -127,16 +145,16 @@ export class HUD {
     this.set('scores', `${red}|${blue}|${limit}|${mode}`, () => {
       $('score-red').textContent = red;
       $('score-blue').textContent = blue;
-      $('score-limit').textContent = mode === 'ctf' ? `${limit} BAYRAK KAZANIR` : `FIRST TO ${limit}`;
+      $('score-limit').textContent = mode === 'ctf' ? `${limit} BAYRAK KAZANIR` : `${limit} PUANDA BİTER`;
     });
   }
 
-  /** Herkes Tek skor çubuğu: benim öldürmelerim / en iyi rakip */
+  /** Herkes Tek skor çubuğu: benim puanım / en iyi rakibin puanı */
   setFfaScores(mine, best, bestName, limit) {
     this.set('scores', `ffa|${mine}|${best}|${bestName}|${limit}`, () => {
       $('score-red').textContent = mine;
       $('score-blue').textContent = best;
-      $('score-limit').textContent = `SEN · ${limit} KAZANIR · ${bestName}`;
+      $('score-limit').textContent = `SEN · ${limit} PUANDA BİTER · ${bestName}`;
     });
   }
 
@@ -195,18 +213,21 @@ export class HUD {
     this.set('chv', v, () => $('crosshair').classList.toggle('hidden', !v));
   }
 
-  killfeed(killer, victim, head, weapon) {
+  /**
+   * Öldüren [silahı] + asist yapan(lar) [silahı] → ölen.
+   * assists: [{ p: oyuncu, w: silah }] — 5 sn içinde ölene hasar verip öldüremeyenler
+   */
+  killfeed(killer, victim, head, weapon, assists = [], teamKill = false) {
     const row = el('div', 'kf-row');
-    const icon = (KF_ICON[weapon] ?? '✹') + (head ? ' ⌖' : '');
-    if (killer === victim || killer.id === victim.id) {
-      row.append(el('span', 'kf-icon', icon), el('span', `kf-name ${victim.team}`, victim.name));
-    } else {
-      row.append(
-        el('span', `kf-name ${killer.team}`, killer.name),
-        el('span', 'kf-icon', icon),
-        el('span', `kf-name ${victim.team}`, victim.name),
-      );
+    const self = killer === victim || killer.id === victim.id;
+    if (!self) row.append(el('span', `kf-name ${killer.team}`, killer.name));
+    row.append(this.weaponIcon(weapon));
+    if (head) row.append(el('span', 'kf-hs', '⌖'));
+    for (const a of assists) {
+      row.append(el('span', 'kf-plus', '+'), el('span', `kf-name kf-assist ${a.p.team}`, a.p.name), this.weaponIcon(a.w, true));
     }
+    if (teamKill) row.append(el('span', 'kf-tk', 'TAKIM ATEŞİ'));
+    row.append(el('span', 'kf-arrow', '➜'), el('span', `kf-name ${victim.team}`, victim.name));
     const feed = $('killfeed');
     feed.prepend(row);
     while (feed.children.length > 5) feed.lastChild.remove();
@@ -287,17 +308,47 @@ export class HUD {
         box.append(el('h3', '', team === 'ffa' ? 'HERKES TEK' : `${TEAM_INFO[team].name} — ${scores ? scores[team] : 0}`));
         const table = el('table');
         const head = el('tr');
-        for (const h of ['NAME', 'K', 'D', 'PING']) head.append(el('th', '', h));
+        for (const h of ['İSİM', 'K', 'A', 'D', 'PUAN', 'PING']) head.append(el('th', '', h));
         table.append(head);
-        for (const r of rows.filter((x) => x.team === team).sort((a, b) => b.k - a.k || a.d - b.d)) {
+        for (const r of rows.filter((x) => x.team === team).sort((a, b) => b.score - a.score || b.k - a.k)) {
           const tr = el('tr', r.id === myId ? 'me' : '');
-          tr.append(el('td', '', (r.bot ? '🤖 ' : '') + r.name), el('td', '', r.k), el('td', '', r.d), el('td', '', r.bot ? 'BOT' : r.rtt));
+          tr.append(
+            el('td', '', (r.bot ? '🤖 ' : '') + r.name),
+            el('td', '', r.k),
+            el('td', '', r.a),
+            el('td', '', r.d),
+            el('td', 'sb-score', r.score),
+            el('td', '', r.bot ? 'BOT' : r.rtt),
+          );
           table.append(tr);
         }
         box.append(table);
         sb.append(box);
       }
+      sb.append(el('p', 'sb-note', 'Öldürme +3 · Asist +1 · Ölüm −1 (asist: 5 sn içinde vurduğun rakibi başkası öldürdü)'));
     });
+  }
+
+  // ---------------- Sohbet ----------------
+
+  /** Gelen sohbet satırı. m: {n, tm, t, team, dead} */
+  chatLine(m) {
+    const log = $('chat-log');
+    const row = el('div', 'chat-row');
+    if (m.team) row.append(el('span', 'chat-tag', '[TAKIM]'));
+    if (m.dead) row.append(el('span', 'chat-dead', '*ÖLÜ*'));
+    row.append(el('span', `chat-name ${m.tm}`, `${m.n}:`), el('span', 'chat-text', m.t));
+    log.append(row);
+    while (log.children.length > 8) log.firstChild.remove();
+    setTimeout(() => row.classList.add('old'), CHAT_LIFE);
+  }
+
+  /** Sohbet yazma kutusu: team=true takım içi */
+  chatInput(open, team = false) {
+    $('chat').classList.toggle('open', open);
+    $('chat-input-row').classList.toggle('hidden', !open);
+    $('chat-mode').textContent = team ? 'TAKIM:' : 'HERKES:';
+    $('chat-input-row').classList.toggle('team', team);
   }
 
   end(data, myTeam, names, myId = null) {
@@ -310,7 +361,7 @@ export class HUD {
       e.replaceChildren(
         el('h1', `end-title ${w ? 'ffa' : 'draw'}`, !w ? 'BERABERE!' : me ? 'KAZANDIN!' : `${wName} KAZANDI!`),
         el('p', 'end-sub', !w ? 'Kimse öne geçemedi.' : me ? 'HERKESİ ALT ETTİN!' : 'Bir dahaki sefere...'),
-        el('p', 'end-score', w ? `${w.kills} öldürme` : ''),
+        el('p', 'end-score', w ? `${w.score ?? 0} puan · ${w.kills} öldürme` : ''),
       );
     } else {
       const title = data.winner === 'draw' ? 'BERABERE!' : `${TEAM_INFO[data.winner].name} WINS!`;
@@ -322,8 +373,8 @@ export class HUD {
       );
     }
     // Maç sonu ödülleri
-    const ICON = { kills: '💀', hs: '🎯', caps: '🚩', deaths: '🧲' };
-    const UNIT = { kills: 'öldürme', hs: 'kafadan', caps: 'bayrak', deaths: 'ölüm' };
+    const ICON = { score: '⭐', kills: '💀', assists: '🤝', hs: '🎯', caps: '🚩', deaths: '🧲' };
+    const UNIT = { score: 'puan', kills: 'öldürme', assists: 'asist', hs: 'kafadan', caps: 'bayrak', deaths: 'ölüm' };
     if (data.awards?.length) {
       const row = el('div', 'awards');
       data.awards.forEach((a, i) => {
