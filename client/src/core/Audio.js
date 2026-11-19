@@ -85,6 +85,37 @@ export class Sfx {
     this.noiseBurst({ gain: 0.3 * volume, decay: 0.06, freq: 2000, type: 'highpass', delay: 0.85 });
   }
 
+  /** Pompalı: kalın patlama + pompa sesi */
+  shotgun(volume = 1, far = false) {
+    if (!this.ready || volume <= 0.01) return;
+    this.noiseBurst({ gain: 1.2 * volume, decay: far ? 0.4 : 0.26, freq: far ? 450 : 800, q: 0.4 });
+    this.tone({ type: 'sine', from: 120, to: 35, gain: 1.0 * volume, decay: 0.2 });
+    this.noiseBurst({ gain: 0.3 * volume, decay: 0.07, freq: 1800, type: 'highpass', delay: 0.35 });
+    this.noiseBurst({ gain: 0.35 * volume, decay: 0.08, freq: 1400, type: 'highpass', delay: 0.52 });
+  }
+
+  /** Kovboy tabancası / ağır tabanca: tok ve çınlayan */
+  revolver(volume = 1, far = false) {
+    if (!this.ready || volume <= 0.01) return;
+    this.noiseBurst({ gain: 1.0 * volume, decay: far ? 0.3 : 0.18, freq: far ? 650 : 1100, q: 0.6 });
+    this.tone({ type: 'sine', from: 170, to: 50, gain: 0.8 * volume, decay: 0.16 });
+    this.tone({ type: 'triangle', from: 1900, to: 1700, gain: 0.05 * volume, decay: 0.25 });
+  }
+
+  /** Roket ateşleme: vınlayan ıslık */
+  rocket(volume = 1) {
+    if (!this.ready || volume <= 0.01) return;
+    this.noiseBurst({ gain: 0.9 * volume, decay: 0.5, freq: 600, q: 0.5 });
+    this.tone({ type: 'sawtooth', from: 220, to: 90, gain: 0.18 * volume, decay: 0.45 });
+  }
+
+  /** Molotof kırılıp tutuşunca */
+  fireBurst(volume = 1) {
+    if (!this.ready || volume <= 0.01) return;
+    this.noiseBurst({ gain: 0.5 * volume, decay: 0.08, freq: 3500, type: 'highpass' }); // cam kırılması
+    this.noiseBurst({ gain: 0.9 * volume, decay: 1.2, freq: 500, q: 0.3, type: 'lowpass', delay: 0.05 });
+  }
+
   knife(volume = 1) {
     if (!this.ready || volume <= 0.01) return;
     this.noiseBurst({ gain: 0.35 * volume, decay: 0.12, freq: 3200, q: 1.5 });

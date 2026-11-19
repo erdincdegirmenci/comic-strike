@@ -1,5 +1,5 @@
 import {
-  PLAYER, FLAG, FALL, CTF, FFA, PAD, isEnemy, SCORE, LIMITS, CHAT, VOTE, DROP, MARK, CHARACTER_IDS, MODE_IDS, DEFAULT_MODE, FLAG_STATE, WEAPONS, WEAPON_ORDER, GRENADE, SPRAY, BUY_TIME, cleanLoadout, MATCH, SERVER_TICK_RATE, MAX_PLAYERS, MAX_PER_TEAM, MIN_PLAYERS_TO_START, INTERP_DELAY, TEAMS,
+  PLAYER, DAMAGE_ZONE, WATER, FLAG, FALL, CTF, FFA, PAD, isEnemy, SCORE, LIMITS, CHAT, VOTE, DROP, MARK, CHARACTER_IDS, MODE_IDS, DEFAULT_MODE, FLAG_STATE, WEAPONS, WEAPON_ORDER, GRENADE, SPRAY, BUY_TIME, cleanLoadout, MATCH, SERVER_TICK_RATE, MAX_PLAYERS, MAX_PER_TEAM, MIN_PLAYERS_TO_START, INTERP_DELAY, TEAMS,
 } from '@comic-strike/shared/constants.js';
 import { stepGrenade, throwVelocity } from '@comic-strike/shared/grenade.js';
 import { MSG } from '@comic-strike/shared/protocol.js';
@@ -18,6 +18,21 @@ const norm = (v) => {
   const len = Math.hypot(v[0], v[1], v[2]);
   return len < 0.5 ? null : [v[0] / len, v[1] / len, v[2] / len];
 };
+
+// Patlayıp alan hasarı veren mermiler
+const EXPLOSIVE = new Set(['he', 'mine', 'bazooka']);
+
+/** dir etrafında en fazla `spread` radyan sapan rastgele yön (pompalı saçması) */
+function coneDir(dir, spread) {
+  const up = Math.abs(dir[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+  const rx = [dir[1] * up[2] - dir[2] * up[1], dir[2] * up[0] - dir[0] * up[2], dir[0] * up[1] - dir[1] * up[0]];
+  const rl = Math.hypot(...rx);
+  const r = rx.map((c) => c / rl);
+  const u = [dir[1] * r[2] - dir[2] * r[1], dir[2] * r[0] - dir[0] * r[2], dir[0] * r[1] - dir[1] * r[0]];
+  const a = Math.random() * Math.PI * 2;
+  const m = Math.sqrt(Math.random()) * spread;
+  return norm([0, 1, 2].map((i) => dir[i] + r[i] * Math.cos(a) * m + u[i] * Math.sin(a) * m));
+}
 
 /**
  * Bir oda = bir lobi + bir maç.
@@ -49,7 +64,7 @@ export class Room {
     this.flags = null; // CTF: { red: {state, pos, carrier, droppedAt}, blue: {...} }
     this.sprays = new Map(); // oyuncu id -> son sticker (sonradan katilanlar da gorsun)
     // Maç sonu sınırları (host lobide seçer): puan / bayrak sayısı / dakika — hangisi önce gelirse
-    this.limits = { score: LIMITS.SCORE.DEFAULT, flags: LIMITS.FLAGS.DEFAULT, time: LIMITS.TIME.DEFAULT };
+    this.limits = { score: LIMITS.SCORE.DEFAULT, flags: LIMITS.FLAGS.DEFAULT, kills: LIMITS.KILLS.DEFAULT, time: LIMITS.TIME.DEFAULT };
     this.password = ''; // boşsa herkes girer
     this.ff = false; // takım ateşi: takım arkadaşları birbirini vurabilir
     this.vote = null; // maçı baştan başlatma oylaması: { by, until, yes:Set, no:Set }
@@ -74,6 +89,11 @@ export class Room {
 
   get ffa() {
     return this.mode === 'ffa';
+  }
+
+  /** Ölüm Yarışı: takım puanı = takımın öldürme sayısı */
+  get killRace() {
+    return this.mode === 'kills';
   }
 
   /** Oyuncunun doğabileceği noktalar (Herkes Tek'te tüm haritaya dağılmış noktalar) */
@@ -113,6 +133,7 @@ export class Room {
 
   /** Bitiş puanı: Takım Savaşı'nda takım puanı, Herkes Tek'te oyuncu puanı, Bayrak Kap'ta bayrak sayısı */
   get scoreLimit() {
+    if (this.killRace) return this.limits.kills;
     return this.ctf ? this.limits.flags : this.limits.score;
   }
 
@@ -176,7 +197,21 @@ export class Room {
       socket.emit(MSG.MATCH_START, this.matchInfo());
       for (const s of this.sprays.values()) socket.emit(MSG.SPRAYED, s);
       for (const d of this.drops.values()) socket.emit(MSG.DROP, { id: d.id, p: d.p });
+      this.sendActiveHazards(socket);
       this.spawn(p);
+    }
+  }
+
+  /** Maç ortasında gelen oyuncuya yerdeki mayınları ve süren zehir/alev alanlarını gönder */
+  sendActiveHazards(socket) {
+    const now = Date.now();
+    for (const g of this.grenades) {
+      if (g.t !== 'mine') continue;
+      // age: mayın ne kadar önce atıldı (kurulma / yanıp sönme zamanı doğru görünsün)
+      socket.emit(MSG.GRENADE, { g: g.g, t: g.t, id: g.by.id, o: g.sim.p.map(r2), v: [0, 0, 0], age: now - g.born });
+    }
+    for (const c of this.clouds) {
+      socket.emit(MSG.BOOM, { g: 0, t: c.t, p: c.pos, rem: Math.max(0, c.until - now) });
     }
   }
 
@@ -322,6 +357,7 @@ export class Room {
     this.limits = {
       score: clamp(d.score ?? this.limits.score, LIMITS.SCORE, this.limits.score),
       flags: clamp(d.flags ?? this.limits.flags, LIMITS.FLAGS, this.limits.flags),
+      kills: clamp(d.kills ?? this.limits.kills, LIMITS.KILLS, this.limits.kills),
       time: clamp(d.time ?? this.limits.time, LIMITS.TIME, this.limits.time),
     };
     this.broadcastRoom();
@@ -527,6 +563,24 @@ export class Room {
     return false;
   }
 
+  /** Havuz: suyun içindeki oyuncular az az can kaybeder */
+  updateWater(now) {
+    const w = this.map.water;
+    for (const p of this.players.values()) {
+      const [x, y, z] = p.pos;
+      const inside = p.alive && x > w.min[0] && x < w.max[0] && z > w.min[2] && z < w.max[2] && y < w.max[1] + 0.05;
+      if (!inside) {
+        p.wetNext = 0;
+        continue;
+      }
+      if (!p.wetNext) p.wetNext = now + WATER.TICK; // suya girer girmez değil, bir süre sonra başlar
+      if (now < p.wetNext) continue;
+      p.wetNext += WATER.TICK;
+      this.applyDamage(p, p, false, null, now, WATER.DAMAGE, 'water', p.pos.map(r2));
+      if (this.state === 'ended') return;
+    }
+  }
+
   /** Düşme hasarı: istemci yere çarpma hızını bildirir, hasarı sunucu hesaplar (üst sınırlı) */
   onFall(id, d) {
     const p = this.players.get(id);
@@ -574,6 +628,7 @@ export class Room {
     p.lastShot = now + (heavy ? w.HEAVY_INTERVAL : w.FIRE_INTERVAL) * 0.8;
     p.protectedUntil = 0; // ateş eden spawn korumasını kaybeder
     p.fired = true;
+    if (w.ROCKET) return this.fireRocket(p, w, dir, now);
 
     // Lag compensation: hedefleri, atış yapanın gördüğü ana geri sar
     const rewind = now - Math.min(p.rtt + INTERP_DELAY, 400);
@@ -585,14 +640,84 @@ export class Room {
         targets.push({ player: o, pos: past.pos, crouch: past.crouch });
       }
     }
+    if (w.PELLETS) return this.firePellets(p, w, dir, d.ds, origin, targets, now);
     const hit = castShot(origin, dir, this.solids, targets, w.RANGE);
     const end = hit.point.map(r2);
 
     p.socket.to(this.code).emit(MSG.SHOT, { id: p.id, o: origin.map(r2), e: end, w: w.id });
     if (!hit.player) return;
     const base = heavy ? w.HEAVY_DAMAGE : w.DAMAGE;
-    const dmg = Math.round(base * (hit.head ? w.HEADSHOT_MULT : 1));
+    const dmg = Math.round(base * (hit.head ? w.HEADSHOT_MULT : hit.leg ? DAMAGE_ZONE.LEG : 1));
     this.applyDamage(p, hit.player, hit.head, end, now, dmg, w.id);
+  }
+
+  /**
+   * Pompalı: istemcinin gönderdiği saçma yönleri (ds) ana yönden çok sapmıyorsa kullanılır, eksikler sunucuda üretilir.
+   * Her kurbana tek seferde toplam hasar verilir (bir saçma kafaya geldiyse kafadan sayılır).
+   */
+  firePellets(p, w, dir, ds, origin, targets, now) {
+    const cosMax = Math.cos(w.PELLET_SPREAD * 1.6 + 0.03);
+    const dirs = [];
+    if (Array.isArray(ds)) {
+      for (const x of ds.slice(0, w.PELLETS)) {
+        const n = isVec(x) ? norm(x) : null;
+        if (n && n[0] * dir[0] + n[1] * dir[1] + n[2] * dir[2] >= cosMax) dirs.push(n);
+      }
+    }
+    while (dirs.length < w.PELLETS) dirs.push(coneDir(dir, w.PELLET_SPREAD));
+    const [near, far] = w.FALLOFF;
+    const per = new Map();
+    const ends = [];
+    for (const pd of dirs) {
+      const hit = castShot(origin, pd, this.solids, targets, w.RANGE);
+      ends.push(hit.point.map(r2));
+      if (!hit.player) continue;
+      const k = Math.max(w.MIN_FALLOFF, 1 - Math.max(0, hit.distance - near) / (far - near) * (1 - w.MIN_FALLOFF));
+      const zone = hit.head ? w.HEADSHOT_MULT : hit.leg ? DAMAGE_ZONE.LEG : 1;
+      const r = per.get(hit.player) ?? { dmg: 0, head: false, point: hit.point.map(r2) };
+      r.dmg += w.DAMAGE * zone * k;
+      r.head ||= hit.head;
+      per.set(hit.player, r);
+    }
+    p.socket.to(this.code).emit(MSG.SHOT, { id: p.id, o: origin.map(r2), e: ends[0], es: ends, w: w.id });
+    for (const [v, r] of per) {
+      if (!v.alive) continue;
+      this.applyDamage(p, v, r.head, r.point, now, Math.round(r.dmg), w.id);
+      if (this.state === 'ended') return;
+    }
+  }
+
+  /** Bazuka: roket mermisi oluştur (bomba listesinde, kendi adımıyla ilerler) */
+  fireRocket(p, w, dir, now) {
+    const eye = [p.pos[0], p.pos[1] + p.eyeHeight, p.pos[2]];
+    const wall = castShot(eye, dir, this.solids, [], 0.8);
+    const ahead = Math.max(0, Math.min(0.6, wall.distance - 0.15));
+    const o = [eye[0] + dir[0] * ahead, eye[1] + dir[1] * ahead - 0.08, eye[2] + dir[2] * ahead].map(r2);
+    const v = dir.map((c) => r2(c * w.SPEED));
+    const g = { g: this.nextGid++, t: w.id, by: p, sim: { p: [...o], v: [...v] }, born: now, steps: 0, direct: null };
+    this.grenades.push(g);
+    this.emit(MSG.GRENADE, { g: g.g, t: g.t, id: p.id, o, v });
+  }
+
+  /** Roketi bir adım ilerlet: duvara ya da rakibe çarparsa true */
+  stepRocket(g) {
+    const v = g.sim.v;
+    const speed = Math.hypot(v[0], v[1], v[2]);
+    const len = speed * GRENADE.STEP;
+    const dir = [v[0] / speed, v[1] / speed, v[2] / speed];
+    const targets = [];
+    for (const o of this.players.values()) {
+      if (o.alive && o !== g.by && this.canHurt(g.by, o)) targets.push({ player: o, pos: o.pos, crouch: o.crouching });
+    }
+    const hit = castShot(g.sim.p, dir, this.solids, targets, len);
+    if (hit.distance < len) {
+      const back = Math.min(0.1, hit.distance);
+      g.sim.p = [hit.point[0] - dir[0] * back, hit.point[1] - dir[1] * back, hit.point[2] - dir[2] * back];
+      g.direct = hit.player;
+      return true;
+    }
+    for (let i = 0; i < 3; i++) g.sim.p[i] += v[i] * GRENADE.STEP;
+    return g.sim.p[1] < this.map.bounds.minY;
   }
 
   onThrow(id, d) {
@@ -615,6 +740,11 @@ export class Room {
     const o = [eye[0] + dir[0] * ahead, eye[1] + dir[1] * ahead - 0.1, eye[2] + dir[2] * ahead].map(r2);
     const v = throwVelocity(dir, typeof d.c === 'number' ? d.c : 1).map(r2);
     const g = { g: this.nextGid++, t: w.id, by: p, sim: { p: [...o], v: [...v] }, born: now, steps: 0 };
+    if (w.id === 'mine') {
+      // En fazla MAX_ACTIVE mayın: fazlası en eskisini söndürür
+      const mine = this.grenades.filter((x) => x.t === 'mine' && x.by === p);
+      while (mine.length >= w.MAX_ACTIVE) this.fizzle(mine.shift());
+    }
     this.grenades.push(g);
     this.emit(MSG.GRENADE, { g: g.g, t: g.t, id: p.id, o, v });
   }
@@ -649,9 +779,27 @@ export class Room {
     for (let i = this.grenades.length - 1; i >= 0; i--) {
       const g = this.grenades[i];
       const target = Math.floor((now - g.born) / 1000 / GRENADE.STEP);
-      while (g.steps < target) {
-        stepGrenade(g.sim, this.solids);
+      const w = WEAPONS[g.t];
+      let impact = false;
+      while (g.steps < target && !impact) {
+        impact = w.ROCKET ? this.stepRocket(g) : stepGrenade(g.sim, this.solids) && !!w.IMPACT;
         g.steps++;
+      }
+      if (w.ROCKET || w.IMPACT) {
+        // Roket / molotof: çarpınca (ya da süresi dolunca) patlar
+        if (!impact && now - g.born < (w.LIFETIME ?? w.FUSE)) continue;
+        this.grenades.splice(i, 1);
+        this.explode(g, now);
+        if (this.state === 'ended') return;
+        continue;
+      }
+      if (g.t === 'mine') {
+        if (this.updateMine(g, now)) {
+          this.grenades.splice(i, 1);
+          this.explode(g, now);
+          if (this.state === 'ended') return;
+        }
+        continue;
       }
       if (now - g.born < WEAPONS[g.t].FUSE) continue;
       this.grenades.splice(i, 1);
@@ -660,16 +808,42 @@ export class Room {
     }
   }
 
+  /** Mayın: kurulduysa yakınına rakip geldi mi (true = patlat). Süresi dolan / sahibi çıkan mayın söner. */
+  updateMine(g, now) {
+    const w = WEAPONS.mine;
+    if (now - g.born > w.LIFETIME || !this.players.has(g.by.id)) {
+      this.fizzle(g);
+      return false;
+    }
+    if (now - g.born < w.ARM || this.state !== 'playing') return false;
+    const m = g.sim.p;
+    for (const v of this.players.values()) {
+      if (!v.alive || v === g.by || !this.canHurt(g.by, v) || now < v.protectedUntil) continue;
+      const dy = m[1] - v.pos[1];
+      if (dy < -0.6 || dy > 1.2) continue; // ayak hizasında olmalı
+      if (Math.hypot(v.pos[0] - m[0], v.pos[2] - m[2]) < w.TRIGGER + 0.35) return true;
+    }
+    return false;
+  }
+
+  /** Mayını hasarsız söndür (listeden çıkar, herkese bildir) */
+  fizzle(g) {
+    const i = this.grenades.indexOf(g);
+    if (i >= 0) this.grenades.splice(i, 1);
+    this.emit(MSG.BOOM, { g: g.g, t: g.t, p: g.sim.p.map(r2), fz: 1 });
+  }
+
   explode(g, now) {
     const at = g.sim.p.map(r2);
     this.emit(MSG.BOOM, { g: g.g, t: g.t, p: at });
-    if (g.t === 'poison') {
-      const w = WEAPONS.poison;
-      this.clouds.push({ by: g.by, pos: at, until: now + w.DURATION, next: now + w.TICK });
+    if (g.t === 'poison' || g.t === 'molotov') {
+      // Zehir bulutu / alev halısı: süre boyunca içindekilere hasar
+      const w = WEAPONS[g.t];
+      this.clouds.push({ t: g.t, by: g.by, pos: at, until: now + w.DURATION, next: now + w.TICK });
       return;
     }
-    if (g.t !== 'he' || this.state !== 'playing') return;
-    const w = WEAPONS.he;
+    if (!EXPLOSIVE.has(g.t) || this.state !== 'playing') return;
+    const w = WEAPONS[g.t];
     const attacker = g.by;
     if (!this.players.has(attacker.id)) return; // atan oyuncu odadan çıktı
     const center = [at[0], at[1] + 0.2, at[2]];
@@ -680,23 +854,24 @@ export class Room {
       const dy = chest[1] - center[1];
       const dz = chest[2] - center[2];
       const dist = Math.hypot(dx, dy, dz);
-      if (dist >= w.RADIUS) continue;
+      if (dist >= w.RADIUS && v !== g.direct) continue;
       // Duvar arkasındakiler etkilenmez
-      if (dist > 0.05) {
+      if (dist > 0.05 && v !== g.direct) {
         const los = castShot(center, [dx / dist, dy / dist, dz / dist], this.solids, [], dist);
         if (los.distance < dist - 0.05) continue;
       }
-      const dmg = Math.round(w.DAMAGE * (1 - dist / w.RADIUS));
-      if (dmg > 0) this.applyDamage(attacker, v, false, chest.map(r2), now, dmg, 'he', at);
+      // Roketin doğrudan çarptığı oyuncu tam hasar alır
+      const dmg = v === g.direct ? w.DAMAGE : Math.round(w.DAMAGE * (1 - dist / w.RADIUS));
+      if (dmg > 0) this.applyDamage(attacker, v, false, chest.map(r2), now, dmg, g.t, at);
       if (this.state === 'ended') return;
     }
   }
 
   /** Zehir bulutları: içindeki rakiplere (ve atana) belirli aralıklarla hasar */
   updateClouds(now) {
-    const w = WEAPONS.poison;
     for (let i = this.clouds.length - 1; i >= 0; i--) {
       const c = this.clouds[i];
+      const w = WEAPONS[c.t];
       if (now >= c.until) {
         this.clouds.splice(i, 1);
         continue;
@@ -709,8 +884,8 @@ export class Room {
         const dx = v.pos[0] - c.pos[0];
         const dz = v.pos[2] - c.pos[2];
         const dy = v.pos[1] - c.pos[1];
-        if (Math.hypot(dx, dz) > w.RADIUS || dy < -1.2 || dy > w.RADIUS * 0.8) continue;
-        this.applyDamage(c.by, v, false, null, now, w.DAMAGE_TICK, 'poison', c.pos);
+        if (Math.hypot(dx, dz) > w.RADIUS || dy < -1.2 || dy > (w.CLOUD_H ?? w.RADIUS * 0.8)) continue;
+        this.applyDamage(c.by, v, false, null, now, w.DAMAGE_TICK, c.t, c.pos);
         if (this.state === 'ended') return;
       }
     }
@@ -748,7 +923,11 @@ export class Room {
       if (this.ffa) this.killReward(attacker, weapon);
     }
     // Takım Savaşı: takım puanı = öldürme +3, asist +1, ölüm -1, arkadaş öldürme -3 (Bayrak Kap'ta puan sadece bayrakla gelir)
-    if (!this.ctf && !this.ffa) {
+    if (this.killRace) {
+      // Ölüm Yarışı: sadece rakip öldürmek sayılır (arkadaş öldürmek takımdan 1 öldürme düşer)
+      if (teamKill) this.scores[attacker.team] = Math.max(0, this.scores[attacker.team] - 1);
+      else if (!self) this.scores[attacker.team] += 1;
+    } else if (!this.ctf && !this.ffa) {
       if (teamKill) this.scores[attacker.team] += SCORE.TEAMKILL;
       else if (!self) this.scores[attacker.team] += SCORE.KILL;
       for (const ap of assists) this.scores[ap.team] += SCORE.ASSIST;
@@ -766,7 +945,7 @@ export class Room {
   /** Puan sınırına ulaşıldı mı (Takım Savaşı: takım puanı, Herkes Tek: oyuncu puanı) */
   checkScoreLimit() {
     if (this.ctf || this.state === 'ended') return;
-    const limit = this.limits.score;
+    const limit = this.scoreLimit;
     if (this.ffa) {
       for (const p of this.players.values()) if (p.score >= limit) return this.endMatch();
       return;
@@ -973,6 +1152,7 @@ export class Room {
     }
     for (const p of this.players.values()) if (p.bot && p.alive) p.bot.update(now, 1 / SERVER_TICK_RATE);
     if (this.state === 'playing') this.updateDrops(now);
+    if (this.state === 'playing' && this.map.water) this.updateWater(now);
 
     this.updateGrenades(now);
     if (this.state !== 'ended') this.updateClouds(now);

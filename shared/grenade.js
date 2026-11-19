@@ -28,9 +28,10 @@ export function throwVelocity(dir, charge = 1) {
   return [dir[0] * s, dir[1] * s + up, dir[2] * s];
 }
 
-/** Tek sabit adım (GRENADE.STEP). g = { p:[x,y,z], v:[x,y,z] } yerinde güncellenir. */
+/** Tek sabit adım (GRENADE.STEP). g = { p:[x,y,z], v:[x,y,z] } yerinde güncellenir. Bir yere çarptıysa true döner. */
 export function stepGrenade(g, solids) {
   const dt = GRENADE.STEP;
+  let hit = false;
   g.v[1] -= GRENADE.GRAVITY * dt;
   // Eksen eksen hareket: çarpışan eksende geri sek
   for (let a = 0; a < 3; a++) {
@@ -38,6 +39,7 @@ export function stepGrenade(g, solids) {
     g.p[a] = old + g.v[a] * dt;
     if (!overlaps(g.p, solids)) continue;
     g.p[a] = old;
+    hit = true;
     if (a === 1 && g.v[1] < 0) {
       // Yere çarptı
       if (g.v[1] < -1.5) {
@@ -53,6 +55,49 @@ export function stepGrenade(g, solids) {
       g.v[a] = -g.v[a] * GRENADE.BOUNCE;
     }
   }
+  return hit;
+}
+
+/** Işın - kutu kesişimi: mesafe ya da -1 (dir normalize) */
+function rayBox(o, d, min, max, maxT) {
+  let tmin = 0;
+  let tmax = maxT;
+  for (let i = 0; i < 3; i++) {
+    if (Math.abs(d[i]) < 1e-9) {
+      if (o[i] < min[i] || o[i] > max[i]) return -1;
+    } else {
+      let t1 = (min[i] - o[i]) / d[i];
+      let t2 = (max[i] - o[i]) / d[i];
+      if (t1 > t2) [t1, t2] = [t2, t1];
+      if (t1 > tmin) tmin = t1;
+      if (t2 < tmax) tmax = t2;
+      if (tmin > tmax) return -1;
+    }
+  }
+  return tmin;
+}
+
+/**
+ * Roket: yerçekimsiz, dümdüz bir sabit adım. Duvara çarparsa çarpma noktasında durur (v sıfırlanır) ve true döner.
+ * (Sunucu oyunculara çarpmayı ayrıca kontrol eder; istemci sadece görüntü için kullanır.)
+ */
+export function stepRocket(g, solids) {
+  const speed = Math.hypot(g.v[0], g.v[1], g.v[2]);
+  if (speed < 1e-6) return false;
+  const d = [g.v[0] / speed, g.v[1] / speed, g.v[2] / speed];
+  const len = speed * GRENADE.STEP;
+  let best = len;
+  for (const b of solids) {
+    const t = rayBox(g.p, d, b.min, b.max, best);
+    if (t >= 0 && t < best) best = t;
+  }
+  const go = best < len ? Math.max(0, best - 0.08) : len;
+  for (let i = 0; i < 3; i++) g.p[i] += d[i] * go;
+  if (best < len) {
+    g.v = [0, 0, 0];
+    return true;
+  }
+  return false;
 }
 
 /** Başlangıçtan itibaren ms kadar ilerletilmiş konum (yeni nesne döner). */

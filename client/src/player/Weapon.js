@@ -59,11 +59,17 @@ export class Weapon {
     this.buildGrenade("he", "#52b788");
     this.buildGrenade("smoke", "#adb5bd");
     this.buildGrenade("poison", "#7cb518");
+    this.buildMine();
+    this.buildMolotov();
+    this.buildRevolver();
+    this.buildShotgun();
+    this.buildBazooka();
     this.buildCarbine();
     this.buildSmg();
     this.buildLmg();
     this.buildPopper();
     this.buildCannon();
+    this.computeAdsHeights();
     this.hand = 1; // 1 sağ el, -1 sol el
 
     this.flashLight = new THREE.PointLight("#ffd23f", 0, 2);
@@ -278,6 +284,118 @@ export class Weapon {
       m.add(B(0.1, 0.1, 0.26), TEAM_INFO.red.color, 0.02, -0.07, 0.24, 0.2),
     );
     m.group.position.set(-0.02, 0.06, 0);
+  }
+
+  /**
+   * Her ateşli silah için nişan (ADS) yüksekliği: modelin tüm köşeleri ekranın ortasındaki
+   * artı işaretinin en az ADS_MARGIN (oran, ~3°) altında kalacak şekilde silahın ne kadar
+   * aşağıda durması gerektiğini hesaplar. Modeller dururken bir kez çalışır.
+   */
+  computeAdsHeights() {
+    this.adsY = {};
+    const s = this.root.scale.y;
+    const v = new THREE.Vector3();
+    const mat = new THREE.Matrix4();
+    for (const [id, m] of Object.entries(this.models)) {
+      const w = WEAPONS[id];
+      if (!w || w.kind !== "gun" || w.ZOOM_FOV) continue; // AWP dürbün kullanır
+      const adsZ = w.cat === "pistol" ? Weapon.ADS_Z_PISTOL : Weapon.ADS_Z;
+      let best = Infinity;
+      m.group.traverse((o) => {
+        if (!o.isMesh || !o.geometry?.attributes?.position) return;
+        mat.identity();
+        for (let p = o; p && p !== this.root; p = p.parent) {
+          p.updateMatrix();
+          mat.premultiply(p.matrix);
+        }
+        const pos = o.geometry.attributes.position;
+        for (let i = 0; i < pos.count; i++) {
+          v.fromBufferAttribute(pos, i).applyMatrix4(mat);
+          const depth = adsZ + v.z * s; // kameradan uzaklık (negatif)
+          if (depth > -0.02) continue; // kameranın hemen dibindeki kol/el parçaları
+          best = Math.min(best, Weapon.ADS_MARGIN * depth - v.y * s);
+        }
+      });
+      if (Number.isFinite(best)) this.adsY[id] = best;
+    }
+  }
+
+  /** Mayın: yassı disk, üstünde kırmızı lamba ve basınç düğmesi */
+  buildMine() {
+    const m = this.model("mine");
+    m.add(new THREE.CylinderGeometry(0.075, 0.085, 0.035, 16), "#4a4e3a", 0, 0.02, -0.03);
+    m.add(new THREE.CylinderGeometry(0.03, 0.03, 0.02, 12), "#2b2d22", 0, 0.045, -0.03);
+    m.add(new THREE.SphereGeometry(0.012, 8, 6), "#ff2b2b", 0.045, 0.042, -0.03);
+    m.add(B(0.09, 0.08, 0.1), SKIN, 0, -0.04, 0.05);
+    this.sleeves.push(
+      m.add(B(0.1, 0.1, 0.26), TEAM_INFO.red.color, 0.02, -0.07, 0.24, 0.2),
+    );
+    m.group.position.set(-0.02, 0.06, 0);
+  }
+
+  /** Molotof: kahverengi şişe, ağzında yanan bez */
+  buildMolotov() {
+    const m = this.model("molotov");
+    m.add(new THREE.CylinderGeometry(0.035, 0.04, 0.11, 12), "#9c6644", 0, 0.02, -0.02);
+    m.add(new THREE.CylinderGeometry(0.014, 0.02, 0.06, 10), "#8a5a3b", 0, 0.1, -0.02);
+    m.add(B(0.028, 0.045, 0.028), "#efe6d2", 0, 0.145, -0.02, 0, 0, 0.3); // bez
+    m.add(B(0.03, 0.03, 0.03), "#ff9f1c", 0.005, 0.18, -0.02, 0.4, 0.3, 0.6); // alev
+    m.add(B(0.09, 0.08, 0.1), SKIN, 0, -0.04, 0.05);
+    this.sleeves.push(
+      m.add(B(0.1, 0.1, 0.26), TEAM_INFO.red.color, 0.02, -0.07, 0.24, 0.2),
+    );
+    m.group.position.set(-0.02, 0.04, 0);
+  }
+
+  /** Kovboy tabancası: uzun namlu, döner silindir, ahşap kabza; çekilirken parmakta döner */
+  buildRevolver() {
+    const m = this.model("revolver", [0, -0.03, 0.04]);
+    m.add(new THREE.CylinderGeometry(0.013, 0.013, 0.24, 10), "#9aa1ab", 0, 0.03, -0.17, Math.PI / 2); // namlu
+    m.add(B(0.024, 0.014, 0.22), "#7d838c", 0, 0.012, -0.16); // namlu altı
+    m.add(new THREE.CylinderGeometry(0.032, 0.032, 0.065, 6), "#7d838c", 0, 0.018, -0.015, Math.PI / 2); // silindir
+    m.add(B(0.036, 0.05, 0.1), "#5f6670", 0, 0.012, 0.03); // gövde
+    m.add(B(0.012, 0.03, 0.02), "#2b2d42", 0, 0.05, 0.075, -0.5); // horoz
+    m.add(B(0.04, 0.11, 0.05), "#8a5a3b", 0, -0.07, 0.085, 0.45); // ahşap kabza
+    m.add(B(0.006, 0.03, 0.03), "#141414", 0, -0.03, 0.03); // tetik
+    m.add(B(0.008, 0.02, 0.01), "#141414", 0, 0.052, -0.28); // arpacık
+    m.fixed(B(0.075, 0.08, 0.09), SKIN, 0, -0.075, 0.09);
+    m.support = m.fixed(B(0.06, 0.06, 0.08), SKIN, -0.045, -0.09, 0.06);
+    this.sleeves.push(
+      m.fixed(B(0.1, 0.1, 0.26), TEAM_INFO.red.color, 0.02, -0.11, 0.27, 0.25),
+    );
+    this.muzzleFlash(m, -0.29, 0.03);
+    m.group.position.set(-0.09, 0.14, -0.04);
+  }
+
+  /** Pompalı: kısa kalın namlu, altında tüp, ahşap pompa kolu ve dipçik */
+  buildShotgun() {
+    const m = this.model("shotgun");
+    this.longGun(m, { body: 0.32, barrel: 0.4, color: "#3a3a3a" });
+    m.add(new THREE.CylinderGeometry(0.014, 0.014, 0.42, 10), "#2b2b2b", 0, -0.025, -0.33, Math.PI / 2); // tüp
+    m.pump = m.add(B(0.07, 0.06, 0.16), "#8a5a3b", 0, -0.025, -0.3); // pompa
+    m.pumpRest = m.pump.position.z;
+    m.add(B(0.06, 0.1, 0.24), "#8a5a3b", 0, -0.03, 0.27, -0.12); // ahşap dipçik
+    m.add(B(0.012, 0.02, 0.012), "#c9a24f", 0, 0.035, -0.54); // boncuk arpacık
+  }
+
+  /** Bazuka: omuzda uzun tüp, önünde roket başı, yanında nişangâh */
+  buildBazooka() {
+    const m = this.model("bazooka");
+    m.add(new THREE.CylinderGeometry(0.06, 0.06, 0.9, 14), "#5c6b3a", 0, 0.03, -0.12, Math.PI / 2); // tüp
+    m.add(new THREE.CylinderGeometry(0.075, 0.06, 0.08, 14), "#4a5530", 0, 0.03, 0.36, Math.PI / 2); // arka ağız
+    m.add(new THREE.CylinderGeometry(0.068, 0.068, 0.05, 14), "#3d4628", 0, 0.03, -0.55, Math.PI / 2); // ön bilezik
+    m.add(new THREE.ConeGeometry(0.05, 0.1, 12), "#c0392b", 0, 0.03, -0.62, -Math.PI / 2); // roket başı
+    m.add(B(0.02, 0.05, 0.05), "#2b2d42", -0.07, 0.07, -0.25); // nişangâh
+    m.add(B(0.04, 0.1, 0.05), "#2b2d42", 0, -0.07, 0.02, 0.2); // kabza
+    m.add(B(0.04, 0.09, 0.05), "#2b2d42", 0, -0.07, -0.28, 0.2); // ön tutamak
+    m.add(new THREE.CylinderGeometry(0.062, 0.062, 0.06, 14), "#d1b25a", 0, 0.03, 0.15, Math.PI / 2); // sarı şerit
+    m.fixed(B(0.08, 0.08, 0.1), SKIN, 0, -0.1, 0.03);
+    m.support = m.fixed(B(0.085, 0.07, 0.1), SKIN, -0.01, -0.1, -0.28);
+    this.sleeves.push(
+      m.fixed(B(0.1, 0.1, 0.26), TEAM_INFO.red.color, 0.03, -0.15, 0.2, 0.2),
+    );
+    this.muzzleFlash(m, -0.66, 0.03);
+    m.group.position.set(0, 0.02, 0.04);
   }
 
   /** Uzun tüfek iskeleti: gövde, namlu, dipçik, eller, kol */
@@ -667,8 +785,7 @@ export class Weapon {
       return;
     }
     this.ammo[this.current]--;
-    this.kick =
-      this.current === "awp" ? 1.6 : this.current === "cannon" ? 1.8 : 1;
+    this.kick = d.KICK ?? 1;
     if (this.current === "awp" && this.scope > 0) {
       // Atıştan sonra dürbün kapanır, kurma bitince geri açılır
       this.resumeScope = this.ammo.awp > 0 ? this.scope : 0;
@@ -678,7 +795,7 @@ export class Weapon {
     m.muzzle.visible = true;
     m.muzzle.material.rotation = Math.random() * Math.PI;
     m.muzzle.scale.setScalar(
-      (this.current === "awp" || this.current === "cannon" ? 0.3 : 0.18) +
+      ((d.KICK ?? 1) > 1.5 ? 0.3 : 0.18) +
         Math.random() * 0.1,
     );
     this.flashLight.intensity = 4;
@@ -775,6 +892,12 @@ export class Weapon {
       reloadDip = smooth(0, 0.14, rt) * (1 - smooth(0.82, 1, rt));
       slap = this.animateMag(m, rt);
     } else if (m.reloadPhase || (m.freshMag && m.freshMag.visible)) this.resetMag(m);
+    if (m.pump) {
+      // Pompalı: her atıştan sonra pompa kolu geri çekilip ileri itilir
+      const pt = this.lastShot ? (now - this.lastShot) / d.FIRE_INTERVAL : 1;
+      const pk = pt > 0.3 && pt < 0.85 ? Math.sin(((pt - 0.3) / 0.55) * Math.PI) : 0;
+      m.pump.position.z = m.pumpRest + pk * 0.08;
+    }
     const deploy = this.deployTime ?? d.DEPLOY ?? DEPLOY_TIME;
     const drawK = Math.min(1, (now - this.drawStart) / deploy);
     // Çevirmeli tabanca aşağıdan gelmez, yerinde parmakta döner
@@ -810,9 +933,9 @@ export class Weapon {
     const calm = 1 - 0.8 * a;
     const pistol = d.cat === "pistol";
     const adsX = pistol ? 0.072 : 0; // tabanca modeli el içinde biraz solda duruyor
-    // Tabancada nişan alınca silah biraz aşağıda durur: gez-arpacık hedefin altında kalır, hedefi kapatmaz
-    const adsY = pistol ? -0.205 : -0.08;
-    const adsZ = pistol ? -0.42 : -0.34;
+    // Nişan alınca silahın en üst noktası artı işaretinin biraz altında kalır: hedefi ve nişangâhı kapatmaz
+    const adsZ = pistol ? Weapon.ADS_Z_PISTOL : Weapon.ADS_Z;
+    const adsY = this.adsY[this.current] ?? (pistol ? -0.205 : -0.12);
     const hipX =
       (this.base.x + bobX - this.sprint * 0.06 + swingX) * h + this.sway.x;
     const hipY =
@@ -862,3 +985,7 @@ export class Weapon {
 // Reload sırasında silahın aldığı poz (konum: metre, dönüş: radyan; x/ry/rz sol elde aynalanır)
 Weapon.RELOAD_POSE = { x: -0.08, y: 0.14, z: -0.05, rx: 0.18, ry: 0.3, rz: -0.7 };
 Weapon.RELOAD_POSE_PISTOL = { x: -0.06, y: -0.02, z: -0.04, rx: 0.35, ry: 0.25, rz: -0.6 };
+// Nişan (ADS) pozu: silahın kameradan uzaklığı ve artı işaretinin altında bırakılacak pay (y/z oranı ≈ 3°)
+Weapon.ADS_Z = -0.34;
+Weapon.ADS_Z_PISTOL = -0.42;
+Weapon.ADS_MARGIN = 0.05;

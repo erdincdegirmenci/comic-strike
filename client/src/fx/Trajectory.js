@@ -101,7 +101,7 @@ export class Trajectory {
     this.dots.count = n;
     this.dots.instanceMatrix.needsUpdate = true;
 
-    const color = type === 'he' ? '#e63946' : type === 'poison' ? '#7cb518' : '#8d99ae';
+    const color = type === 'he' ? '#e63946' : type === 'poison' ? '#7cb518' : type === 'mine' ? '#ff6d00' : type === 'molotov' ? '#f4a261' : '#8d99ae';
     this.areaMat.color.set(color);
     this.edgeMat.color.set(color);
     this.dotMat.color.set(charging ? '#ffd23f' : '#ffffff');
