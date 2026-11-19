@@ -17,7 +17,7 @@ import {
   playerScore,
 } from "@comic-strike/shared/constants.js";
 import { solidsOf } from "@comic-strike/shared/maps.js";
-import { stepGrenade } from "@comic-strike/shared/grenade.js";
+import { stepGrenade, stepRocket } from "@comic-strike/shared/grenade.js";
 import { LocalPlayer } from "./player/LocalPlayer.js";
 import { RemotePlayer } from "./player/RemotePlayer.js";
 import { Weapon } from "./player/Weapon.js";
@@ -37,8 +37,17 @@ const NADE_GEO = {
   he: new THREE.SphereGeometry(0.1, 10, 8),
   smoke: new THREE.CylinderGeometry(0.08, 0.08, 0.22, 10),
   poison: new THREE.CylinderGeometry(0.08, 0.08, 0.22, 10),
+  mine: new THREE.CylinderGeometry(0.17, 0.19, 0.07, 16),
+  molotov: new THREE.CylinderGeometry(0.06, 0.075, 0.24, 10),
+  bazooka: new THREE.CylinderGeometry(0.07, 0.07, 0.5, 10), // roket (Y ekseni uçuş yönüne çevrilir)
 };
-const NADE_COLOR = { he: "#52b788", smoke: "#adb5bd", poison: "#7cb518" };
+const NADE_COLOR = { he: "#52b788", smoke: "#adb5bd", poison: "#7cb518", mine: "#4a4e3a", molotov: "#9c6644", bazooka: "#5c6b3a" };
+const _yAxis = new THREE.Vector3(0, 1, 0);
+// Ateş sesi: silaha göre
+const SHOT_SOUND = { awp: "awp", shotgun: "shotgun", revolver: "revolver", cannon: "revolver" };
+const MINE_LAMP = new THREE.SphereGeometry(0.035, 8, 6);
+const MINE_LAMP_ON = new THREE.MeshBasicMaterial({ color: "#ff2b2b" });
+const MINE_LAMP_OFF = new THREE.MeshBasicMaterial({ color: "#4a1010" });
 
 const _eye = new THREE.Vector3();
 const _fwd = new THREE.Vector3();
@@ -238,12 +247,14 @@ export class Game {
       this.sfx.knife(Math.max(0, 1 - dist / 15));
       return;
     }
-    _end.set(d.e[0], d.e[1], d.e[2]);
-    this.effects.tracer(_from, _end);
+    for (const e of d.es ?? [d.e]) {
+      _end.set(e[0], e[1], e[2]);
+      this.effects.tracer(_from, _end);
+    }
     this.effects.muzzle(_from);
-    const vol = Math.max(0, 1 - dist / (d.w === "awp" ? 140 : 90)) * 0.8;
-    if (d.w === "awp") this.sfx.awp(vol, dist > 25);
-    else this.sfx.shot(vol, dist > 25);
+    const loud = d.w === "awp" || d.w === "shotgun";
+    const vol = Math.max(0, 1 - dist / (loud ? 140 : 90)) * 0.8;
+    this.sfx[SHOT_SOUND[d.w] ?? "shot"](vol, dist > 25);
   }
 
   onHit(d) {
@@ -331,7 +342,7 @@ export class Game {
 
   onDamaged(d) {
     this.hp = d.hp;
-    this.shake = Math.max(this.shake, d.w === "poison" ? 0.08 : 0.25);
+    this.shake = Math.max(this.shake, d.w === "poison" || d.w === "molotov" || d.w === "water" ? 0.08 : 0.25);
     this.sfx.hurt();
     // Hasar yönü: saldırganın bize göre açısı
     const dx = d.from[0] - this.local.position.x;
@@ -359,10 +370,20 @@ export class Game {
         ? "SHANKED!"
         : d.w === "he"
           ? "KABOOM!"
+          : d.w === "mine"
+            ? "TIK-TAK-BOOM!"
           : d.w === "fall"
             ? "SPLAT!"
+            : d.w === "water"
+              ? "GLUB GLUB!"
             : d.w === "poison"
               ? "TOXIC!"
+              : d.w === "molotov"
+                ? "YANDI!"
+                : d.w === "bazooka"
+                  ? "KA-BOOM!"
+                  : d.w === "shotgun"
+                    ? "KA-CHUNK!"
               : KILL_WORDS[Math.floor(Math.random() * KILL_WORDS.length)];
     const r = this.remotes.get(d.v);
     if (r) {
@@ -402,18 +423,39 @@ export class Game {
       0.02,
     );
     mesh.position.set(d.o[0], d.o[1], d.o[2]);
+    const rocket = !!WEAPONS[d.t]?.ROCKET;
+    if (rocket) {
+      // Roket: burnu kırmızı, uçuş yönüne bakar
+      const nose = part(new THREE.ConeGeometry(0.07, 0.16, 10), "#c0392b", 0.015);
+      nose.position.y = 0.32;
+      mesh.add(nose);
+      _tmp.set(d.v[0], d.v[1], d.v[2]).normalize();
+      mesh.quaternion.setFromUnitVectors(_yAxis, _tmp);
+    }
+    let lamp = null;
+    if (d.t === "mine") {
+      // Kurulunca yanıp sönen kırmızı lamba (benim mayınımsa daha belirgin)
+      lamp = new THREE.Mesh(MINE_LAMP, MINE_LAMP_OFF);
+      lamp.position.set(0, 0.05, 0);
+      mesh.add(lamp);
+    }
     this.scene.add(mesh);
     this.grenades.set(d.g, {
+      lamp,
+      mine: d.t === "mine",
       mesh,
       sim: { p: [...d.o], v: [...d.v] },
-      born: performance.now(),
-      steps: 0,
+      // age: maç ortasında katılınca sunucu yerdeki mayının yaşını yollar
+      born: performance.now() - (d.age ?? 0),
+      steps: Math.floor((d.age ?? 0) / 1000 / (1 / 60)),
+      rocket,
       t: d.t,
       lastVy: d.v[1],
     });
-    if (d.id !== this.myId) {
+    if (d.id !== this.myId && !d.age) {
       const dist = mesh.position.distanceTo(this.camera.position);
-      if (dist < 20) this.sfx.throw();
+      if (rocket) this.sfx.rocket(Math.max(0, 1 - dist / 80));
+      else if (dist < 20) this.sfx.throw();
     }
   }
 
@@ -425,14 +467,22 @@ export class Game {
     }
     _tmp.set(d.p[0], d.p[1], d.p[2]);
     const dist = _tmp.distanceTo(this.camera.position);
-    if (d.t === "he") {
+    if (d.fz) {
+      // Mayın söndü (süresi doldu / yeni mayın kuruldu): hasarsız küçük duman
+      this.effects.poof(_tmp);
+    } else if (d.t === "molotov") {
+      // Alev halısı (d.rem: maç ortasında katılana kalan süre)
+      const w = WEAPONS.molotov;
+      this.effects.fire(_tmp, w.RADIUS, (d.rem ?? w.DURATION) / 1000);
+      if (!d.rem) this.sfx.fireBurst(Math.max(0.05, 1 - dist / 50));
+    } else if (d.t === "he" || d.t === "mine" || d.t === "bazooka") {
       this.effects.explosion(_tmp);
       this.sfx.explosion(Math.max(0.05, 1 - dist / 70));
       if (dist < 14) this.shake = Math.max(this.shake, 0.5 * (1 - dist / 14));
     } else {
       const w = WEAPONS[d.t] ?? WEAPONS.smoke;
-      this.effects.smoke(_tmp, w.RADIUS, w.DURATION / 1000, d.t === "poison");
-      this.sfx.smokePop(Math.max(0.05, 1 - dist / 50));
+      this.effects.smoke(_tmp, w.RADIUS, (d.rem ?? w.DURATION) / 1000, d.t === "poison");
+      if (!d.rem) this.sfx.smokePop(Math.max(0.05, 1 - dist / 50));
     }
   }
 
@@ -522,6 +572,7 @@ export class Game {
     this.world.load(info.map);
     this.solids = solidsOf(this.world.id);
     this.local.traction = this.world.map.traction ?? 1;
+    this.local.gravity = this.world.map.gravity ?? 1;
     this.local.pads = this.world.map.pads ?? [];
     this.local.onPad = () => this.sfx.boing();
     this.active = true;
@@ -659,8 +710,14 @@ export class Game {
       return;
     }
 
-    if (this.weapon.current === "awp") this.sfx.awp(1);
-    else this.sfx.shot(1);
+    this.sfx[w.ROCKET ? "rocket" : SHOT_SOUND[w.id] ?? "shot"](1);
+    const l = this.local;
+    const rk = this.weapon.aiming ? 0.7 : 1;
+    const recoil = () => {
+      l.pitch += w.RECOIL * rk * (0.6 + Math.random() * 0.4);
+      l.yaw += (Math.random() - 0.5) * w.RECOIL * 0.6 * rk;
+      l.clampPitch();
+    };
 
     const a = Math.random() * Math.PI * 2;
     const r = Math.sqrt(Math.random()) * spread;
@@ -670,6 +727,36 @@ export class Game {
       .addScaledVector(_up, Math.sin(a) * r)
       .normalize();
 
+    if (w.ROCKET) {
+      // Roketi sunucu oluşturur ve herkese (bize de) yollar
+      this.net.emit(MSG.SHOOT, { d: [r3(_dir.x), r3(_dir.y), r3(_dir.z)] });
+      return recoil();
+    }
+    if (w.PELLETS) {
+      // Pompalı: saçma yönlerini biz üretip yollarız; sunucu kontrol eder
+      const ds = [];
+      const base = _dir.clone();
+      const right = new THREE.Vector3().crossVectors(base, _yAxis);
+      if (right.lengthSq() < 1e-4) right.copy(_right); // tam yukarı / aşağı bakarken
+      right.normalize();
+      const up = new THREE.Vector3().crossVectors(right, base).normalize();
+      for (let i = 0; i < w.PELLETS; i++) {
+        const pa = Math.random() * Math.PI * 2;
+        const pr = Math.sqrt(Math.random()) * w.PELLET_SPREAD;
+        _dir.copy(base).addScaledVector(right, Math.cos(pa) * pr).addScaledVector(up, Math.sin(pa) * pr).normalize();
+        ds.push([r3(_dir.x), r3(_dir.y), r3(_dir.z)]);
+        this.shotVisual(w, i < 5);
+      }
+      this.net.emit(MSG.SHOOT, { d: [r3(base.x), r3(base.y), r3(base.z)], ds });
+      return recoil();
+    }
+    this.shotVisual(w, true);
+    this.net.emit(MSG.SHOOT, { d: [r3(_dir.x), r3(_dir.y), r3(_dir.z)] });
+    recoil();
+  }
+
+  /** Yerel atış görseli (_dir yönünde): duvar isabeti + iz. Oyuncu isabetini sunucu söyler. */
+  shotVisual(w, tracer) {
     // Yerel görsel: duvar isabeti (oyuncu isabetini sunucu söyler)
     const hit = this.physics.raycast(_eye, _dir, w.RANGE, this.local.collider);
     let dist = hit ? hit.distance : w.RANGE;
@@ -690,16 +777,7 @@ export class Game {
       .addScaledVector(_right, 0.16 * this.weapon.side)
       .addScaledVector(_up, -0.14)
       .addScaledVector(_fwd, 0.5);
-    this.effects.tracer(_from, _end);
-
-    this.net.emit(MSG.SHOOT, { d: [r3(_dir.x), r3(_dir.y), r3(_dir.z)] });
-
-    // Geri tepme
-    const l = this.local;
-    const rk = this.weapon.aiming ? 0.7 : 1;
-    l.pitch += w.RECOIL * rk * (0.6 + Math.random() * 0.4);
-    l.yaw += (Math.random() - 0.5) * w.RECOIL * 0.6 * rk;
-    l.clampPitch();
+    if (tracer) this.effects.tracer(_from, _end);
   }
 
   get charge() {
@@ -990,8 +1068,12 @@ export class Game {
       const target = Math.floor((now - g.born) / 1000 / (1 / 60));
       let n = 0;
       while (g.steps < target && n++ < 600) {
-        stepGrenade(g.sim, this.solids);
         g.steps++;
+        if (g.rocket) {
+          stepRocket(g.sim, this.solids);
+          continue;
+        }
+        stepGrenade(g.sim, this.solids);
         // Sekme sesi: dikey hız yön değiştirdiyse
         if (g.lastVy < -2 && g.sim.v[1] > 0) {
           _tmp.set(g.sim.p[0], g.sim.p[1], g.sim.p[2]);
@@ -1002,9 +1084,17 @@ export class Game {
         g.lastVy = g.sim.v[1];
       }
       g.mesh.position.set(g.sim.p[0], g.sim.p[1], g.sim.p[2]);
-      g.mesh.rotation.x += Math.hypot(g.sim.v[0], g.sim.v[2]) * 0.05;
+      if (g.rocket) {
+        // Roket arkasında duman izi bırakır
+        if (g.sim.v[0] || g.sim.v[1] || g.sim.v[2]) this.effects.trail(g.mesh.position);
+      } else if (g.mine) {
+        // Mayın yere düz oturur; kurulduktan sonra lamba yanıp söner
+        g.mesh.position.y -= 0.05;
+        const armed = now - g.born > WEAPONS.mine.ARM;
+        g.lamp.material = armed && Math.floor(now / 450) % 2 === 0 ? MINE_LAMP_ON : MINE_LAMP_OFF;
+      } else g.mesh.rotation.x += Math.hypot(g.sim.v[0], g.sim.v[2]) * 0.05;
       // Sunucudan BOOM gelmezse (kopma vb.) temizle
-      if (now - g.born > 6000) {
+      if (now - g.born > (g.mine ? WEAPONS.mine.LIFETIME + 3000 : g.rocket ? WEAPONS.bazooka.LIFETIME + 1000 : 6000)) {
         this.scene.remove(g.mesh);
         this.grenades.delete(gid);
       }

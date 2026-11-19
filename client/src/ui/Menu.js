@@ -1,5 +1,5 @@
 import { MSG } from '@comic-strike/shared/protocol.js';
-import { TEAM_INFO, CHARACTERS, CHARACTER_IDS, WEAPONS, LOADOUT_OPTIONS, cleanLoadout, MODES, MODE_IDS, LIMITS } from '@comic-strike/shared/constants.js';
+import { TEAM_INFO, CHARACTERS, CHARACTER_IDS, WEAPONS, LOADOUT_OPTIONS, cleanLoadout, MODES, MODE_IDS, LIMITS, DAMAGE_ZONE } from '@comic-strike/shared/constants.js';
 import { MAPS, MAP_IDS } from '@comic-strike/shared/maps.js';
 import { saveSettings } from './settings.js';
 import { drawSpray } from '../fx/Sprays.js';
@@ -122,9 +122,13 @@ export class Menu {
         const desc = document.createElement('span');
         desc.textContent = w.DESC ?? '';
         const stats = document.createElement('i');
-        stats.textContent = w.kind === 'gun'
+        stats.textContent = w.ROCKET ? `PATLAMA ${w.DAMAGE} · ${w.RADIUS} m · ${w.MAG_SIZE}+${w.RESERVE} ROKET`
+          : w.PELLETS ? `${w.PELLETS}×${w.DAMAGE} SAÇMA · ŞARJÖR ${w.MAG_SIZE}+${w.RESERVE}`
+          : w.kind === 'gun'
           ? `HASAR ${w.DAMAGE} · ŞARJÖR ${w.MAG_SIZE}+${w.RESERVE} · ${Math.round(60000 / w.FIRE_INTERVAL)} RPM`
           : w.id === 'he' ? `HASAR ${w.DAMAGE} · ${w.RADIUS} m`
+            : w.id === 'mine' ? `HASAR ${w.DAMAGE} · ${w.COUNT} ADET`
+            : w.id === 'molotov' ? `${(w.DAMAGE_TICK * 1000) / w.TICK} HASAR/sn · ${w.DURATION / 1000} sn alev`
             : w.id === 'poison' ? `${(w.DAMAGE_TICK * 1000) / w.TICK} HASAR/sn · ${w.DURATION / 1000} sn` : `${w.DURATION / 1000} sn sis`;
         b.append(name, desc, stats);
         b.addEventListener('click', () => {
@@ -147,9 +151,15 @@ export class Menu {
     this.preview.show(id);
     $('lo-name').textContent = w.NAME;
     $('lo-desc').textContent = w.DESC ?? '';
-    $('lo-stats').textContent = w.kind === 'gun'
-      ? `HASAR ${w.DAMAGE} · KAFA x${w.HEADSHOT_MULT} · ŞARJÖR ${w.MAG_SIZE} · YEDEK ${w.RESERVE} · ${Math.round(60000 / w.FIRE_INTERVAL)} RPM`
+    $('lo-stats').textContent = w.ROCKET
+      ? `Roket çarptığı yerde patlar · ${w.DAMAGE} HASAR · ETKİ ALANI ${w.RADIUS} m · ŞARJÖR ${w.MAG_SIZE} · YEDEK ${w.RESERVE} · kendine de zarar verir`
+      : w.PELLETS
+      ? `${w.PELLETS} saçma × ${w.DAMAGE} HASAR (yakında en fazla ${w.PELLETS * w.DAMAGE}) · ${w.FALLOFF[0]} m'den sonra hasar düşer · ŞARJÖR ${w.MAG_SIZE} · YEDEK ${w.RESERVE}`
+      : w.kind === 'gun'
+      ? `HASAR ${w.DAMAGE} · KAFA ${Math.round(w.DAMAGE * w.HEADSHOT_MULT)} · BACAK ${Math.round(w.DAMAGE * DAMAGE_ZONE.LEG)} · ŞARJÖR ${w.MAG_SIZE} · YEDEK ${w.RESERVE} · ${Math.round(60000 / w.FIRE_INTERVAL)} RPM`
       : w.id === 'he' ? `HASAR ${w.DAMAGE} · ETKİ ALANI ${w.RADIUS} m · basılı tut, uzağa at`
+        : w.id === 'molotov' ? `Çarptığı yerde ${w.DURATION / 1000} sn yanan ${w.RADIUS} m'lik alev · içindekiler saniyede ${(w.DAMAGE_TICK * 1000) / w.TICK} can kaybeder (sen de!)`
+        : w.id === 'mine' ? `${w.COUNT} mayın · ${w.ARM / 1000} sn sonra kurulur · rakip ${w.TRIGGER} m yaklaşınca ${w.DAMAGE} hasarla patlar · ${w.LIFETIME / 1000} sn sonra söner`
         : w.id === 'poison' ? `${w.DURATION / 1000} sn zehirli sis · içindekiler saniyede ${(w.DAMAGE_TICK * 1000) / w.TICK} can kaybeder · basılı tut, uzağa at`
           : `${w.DURATION / 1000} sn görüş kapatır · basılı tut, uzağa at`;
   }
@@ -219,9 +229,10 @@ export class Menu {
         box.append(b);
       }
     };
-    this.fillScorePresets = (ctf) =>
-      fill($('limit-score-presets'), ctf ? [1, 3, 5, 7] : [50, 100, 150, 200], 'score', '');
-    this.fillScorePresets(false);
+    // kind: 'flags' (Bayrak Kap) | 'kills' (Ölüm Yarışı) | 'score' (diğerleri)
+    const PRESETS = { flags: [1, 3, 5, 7], kills: [20, 30, 50, 75], score: [50, 100, 150, 200] };
+    this.fillScorePresets = (kind) => fill($('limit-score-presets'), PRESETS[kind] ?? PRESETS.score, 'score', '');
+    this.fillScorePresets('score');
     fill($('limit-time-presets'), [5, 10, 15, 20], 'time', ' dk');
   }
 
@@ -229,7 +240,7 @@ export class Menu {
   changeLimit(key, op) {
     const rs = this.room;
     if (!rs?.limits || rs.hostId !== this.net.id) return;
-    const field = key === 'time' ? 'time' : rs.mode === 'ctf' ? 'flags' : 'score';
+    const field = key === 'time' ? 'time' : rs.mode === 'ctf' ? 'flags' : rs.mode === 'kills' ? 'kills' : 'score';
     const L = LIMITS[field.toUpperCase()];
     let v = rs.limits[field];
     if (op === 'inc') v += L.STEP;
@@ -525,11 +536,14 @@ export class Menu {
       $('btn-restart').classList.add('hidden');
       $('pause-title').textContent = 'GET READY!';
       $('btn-resume').textContent = 'CLICK TO FIGHT';
-      // Maç başında önce silah seçimi
+      // Maç başında önce silah seçimi (silahı sabit haritalarda — sadece AWP — seçim ekranı açılmaz)
       this.net.emit(MSG.SET_LOADOUT, this.settings.loadout);
-      this.openLoadout();
       const force = MAPS[info.map]?.forceLoadout;
       this.forceNote = force?.primary ? `Bu haritada ana silah her zaman ${WEAPONS[force.primary].NAME}.` : '';
+      if (force) {
+        this.show('pause');
+        this.input.unlock();
+      } else this.openLoadout();
       if (this.forceNote) this.msg('loadout-msg', this.forceNote, false);
       document.body.classList.remove('in-menu');
     });
@@ -570,18 +584,19 @@ export class Menu {
     $('mode-hint').textContent = isHost ? 'Oyun modunu seç' : 'Modu host seçer';
     // Maç sonu sınırları
     if (rs.limits) {
-      const ctf = rs.mode === 'ctf';
+      const kind = rs.mode === 'ctf' ? 'flags' : rs.mode === 'kills' ? 'kills' : 'score';
       const editable = isHost && rs.state === 'lobby';
-      const scoreVal = ctf ? rs.limits.flags : rs.limits.score;
-      if (this.limitsCtf !== ctf) {
-        this.limitsCtf = ctf;
-        this.fillScorePresets(ctf);
+      const scoreVal = rs.limits[kind] ?? rs.limits.score;
+      if (this.limitsKind !== kind) {
+        this.limitsKind = kind;
+        this.fillScorePresets(kind);
       }
-      $('limit-score-label').textContent = ctf ? 'BAYRAK SAYISI' : 'BİTİŞ PUANI';
-      $('limit-score-desc').textContent = ctf
+      $('limit-score-label').textContent = { flags: 'BAYRAK SAYISI', kills: 'ÖLDÜRME SAYISI', score: 'BİTİŞ PUANI' }[kind];
+      $('limit-score-desc').textContent = kind === 'flags'
         ? 'Bu kadar bayrak getiren takım kazanır'
+        : kind === 'kills' ? 'Bu kadar rakip öldüren ilk takım kazanır'
         : rs.mode === 'ffa' ? 'Oyuncu puanı · Öldürme +3 · Asist +1 · Ölüm −1' : 'Takım puanı · Öldürme +3 · Asist +1 · Ölüm −1';
-      $('limit-score').textContent = ctf ? `${scoreVal} BAYRAK` : `${scoreVal} PUAN`;
+      $('limit-score').textContent = `${scoreVal} ${{ flags: 'BAYRAK', kills: 'ÖLDÜRME', score: 'PUAN' }[kind]}`;
       $('limit-time').textContent = `${rs.limits.time} DK`;
       for (const b of document.querySelectorAll('#limits-pick button')) b.disabled = !editable;
       for (const b of document.querySelectorAll('#limit-score-presets .preset')) b.classList.toggle('active', Number(b.dataset.value) === scoreVal);

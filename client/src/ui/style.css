@@ -397,7 +397,7 @@ body.pointer-locked .fs-btn { display: none; }
 .map-row { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
 .map-row i { font-style: normal; color: #666; }
 #map-pick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-#mode-pick { grid-template-columns: repeat(3, 1fr) !important; }
+#mode-pick { grid-template-columns: repeat(4, 1fr) !important; }
 .map-card {
   font-family: var(--font); font-size: 18px; letter-spacing: 1px; cursor: pointer; color: var(--ink);
   border: 3px solid var(--ink); border-radius: 8px; padding: 18px 6px; opacity: 0.6;
@@ -522,8 +522,9 @@ body.pointer-locked .fs-btn { display: none; }
 .map-card.map-sniper { background: linear-gradient(180deg, #e7dcc1 55%, #bfa77c 55%, #d8c8a4 70%); }
 .map-card.map-aim { background: linear-gradient(180deg, #e9dfc8 50%, #9e3b2f 50%, #9e3b2f 58%, #d3c8b2 58%); }
 .map-card.map-yard { background: linear-gradient(180deg, #ebe1ca 40%, #5a606b 40%, #5a606b 55%, #ece3cf 55%, #d6c8a8 80%); }
-.map-card.map-giant { background: linear-gradient(180deg, #efe6d2 50%, #8c6845 50%, #8c6845 60%, #b99a72 60%); }
-.map-card small { color: var(--red); text-shadow: none; }
+.map-card.map-giant { background: linear-gradient(180deg, #efe6d2 45%, #b5524a 45%, #b5524a 50%, #d1b25a 50%, #d1b25a 55%, #5f7fa0 55%, #5f7fa0 60%, #b99a72 60%); }
+.map-card.map-station { background: linear-gradient(180deg, #46557e 45%, #58c4d6 45%, #58c4d6 53%, #b8c0cc 53%); }
+.map-card small { color: #4a4038; text-shadow: none; }
 
 #limits-pick { display: flex; align-items: stretch; gap: 10px; }
 .limit-card {

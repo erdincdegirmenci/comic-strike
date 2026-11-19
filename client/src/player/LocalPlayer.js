@@ -36,6 +36,7 @@ export class LocalPlayer {
     this.crouchT = 0; // 0 ayakta, 1 çömelmiş (göz yüksekliği yumuşak geçiş)
     this.speedMult = 1; // elindeki silaha göre (AWP yavaşlatır)
     this.traction = 1; // haritaya göre zemin tutuşu (buz < 1)
+    this.gravity = 1; // haritaya göre yerçekimi çarpanı (uzay istasyonunda düşük)
     this.scoped = false; // AWP dürbünü
     this.aiming = false; // sağ tık nişan (diğer silahlar)
     this.stamina = PLAYER.STAMINA_MAX;
@@ -232,7 +233,7 @@ export class LocalPlayer {
       this.velocity.y = PLAYER.JUMP_VELOCITY;
       this.grounded = false;
     }
-    this.velocity.y -= PLAYER.GRAVITY * dt;
+    this.velocity.y -= PLAYER.GRAVITY * this.gravity * dt;
 
     const wasGrounded = this.grounded;
     const fallSpeed = -this.velocity.y;

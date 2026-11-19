@@ -605,7 +605,7 @@ export class BotBrain {
       p.pos[1] = Math.max(p.pos[1], g);
       this.vy = 0;
     } else {
-      this.vy -= PLAYER.GRAVITY * dt;
+      this.vy -= PLAYER.GRAVITY * (room.map.gravity ?? 1) * dt; // haritaya göre (uzay istasyonunda düşük)
       p.pos[1] = Math.max(g, p.pos[1] + this.vy * dt);
       if (p.pos[1] <= g) this.vy = 0;
     }

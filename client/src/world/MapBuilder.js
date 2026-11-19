@@ -10,6 +10,7 @@ import { toon, addOutline, sketchToon, sketchOutline, sketchSegments } from '../
  */
 export function buildMap(map, scene, physics) {
   const colorGeos = [];
+  const glassGeos = []; // cam: yarı saydam ayrı mesh (fizikte ve isabette yine katı)
   const outlineGeos = [];
   const edgeGeos = [];
   const color = new THREE.Color();
@@ -36,6 +37,12 @@ export function buildMap(map, scene, physics) {
     g.deleteAttribute('uv');
 
     const minDim = Math.min(w, h, d);
+    if (b.glass) {
+      g.translate(cx, cy, cz);
+      glassGeos.push(g);
+      if (b.solid) physics.addBox(cx, cy, cz, w / 2, h / 2, d / 2);
+      continue;
+    }
     if (!huge && h > 0.05) {
       const t = minDim < 0.2 ? 0.01 : 0.024; // ince, yumuşak mürekkep çizgisi
       const og = new THREE.BoxGeometry(w + t * 2, h + t * 2, d + t * 2);
@@ -73,7 +80,16 @@ export function buildMap(map, scene, physics) {
   const edges = new THREE.LineSegments(mergeGeometries(edgeGeos), new THREE.LineBasicMaterial({ color: '#7d6b59' }));
   group.add(edges);
 
-  for (const g of [...colorGeos, ...outlineGeos, ...edgeGeos]) g.dispose();
+  if (glassGeos.length) {
+    const glass = new THREE.Mesh(
+      mergeGeometries(glassGeos),
+      new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide }),
+    );
+    glass.renderOrder = 5;
+    group.add(glass);
+  }
+
+  for (const g of [...colorGeos, ...outlineGeos, ...edgeGeos, ...glassGeos]) g.dispose();
 
   if (map.water) addWater(group, map.water);
   if (map.pads) for (const p of map.pads) addPad(group, p);

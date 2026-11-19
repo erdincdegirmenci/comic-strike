@@ -42,6 +42,7 @@ export function castShot(origin, dir, solids, targets, range) {
   let best = range;
   let player = null;
   let head = false;
+  let leg = false;
 
   for (const b of solids) {
     const t = rayAABB(origin, dir, b.min, b.max, best);
@@ -57,6 +58,7 @@ export function castShot(origin, dir, solids, targets, range) {
       best = th;
       player = p;
       head = true;
+      leg = false;
     }
     const bmin = [pos[0] - HITBOX.BODY_HALF, pos[1], pos[2] - HITBOX.BODY_HALF];
     const bmax = [pos[0] + HITBOX.BODY_HALF, pos[1] + bodyTop, pos[2] + HITBOX.BODY_HALF];
@@ -65,9 +67,12 @@ export function castShot(origin, dir, solids, targets, range) {
       best = tb;
       player = p;
       head = false;
+      // Gövde kutusunun alt kısmı bacak sayılır (daha az hasar)
+      const hy = origin[1] + dir[1] * tb - pos[1];
+      leg = hy < (crouch ? HITBOX.CROUCH_LEG_TOP : HITBOX.LEG_TOP);
     }
   }
 
   const point = [origin[0] + dir[0] * best, origin[1] + dir[1] * best, origin[2] + dir[2] * best];
-  return { player, head, point, distance: best };
+  return { player, head, leg, point, distance: best };
 }

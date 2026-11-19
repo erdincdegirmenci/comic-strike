@@ -1,7 +1,7 @@
 import { TEAM_INFO, WEAPONS, SLOT_OF_CAT, FLAG_STATE, TEAMS } from '@comic-strike/shared/constants.js';
 
 // Silah resmi yoksa (düşme vb.) gösterilecek metin
-const KF_TEXT = { fall: '⤓ DÜŞTÜ' };
+const KF_TEXT = { fall: '⤓ DÜŞTÜ', water: '≈ BOĞULDU' };
 const CHAT_LIFE = 10000; // sohbet satırı bu kadar ms sonra solar
 
 const $ = (id) => document.getElementById(id);
@@ -145,7 +145,8 @@ export class HUD {
     this.set('scores', `${red}|${blue}|${limit}|${mode}`, () => {
       $('score-red').textContent = red;
       $('score-blue').textContent = blue;
-      $('score-limit').textContent = mode === 'ctf' ? `${limit} BAYRAK KAZANIR` : `${limit} PUANDA BİTER`;
+      $('score-limit').textContent =
+        mode === 'ctf' ? `${limit} BAYRAK KAZANIR` : mode === 'kills' ? `${limit} ÖLDÜRMEYE ULAŞAN KAZANIR` : `${limit} PUANDA BİTER`;
     });
   }
 

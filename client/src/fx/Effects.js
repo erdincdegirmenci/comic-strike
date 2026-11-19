@@ -269,6 +269,61 @@ export class Effects {
     this.sprays = new Map(); // oyuncu id -> sticker mesh (her oyuncunun tek sticker'ı olur)
     this.sprayGeo = new THREE.PlaneGeometry(SPRAY.SIZE, SPRAY.SIZE);
     this.smokes = []; // {pos, radius, until}
+    this.fires = []; // molotof alev halıları {pos, radius, until, acc}
+  }
+
+  /** Molotof: süre boyunca yerde yanan alev halısı */
+  fire(pos, radius, seconds) {
+    this.fires.push({ pos: new THREE.Vector3(pos.x, pos.y, pos.z), radius, until: performance.now() + seconds * 1000, acc: 0 });
+    this.scorch(pos, seconds + 4, radius / 1.4);
+    _p.set(pos.x, pos.y + 1.6, pos.z);
+    this.word(_p, 'FWOOSH!', '#ff6d00');
+  }
+
+  /** Roket arkasındaki duman izi */
+  trail(pos) {
+    this.sprite(puffTexture(), pos, 0.35, 0.35, 0.6, { grow: 2, color: '#d8d0c4', order: 9 });
+  }
+
+  /** Yerde yanık izi (life sn, scale yarıçap çarpanı) */
+  scorch(pos, life = 12, scale = 1) {
+    let m = this.scorchPool.pop();
+    if (!m) {
+      m = new THREE.Mesh(this.scorchGeo, new THREE.MeshBasicMaterial({
+        map: inkTexture(), color: '#333', transparent: true, opacity: 0.6, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4,
+      }));
+      m.rotation.x = -Math.PI / 2;
+      this.scene.add(m);
+    }
+    m.visible = true;
+    m.scale.setScalar(scale);
+    m.rotation.z = Math.random() * Math.PI * 2;
+    m.position.set(pos.x, pos.y + 0.02, pos.z);
+    this.items.push({ obj: m, life, max: life, scorch: true, kind: 'scorch' });
+  }
+
+  /** Alev halılarından alev parçacıkları çıkar */
+  updateFires(dt) {
+    const now = performance.now();
+    for (let i = this.fires.length - 1; i >= 0; i--) {
+      const f = this.fires[i];
+      const left = (f.until - now) / 1000;
+      if (left <= 0) {
+        this.fires.splice(i, 1);
+        continue;
+      }
+      // Sona doğru alev seyrekleşir
+      f.acc += dt * f.radius * f.radius * 3.2 * Math.min(1, left / 1.5);
+      while (f.acc >= 1) {
+        f.acc -= 1;
+        const a = Math.random() * Math.PI * 2;
+        const d = Math.sqrt(Math.random()) * f.radius;
+        _p.set(f.pos.x + Math.cos(a) * d, f.pos.y + 0.25, f.pos.z + Math.sin(a) * d);
+        const size = 0.7 + Math.random() * 0.7;
+        const vel = new THREE.Vector3((Math.random() - 0.5) * 0.4, 1.2 + Math.random() * 1.2, (Math.random() - 0.5) * 0.4);
+        this.sprite(Math.random() < 0.8 ? fireTexture() : puffTexture(), _p, size, size, 0.45 + Math.random() * 0.35, { grow: 0.6, vel, order: 9 });
+      }
+    }
   }
 
   /** Havuzdan bir sprite al (yoksa oluştur) */
@@ -348,18 +403,7 @@ export class Effects {
     _p.set(pos.x, pos.y + 2.4, pos.z);
     this.word(_p, 'KABOOM!', '#ff6d00');
     // Yerde yanık izi
-    let m = this.scorchPool.pop();
-    if (!m) {
-      m = new THREE.Mesh(this.scorchGeo, new THREE.MeshBasicMaterial({
-        map: inkTexture(), color: '#333', transparent: true, opacity: 0.6, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4,
-      }));
-      m.rotation.x = -Math.PI / 2;
-      this.scene.add(m);
-    }
-    m.visible = true;
-    m.rotation.z = Math.random() * Math.PI * 2;
-    m.position.set(pos.x, pos.y + 0.02, pos.z);
-    this.items.push({ obj: m, life: 12, max: 12, scorch: true, kind: 'scorch' });
+    this.scorch(pos);
   }
 
   /** Sis bombası: süre boyunca görüşü kapatan bulut. poison=true ise yeşil zehir bulutu */
@@ -493,6 +537,7 @@ export class Effects {
   }
 
   update(dt) {
+    this.updateFires(dt);
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.items[i];
       it.life -= dt;
@@ -552,6 +597,7 @@ export class Effects {
     for (const it of this.items) this.release(it);
     this.items.length = 0;
     this.smokes.length = 0;
+    this.fires.length = 0;
     for (const m of this.sprays.values()) {
       this.scene.remove(m);
       m.material.dispose();

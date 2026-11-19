@@ -3,15 +3,16 @@
 // Kırmızı takım -Z, mavi takım +Z tarafında; haritalar Z=0'a göre aynalanır.
 import { CITY_ARENA } from "./map.js";
 import { addTunnel, carve, tunnelExits } from "./tunnel.js";
-import { sniperDuel, aimArena, courtyard, giantRoom } from "./funmaps.js";
+import { sniperDuel, aimArena, courtyard, spaceStation } from "./funmaps.js";
+import { toyRoom } from "./toyroom.js";
 
 /** Kutu ekleme yardımcıları ve hazır yapılar (kulübe, merdiven, duvar). */
 function builder(defaults = {}) {
   const boxes = [];
   const pads = [];
   const MIRROR = defaults.mirror ?? true; // takım haritaları Z=0'a göre aynalanır; Herkes Tek haritası aynalanmaz
-  const add = (min, max, color, solid) =>
-    boxes.push({ min, max, color, solid });
+  const add = (min, max, color, solid, glass) =>
+    boxes.push(glass ? { min, max, color, solid, glass: true } : { min, max, color, solid });
   /** cx/cz merkez, w (X), d (Z), h yükseklik, o.y taban; o.mirror=false ise aynalanmaz */
   const box = (cx, cz, w, d, h, color, o = {}) => {
     const y = o.y ?? 0;
@@ -21,6 +22,7 @@ function builder(defaults = {}) {
       [cx + w / 2, y + h, cz + d / 2],
       color,
       solid,
+      o.glass,
     );
     if (o.mirror ?? MIRROR)
       add(
@@ -28,6 +30,7 @@ function builder(defaults = {}) {
         [cx + w / 2, y + h, -cz + d / 2],
         o.mirrorColor ?? color,
         solid,
+        o.glass,
       );
   };
   /** İki köşesiyle verilen kutu */
@@ -535,7 +538,7 @@ function poolParty() {
 
   return {
     id: "pool",
-    name: "POOL PARTY",
+    name: "HAVUZ PARTİSİ",
     boxes,
     pads,
     spawns: spawnsFrom([
@@ -797,7 +800,7 @@ function frostArena() {
 
   return {
     id: "frost",
-    name: "FROST ARENA",
+    name: "BUZ ARENASI",
     boxes,
     pads,
     spawns: spawnsFrom([
@@ -1267,7 +1270,7 @@ export const MAPS = {
     sky: "#8ecae6",
     flags: flagsFrom(0, -40.4),
     ...CITY_ARENA,
-    name: "CITY ARENA",
+    name: "ŞEHİR ARENASI",
   },
   pool: poolParty(),
   frost: frostArena(),
@@ -1276,7 +1279,8 @@ export const MAPS = {
   sniper: sniperDuel(builder),
   aim: aimArena(builder),
   yard: courtyard(builder),
-  giant: giantRoom(builder),
+  station: spaceStation(builder),
+  giant: toyRoom(builder), // sadece Herkes Tek (shared/toyroom.js)
 };
 export const MAP_IDS = Object.keys(MAPS);
 export const DEFAULT_MAP = "city";

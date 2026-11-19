@@ -22,7 +22,7 @@ const G = {
   crest: new THREE.BoxGeometry(0.07, 0.12, 0.32),
   shadow: new THREE.CircleGeometry(0.42, 20),
 };
-const NADE_COLOR = { he: '#52b788', smoke: '#adb5bd', poison: '#7cb518' };
+const NADE_COLOR = { he: '#52b788', smoke: '#adb5bd', poison: '#7cb518', mine: '#4a4e3a', molotov: '#9c6644' };
 const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false });
 
 function lerpAngle(a, b, k) {
@@ -169,7 +169,13 @@ export class RemotePlayer {
     const lmg = simple(0.75, '#5c6b3a', -0.97, -0.12, 0.11);
     const popper = simple(0.2, '#3d405b', -0.42, -0.08, 0.06);
     const cannon = simple(0.26, '#c0c6cf', -0.48, -0.08, 0.07);
-    this.guns = { rifle, awp, knife, he: nade, smoke: nade, poison: nade, carbine, smg, lmg, popper, cannon };
+    const revolver = simple(0.26, '#8a5a3b', -0.48, -0.08, 0.06);
+    const shotgun = simple(0.66, '#5a4030', -0.88, -0.12, 0.09);
+    const bazooka = simple(0.95, '#5c6b3a', -1.17, -0.04, 0.14);
+    this.guns = {
+      rifle, awp, knife, he: nade, smoke: nade, poison: nade, mine: nade, molotov: nade,
+      carbine, smg, lmg, popper, cannon, revolver, shotgun, bazooka,
+    };
     rifle.visible = true;
     this.gunTip = rifle.tip;
     this.arms.add(armR, armL);

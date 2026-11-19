@@ -531,7 +531,7 @@ const RED_SPAWNS = [
 ];
 
 export const CITY_ARENA = {
-  name: "City Arena",
+  name: "Şehir Arenası",
   boxes,
   pads,
   botExits: TUNNELS.flatMap(tunnelExits), // tünele düşen bot en yakın merdivenden çıksın
