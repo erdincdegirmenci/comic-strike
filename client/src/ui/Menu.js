@@ -1,5 +1,5 @@
 import { MSG } from '@comic-strike/shared/protocol.js';
-import { TEAM_INFO, CHARACTERS, CHARACTER_IDS, WEAPONS, LOADOUT_OPTIONS, cleanLoadout, MODES, MODE_IDS } from '@comic-strike/shared/constants.js';
+import { TEAM_INFO, CHARACTERS, CHARACTER_IDS, WEAPONS, LOADOUT_OPTIONS, cleanLoadout, MODES, MODE_IDS, LIMITS } from '@comic-strike/shared/constants.js';
 import { MAPS, MAP_IDS } from '@comic-strike/shared/maps.js';
 import { saveSettings } from './settings.js';
 import { drawSpray } from '../fx/Sprays.js';
@@ -16,10 +16,11 @@ const CONTROLS = [
   ['ATEŞ / BOMBA AT', '', 'LEFT MOUSE BUTTON'], ['NİŞAN AL / DÜRBÜN / AĞIR BIÇAK', '', 'RIGHT MOUSE BUTTON'],
   ['ŞARJÖR DEĞİŞTİR', 'R', ''],
   ['ANA SİLAH', '1', ''], ['TABANCA', '2', ''], ['BIÇAK', '3', ''], ['BOMBA', '4', ''],
-  ['ÖNCEKİ SİLAH', 'Q', 'MOUSE WHEEL UP'], ['SONRAKİ SİLAH', '', 'MOUSE WHEEL DOWN'],
+  ['SON İKİ SİLAH ARASINDA GEÇİŞ', 'Q', ''], ['ÖNCEKİ / SONRAKİ SİLAH', '', 'MOUSE WHEEL'],
   ['SİLAH SEÇİMİ', 'B', ''],
   ['DİĞER'],
-  ['STICKER YAPIŞTIR', 'T', ''], ['TAKIMA İŞARET', 'E', 'MIDDLE MOUSE BUTTON'], ['SKOR TABLOSU', 'TAB', ''], ['MENÜ / DURAKLAT', 'ESC', ''],
+  ['STICKER YAPIŞTIR', 'T', ''], ['TAKIMA İŞARET', 'E', 'MIDDLE MOUSE BUTTON'], ['SKOR TABLOSU', 'TAB', ''],
+  ['SOHBET (HERKESE)', 'ENTER', ''], ['TAKIM SOHBETİ', 'Y', ''], ['OYLAMA: EVET / HAYIR', 'F1 / F2', ''], ['MENÜ / DURAKLAT', 'ESC', ''],
 ];
 
 /**
@@ -64,12 +65,24 @@ export class Menu {
     this.buildCharacters();
     this.buildModes();
     this.buildMaps();
+    this.buildLimits();
+    this.createOpts = { locked: false, ff: false };
+    this.bindBotDrag();
+    this.refreshRooms();
+    setInterval(() => this.refreshRooms(), 3000);
+    $('inp-pass').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') this.action('create-confirm');
+    });
+    $('inp-join-pass').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') this.action('join-confirm');
+    });
     this.buildControls();
     this.preview = new WeaponPreview($('lo-canvas'));
     this.buildLoadout();
     this.game.onBuyMenu = () => this.openLoadout();
     this.game.onLoadout = (d) => {
-      this.msg('loadout-msg', d.now ? 'Silahların eline verildi!' : 'Seçimin bir sonraki doğuşta geçerli olacak.', false);
+      const base = d.now ? 'Silahların eline verildi!' : 'Seçimin bir sonraki doğuşta geçerli olacak.';
+      this.msg('loadout-msg', this.forceNote ? `${base} ${this.forceNote}` : base, false);
     };
   }
 
@@ -182,13 +195,48 @@ export class Menu {
       b.dataset.action = `map-${id}`;
       b.dataset.map = id;
       b.textContent = MAPS[id].name;
-      if (MAPS[id].ffaOnly) {
+      const note = MAPS[id].ffaOnly ? 'SADECE HERKES TEK' : MAPS[id].desc;
+      if (note) {
         const tag = document.createElement('small');
-        tag.textContent = 'SADECE HERKES TEK';
+        tag.textContent = note;
         b.append(tag);
       }
       box.append(b);
     }
+  }
+
+  /** Maç sonu sınırları: hazır değer düğmeleri (puan / bayrak / dakika) */
+  buildLimits() {
+    const fill = (box, values, key, unit) => {
+      box.replaceChildren();
+      for (const v of values) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'preset';
+        b.dataset.action = `limit-${key}-${v}`;
+        b.dataset.value = v;
+        b.textContent = `${v}${unit}`;
+        box.append(b);
+      }
+    };
+    this.fillScorePresets = (ctf) =>
+      fill($('limit-score-presets'), ctf ? [1, 3, 5, 7] : [50, 100, 150, 200], 'score', '');
+    this.fillScorePresets(false);
+    fill($('limit-time-presets'), [5, 10, 15, 20], 'time', ' dk');
+  }
+
+  /** key: 'score' | 'time', op: 'inc' | 'dec' | sayı */
+  changeLimit(key, op) {
+    const rs = this.room;
+    if (!rs?.limits || rs.hostId !== this.net.id) return;
+    const field = key === 'time' ? 'time' : rs.mode === 'ctf' ? 'flags' : 'score';
+    const L = LIMITS[field.toUpperCase()];
+    let v = rs.limits[field];
+    if (op === 'inc') v += L.STEP;
+    else if (op === 'dec') v -= L.STEP;
+    else v = Number(op);
+    v = Math.max(L.MIN, Math.min(L.MAX, v));
+    this.net.emit(MSG.SET_LIMITS, { [field]: v });
   }
 
   /** Karakter seçimi: her karakterin sticker'ı önizleme olarak gösterilir */
@@ -218,6 +266,7 @@ export class Menu {
 
   show(name) {
     if (name !== 'loadout') this.preview?.stop();
+    if (name === 'main' && this.current !== 'main') setTimeout(() => this.refreshRooms(), 0);
     for (const s of document.querySelectorAll('.screen')) s.classList.toggle('hidden', s.id !== `screen-${name}`);
     this.current = name;
     document.body.classList.toggle('in-menu', !this.game.active);
@@ -253,7 +302,32 @@ export class Menu {
       case 'play':
         return this.request(MSG.QUICK_PLAY, { name: this.playerName(), char: this.settings.char, loadout: this.settings.loadout }, 'main-msg');
       case 'create':
-        return this.request(MSG.CREATE_ROOM, { name: this.playerName(), char: this.settings.char, loadout: this.settings.loadout }, 'main-msg');
+        this.playerName();
+        this.show('create');
+        this.msg('create-msg', '', false);
+        return;
+      case 'vis-public':
+      case 'vis-locked':
+        this.createOpts.locked = a === 'vis-locked';
+        return this.renderCreate();
+      case 'ff-on':
+      case 'ff-off':
+        this.createOpts.ff = a === 'ff-on';
+        return this.renderCreate();
+      case 'create-confirm': {
+        const password = $('inp-pass').value.trim();
+        if (this.createOpts.locked && !password) return this.msg('create-msg', 'Şifreli oda için bir şifre yaz.');
+        return this.request(
+          MSG.CREATE_ROOM,
+          { name: this.settings.name, char: this.settings.char, loadout: this.settings.loadout, ...this.createOpts, password },
+          'create-msg',
+        );
+      }
+      case 'restart-vote':
+        this.net.emit(MSG.RESTART_REQUEST);
+        return this.resume();
+      case 'ff-toggle':
+        return this.net.emit(MSG.SET_FF, !this.room?.ff);
       case 'join':
         this.playerName();
         this.show('join');
@@ -262,7 +336,7 @@ export class Menu {
       case 'join-confirm': {
         const code = $('inp-code').value.trim().toUpperCase();
         if (code.length < 4) return this.msg('join-msg', 'Oda kodunu gir.');
-        return this.request(MSG.JOIN_ROOM, { name: this.settings.name, char: this.settings.char, loadout: this.settings.loadout, code }, 'join-msg');
+        return this.joinRoom(code, $('inp-join-pass').value, 'join-msg');
       }
       case 'settings':
         this.settingsBack = this.current;
@@ -312,8 +386,104 @@ export class Menu {
         return this.input.toggleFullscreen();
       }
       default:
-        if (a.startsWith('map-')) this.net.emit(MSG.SET_MAP, a.slice(4));
+        if (a.startsWith('limit-')) {
+          const [, key, op] = a.split('-');
+          this.changeLimit(key, op);
+        } else if (a.startsWith('map-')) this.net.emit(MSG.SET_MAP, a.slice(4));
         else if (a.startsWith('mode-')) this.net.emit(MSG.SET_MODE, a.slice(5));
+    }
+  }
+
+  /** Odaya gir; şifre gerekiyorsa katılma ekranında şifre alanını aç */
+  async joinRoom(code, password, msgId) {
+    if (this.busy) return;
+    this.busy = true;
+    this.msg(msgId, 'Bağlanıyor...', false);
+    const res = await this.net.request(MSG.JOIN_ROOM, {
+      name: this.playerName(), char: this.settings.char, loadout: this.settings.loadout, code, password,
+    });
+    this.busy = false;
+    if (res?.ok) return this.msg(msgId, '', false);
+    if (res?.needPassword && this.current !== 'join') {
+      this.show('join');
+      $('inp-code').value = code;
+      $('inp-join-pass').value = '';
+      this.msg('join-msg', res.error);
+      return $('inp-join-pass').focus();
+    }
+    this.msg(msgId, res?.error ?? 'Bir hata oluştu.');
+  }
+
+  renderCreate() {
+    const o = this.createOpts;
+    $('vis-public').classList.toggle('active', !o.locked);
+    $('vis-locked').classList.toggle('active', o.locked);
+    $('pass-field').classList.toggle('hidden', !o.locked);
+    $('ff-off').classList.toggle('active', !o.ff);
+    $('ff-on').classList.toggle('active', o.ff);
+    if (o.locked) $('inp-pass').focus();
+  }
+
+  /** Ana menüdeki açık oda listesi (menü açıkken birkaç saniyede bir yenilenir) */
+  async refreshRooms() {
+    if (this.current !== 'main' || !this.net.connected) return;
+    const list = await this.net.request(MSG.LIST_ROOMS, null, 3000);
+    const box = $('room-list');
+    box.replaceChildren();
+    if (!Array.isArray(list) || !list.length) {
+      const empty = document.createElement('p');
+      empty.className = 'rooms-empty';
+      empty.textContent = 'Şu an açık oda yok. CREATE ROOM ile sen kur!';
+      box.append(empty);
+      return;
+    }
+    list.sort((a, b) => (a.state === 'lobby' ? 0 : 1) - (b.state === 'lobby' ? 0 : 1) || b.humans - a.humans);
+    for (const r of list) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = `room-row${r.players >= r.max ? ' full' : ''}`;
+      b.disabled = r.players >= r.max;
+      const name = document.createElement('b');
+      name.textContent = `${r.locked ? '🔒 ' : ''}${r.ff ? '⚔ ' : ''}${r.name}`;
+      const info = document.createElement('span');
+      info.textContent = `${MODES[r.mode]?.name ?? r.mode} · ${MAPS[r.map]?.name ?? r.map}`;
+      const right = document.createElement('i');
+      right.textContent = `${r.players}/${r.max} · ${r.state === 'lobby' ? 'LOBİDE' : 'MAÇTA'}`;
+      b.append(name, info, right);
+      b.addEventListener('click', () => {
+        this.sfx.ensure();
+        if (r.locked) {
+          this.playerName();
+          this.show('join');
+          $('inp-code').value = r.code;
+          $('inp-join-pass').value = '';
+          this.msg('join-msg', 'Bu oda şifreli. Şifreyi yaz.', false);
+          $('inp-join-pass').focus();
+        } else this.joinRoom(r.code, '', 'main-msg');
+      });
+      box.append(b);
+    }
+  }
+
+  /** Lobide botları sürükle-bırak ile takım değiştirme (sadece host) */
+  bindBotDrag() {
+    for (const team of ['red', 'blue']) {
+      const zone = document.querySelector(`#screen-lobby .team.${team}`);
+      zone.addEventListener('dragover', (e) => {
+        if (!this.dragBot) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        zone.classList.add('drop');
+      });
+      zone.addEventListener('dragleave', (e) => {
+        if (!zone.contains(e.relatedTarget)) zone.classList.remove('drop');
+      });
+      zone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        zone.classList.remove('drop');
+        if (this.dragBot) this.net.emit(MSG.MOVE_BOT, { id: this.dragBot, team });
+        this.dragBot = null;
+      });
     }
   }
 
@@ -329,6 +499,7 @@ export class Menu {
     else if (this.game.state !== 'ended' && !['settings', 'controls', 'loadout'].includes(this.current)) {
       $('pause-title').textContent = 'PAUSED';
       $('btn-resume').textContent = 'RESUME';
+      $('btn-restart').classList.toggle('hidden', this.room?.hostId !== this.net.id);
       this.show('pause');
     }
   }
@@ -343,7 +514,7 @@ export class Menu {
           this.game.stop();
           this.show('lobby');
         } else this.game.syncRoster(rs.players);
-      } else if (['main', 'join', 'lobby'].includes(this.current)) {
+      } else if (['main', 'join', 'create', 'lobby'].includes(this.current)) {
         this.show('lobby');
       }
       this.renderLobby();
@@ -351,11 +522,15 @@ export class Menu {
 
     this.net.on(MSG.MATCH_START, (info) => {
       this.game.start(info, this.net.id);
+      $('btn-restart').classList.add('hidden');
       $('pause-title').textContent = 'GET READY!';
       $('btn-resume').textContent = 'CLICK TO FIGHT';
       // Maç başında önce silah seçimi
       this.net.emit(MSG.SET_LOADOUT, this.settings.loadout);
       this.openLoadout();
+      const force = MAPS[info.map]?.forceLoadout;
+      this.forceNote = force?.primary ? `Bu haritada ana silah her zaman ${WEAPONS[force.primary].NAME}.` : '';
+      if (this.forceNote) this.msg('loadout-msg', this.forceNote, false);
       document.body.classList.remove('in-menu');
     });
 
@@ -393,8 +568,33 @@ export class Menu {
       b.disabled = !isHost || rs.state !== 'lobby';
     }
     $('mode-hint').textContent = isHost ? 'Oyun modunu seç' : 'Modu host seçer';
+    // Maç sonu sınırları
+    if (rs.limits) {
+      const ctf = rs.mode === 'ctf';
+      const editable = isHost && rs.state === 'lobby';
+      const scoreVal = ctf ? rs.limits.flags : rs.limits.score;
+      if (this.limitsCtf !== ctf) {
+        this.limitsCtf = ctf;
+        this.fillScorePresets(ctf);
+      }
+      $('limit-score-label').textContent = ctf ? 'BAYRAK SAYISI' : 'BİTİŞ PUANI';
+      $('limit-score-desc').textContent = ctf
+        ? 'Bu kadar bayrak getiren takım kazanır'
+        : rs.mode === 'ffa' ? 'Oyuncu puanı · Öldürme +3 · Asist +1 · Ölüm −1' : 'Takım puanı · Öldürme +3 · Asist +1 · Ölüm −1';
+      $('limit-score').textContent = ctf ? `${scoreVal} BAYRAK` : `${scoreVal} PUAN`;
+      $('limit-time').textContent = `${rs.limits.time} DK`;
+      for (const b of document.querySelectorAll('#limits-pick button')) b.disabled = !editable;
+      for (const b of document.querySelectorAll('#limit-score-presets .preset')) b.classList.toggle('active', Number(b.dataset.value) === scoreVal);
+      for (const b of document.querySelectorAll('#limit-time-presets .preset')) b.classList.toggle('active', Number(b.dataset.value) === rs.limits.time);
+      $('limits-hint').textContent = isHost ? 'Puan ya da süre — hangisi önce gelirse' : 'Sınırları host seçer';
+    }
     if (!this.game.active && rs.map) this.game.world.load(rs.map);
-    $('lobby-type').textContent = rs.isPublic ? 'PUBLIC ROOM' : 'PRIVATE ROOM';
+    $('lobby-type').textContent = rs.locked ? '🔒 ŞİFRELİ ODA' : '🌐 HERKESE AÇIK ODA';
+    // Takım ateşi (host lobide değiştirebilir)
+    const ffBtn = $('btn-ff');
+    ffBtn.textContent = rs.ff ? '⚔ AÇIK' : 'KAPALI';
+    ffBtn.classList.toggle('active', !!rs.ff);
+    ffBtn.disabled = !isHost || rs.state !== 'lobby';
     // Herkes Tek: takım yok, herkes tek listede
     const ffa = rs.mode === 'ffa';
     document.querySelector('#screen-lobby .teams').classList.toggle('ffa', ffa);
@@ -406,6 +606,22 @@ export class Menu {
       for (const p of members) {
         const li = document.createElement('li');
         if (p.id === myId) li.classList.add('me');
+        // Host botları sürükleyip diğer takıma bırakabilir
+        if (p.bot && isHost && !ffa && rs.state === 'lobby') {
+          li.draggable = true;
+          li.classList.add('draggable');
+          li.addEventListener('dragstart', (e) => {
+            this.dragBot = p.id;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', p.id);
+            li.classList.add('dragging');
+          });
+          li.addEventListener('dragend', () => {
+            this.dragBot = null;
+            li.classList.remove('dragging');
+            for (const z of document.querySelectorAll('#screen-lobby .team')) z.classList.remove('drop');
+          });
+        }
         const name = document.createElement('span');
         name.textContent = (p.id === rs.hostId ? '★ ' : p.bot ? '🤖 ' : '') + p.name;
         const status = document.createElement('span');

@@ -1,11 +1,12 @@
 /* COMIC STRIKE WEB — çizgi roman arayüzü */
 :root {
-  --ink: #141414;
-  --paper: #fffdf4;
-  --yellow: #ffd23f;
-  --red: #e63946;
-  --blue: #2a6fdb;
-  --green: #2a9d4b;
+  /* Mürekkep resim paleti: sıcak kahverengi mürekkep, eski kâğıt, soluk boyalar */
+  --ink: #2f2721;
+  --paper: #f6efdd;
+  --yellow: #e2b65a;
+  --red: #b8473b;
+  --blue: #3e6c9c;
+  --green: #5f8f55;
   --font: 'Bangers', Impact, 'Arial Black', sans-serif;
 }
 
@@ -24,6 +25,9 @@ body { font-family: var(--font); color: var(--ink); letter-spacing: 1px; user-se
     radial-gradient(rgba(20, 20, 20, 0.12) 1px, transparent 1.3px) 0 0 / 5px 5px;
   mix-blend-mode: multiply;
 }
+/* Oyunda kâğıt dokusu + vinyet WebGL içinde çiziliyor (Renderer PaperOverlay); CSS karışım katmanı
+   her karede ayrı birleştirme maliyeti getirdiği için maç sırasında kapalı */
+body:not(.in-menu) #halftone { display: none; }
 body.in-menu #halftone {
   background:
     radial-gradient(ellipse at center, rgba(255, 210, 63, 0.15) 30%, rgba(20, 20, 20, 0.45) 100%),
@@ -464,3 +468,142 @@ body.pointer-locked .fs-btn { display: none; }
   .lo-preview { flex-direction: column; }
   #lo-canvas { width: 100%; }
 }
+
+/* ---------------- El çizimi görünüm ----------------
+   Kutular cetvelle değil elle çizilmiş gibi: kenarlar hafif eğri, köşeler düzensiz.
+   (Sadece border-radius; filtre / karışım yok, çizim maliyeti eklemez.) */
+.panel, .hud-box, #topbar .mid, .flagchip, #flag-carry, #protect, #respawn, #scoreboard, #end-screen .award {
+  border-radius: 255px 18px 225px 16px / 16px 225px 18px 255px;
+}
+.btn, .fs-btn, .kf-row, #weapons .slot, #char-pick button, .mode-card, .map-card, .lo-card, #charge {
+  border-radius: 14px 225px 12px 255px / 255px 12px 225px 14px;
+}
+#health .bar, #stamina { border-radius: 120px 8px 140px 6px / 6px 140px 8px 120px; }
+#topbar .score.red { border-radius: 18px 4px 4px 22px / 22px 4px 4px 18px; }
+#topbar .score.blue { border-radius: 4px 20px 24px 4px / 4px 24px 20px 4px; }
+.panel { transform: rotate(-0.4deg); }
+.panel .panel, .panel .btn { transform: none; }
+.btn:nth-child(odd):not(:hover):not(:active) { transform: rotate(0.5deg); }
+.btn:nth-child(even):not(:hover):not(:active) { transform: rotate(-0.6deg); }
+.kf-row:nth-child(odd) { transform: rotate(-0.8deg); }
+.kf-row:nth-child(even) { transform: rotate(0.6deg); }
+
+/* ---------------- Oda listesi, oda kurma, sürükle-bırak ---------------- */
+.main-row { display: flex; gap: 22px; align-items: flex-start; justify-content: center; flex-wrap: wrap; }
+.rooms-panel { width: min(400px, 92vw); display: flex; flex-direction: column; gap: 8px; max-height: 70vh; }
+.rooms-panel h2 { font-size: 34px; }
+#room-list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 80px; padding: 2px 6px 6px 2px; }
+.room-row {
+  display: grid; grid-template-columns: 1fr auto; grid-template-areas: 'name right' 'info right'; text-align: left;
+  font-family: var(--font); letter-spacing: 1px; color: var(--ink); cursor: pointer; padding: 6px 10px;
+  background: #fffaf0; border: 3px solid var(--ink); box-shadow: 3px 3px 0 var(--ink);
+  border-radius: 14px 225px 12px 255px / 255px 12px 225px 14px;
+}
+.room-row:hover:not(:disabled) { background: var(--yellow); transform: translate(-1px, -1px); }
+.room-row b { grid-area: name; font-size: 19px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.room-row span { grid-area: info; font-size: 13px; color: #6d6052; }
+.room-row i { grid-area: right; align-self: center; font-style: normal; font-size: 14px; margin-left: 10px; }
+.room-row.full { opacity: 0.5; cursor: default; }
+.rooms-empty { font-family: system-ui, sans-serif; font-size: 14px; color: #6d6052; padding: 10px; text-align: center; }
+.rooms-note { color: #6d6052; }
+.toggle-row { display: flex; gap: 8px; margin-top: 4px; }
+.btn.opt { flex: 1; background: var(--paper); }
+.btn.opt.active { background: var(--yellow); }
+.ff-row { display: flex; align-items: center; gap: 10px; justify-content: center; margin: 4px 0; }
+#btn-ff.active { background: var(--red); color: var(--paper); }
+.bot-hint { color: #6d6052; font-size: 12px; }
+.team li.draggable { cursor: grab; }
+.team li.draggable::after { content: ' ⇄'; color: #6d6052; }
+.team li.dragging { opacity: 0.4; }
+.team.drop { outline: 4px dashed var(--ink); outline-offset: 3px; background: #fff7d6; }
+.kf-tk { color: var(--red); font-size: 14px; }
+
+/* ---------------- Yeni: haritalar, maç sonu sınırları, öldürme akışı, sohbet ---------------- */
+.map-card.map-sniper { background: linear-gradient(180deg, #e7dcc1 55%, #bfa77c 55%, #d8c8a4 70%); }
+.map-card.map-aim { background: linear-gradient(180deg, #e9dfc8 50%, #9e3b2f 50%, #9e3b2f 58%, #d3c8b2 58%); }
+.map-card.map-yard { background: linear-gradient(180deg, #ebe1ca 40%, #5a606b 40%, #5a606b 55%, #ece3cf 55%, #d6c8a8 80%); }
+.map-card.map-giant { background: linear-gradient(180deg, #efe6d2 50%, #8c6845 50%, #8c6845 60%, #b99a72 60%); }
+.map-card small { color: var(--red); text-shadow: none; }
+
+#limits-pick { display: flex; align-items: stretch; gap: 10px; }
+.limit-card {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 10px;
+  background: #fffaf0; border: 3px solid var(--ink); border-radius: 12px 180px 14px 200px / 200px 14px 180px 12px;
+}
+.limit-card > small:first-child { font-size: 15px; letter-spacing: 1px; }
+.stepper { display: flex; align-items: center; gap: 10px; }
+.stepper b { font-size: 30px; min-width: 120px; text-align: center; }
+.btn.step { width: 40px; padding: 2px 0; font-size: 24px; }
+.presets { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.preset {
+  font-family: var(--font); font-size: 15px; letter-spacing: 1px; cursor: pointer; color: var(--ink);
+  background: var(--paper); border: 2px solid var(--ink); border-radius: 10px 60px 10px 60px / 60px 10px 60px 10px;
+  padding: 1px 9px;
+}
+.preset.active { background: var(--yellow); }
+.preset:disabled, .btn.step:disabled { cursor: default; opacity: 0.5; }
+.limit-desc { font-size: 12px; color: #6d6052; letter-spacing: 0.3px; text-align: center; }
+.limit-or { align-self: center; font-size: 20px; color: var(--red); }
+
+.kf-row { align-items: center; }
+.kf-gun { height: 26px; width: auto; display: block; filter: drop-shadow(0 0 0.5px var(--ink)); }
+.kf-gun.small { height: 19px; opacity: 0.9; }
+.kf-hs { font-size: 18px; color: var(--red); }
+.kf-plus { color: #8a7c6c; font-size: 18px; }
+.kf-assist { font-size: 16px; opacity: 0.85; }
+.kf-arrow { color: #8a7c6c; font-size: 16px; }
+.sb-score { font-weight: bold; }
+.sb-note { flex-basis: 100%; text-align: center; font-size: 13px; color: #6d6052; margin-top: 8px; letter-spacing: 0.5px; }
+
+#chat { position: absolute; left: 22px; bottom: 140px; width: min(460px, 60vw); font-family: system-ui, sans-serif; }
+#chat-log { display: flex; flex-direction: column; gap: 3px; }
+.chat-row {
+  font-size: 15px; line-height: 1.3; color: #fffaf0; text-shadow: 1px 1px 0 var(--ink), -1px 0 0 var(--ink), 0 -1px 0 var(--ink);
+  transition: opacity 0.8s; overflow-wrap: anywhere;
+}
+.chat-row.old { opacity: 0; }
+#chat.open .chat-row.old { opacity: 0.85; }
+.chat-name { font-weight: 700; margin-right: 6px; }
+.chat-name.red { color: #ffb4a8; }
+.chat-name.blue { color: #b4d2f5; }
+.chat-name.ffa { color: #dcc4f5; }
+.chat-tag { color: #cfe3b0; font-weight: 700; margin-right: 6px; }
+.chat-dead { color: #c9bfae; margin-right: 6px; font-style: italic; }
+#chat-input-row {
+  display: flex; align-items: center; gap: 8px; margin-top: 6px; padding: 5px 10px;
+  background: rgba(246, 239, 221, 0.95); border: 3px solid var(--ink); border-radius: 12px 160px 14px 180px / 180px 14px 160px 12px;
+}
+#chat-input-row.team { background: rgba(214, 230, 200, 0.96); }
+#chat-mode { font-family: var(--font); font-size: 18px; letter-spacing: 1px; color: var(--blue); }
+#chat-input-row.team #chat-mode { color: var(--green); }
+#chat-input { flex: 1; border: 0; outline: none; background: transparent; font: 16px system-ui, sans-serif; color: var(--ink); }
+#chat-hint { margin-top: 4px; font: 700 11px system-ui, sans-serif; color: rgba(255, 250, 240, 0.7); text-shadow: 1px 1px 0 var(--ink); }
+#chat.open #chat-hint { display: none; }
+#scoreboard { flex-wrap: wrap; }
+#killfeed { top: 70px; }
+
+/* Mini harita (sol üst, oyuncuyla döner) */
+#minimap {
+  position: absolute; top: 12px; left: 12px; width: 170px; height: 170px;
+  background: #e8dcc0; border: 3px solid var(--ink); box-shadow: 3px 3px 0 rgba(47, 39, 33, 0.6);
+  border-radius: 46% 54% 50% 50% / 52% 48% 52% 48%;
+}
+#ping { top: 190px; left: 16px; }
+
+/* Ana menü kısa ekranlarda sığsın: logo küçülür, gerekirse sayfa kayar */
+#screen-main { overflow-y: auto; justify-content: safe center; padding: 16px 0; }
+#screen-main .logo { font-size: clamp(54px, min(11vw, 13vh), 140px); }
+#screen-main .panel.menu { gap: 9px; }
+
+/* Baştan başlatma oylaması (skor çubuğunun altında) */
+#vote {
+  position: absolute; top: 82px; left: 50%; transform: translateX(-50%) rotate(-0.6deg); pointer-events: auto;
+  background: var(--paper); border: 4px solid var(--ink); box-shadow: 5px 5px 0 rgba(47, 39, 33, 0.6);
+  border-radius: 255px 18px 225px 16px / 16px 225px 18px 255px; padding: 10px 22px; text-align: center; min-width: 340px;
+}
+#vote-title { font-size: 22px; letter-spacing: 1px; }
+#vote-count { font-size: 18px; color: #6d6052; margin: 2px 0 6px; }
+#vote-actions { display: flex; gap: 10px; justify-content: center; }
+#vote.voted #vote-actions { display: none; }
+#vote-note { font: 12px system-ui, sans-serif; color: #6d6052; }
+#btn-restart { background: #f3e1c6; }

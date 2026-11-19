@@ -2,8 +2,11 @@
 // Ayrıntılı açıklama: docs/PROTOCOL.md
 export const MSG = {
   // istemci → sunucu
-  CREATE_ROOM: 'create_room', // {name} → ack {ok, code}
-  JOIN_ROOM: 'join_room', // {name, code} → ack {ok, code | error}
+  CREATE_ROOM: 'create_room', // {name, locked, password, ff} → ack {ok, code}
+  JOIN_ROOM: 'join_room', // {name, code, password} → ack {ok, code | error, needPassword}
+  LIST_ROOMS: 'list_rooms', // → ack [{code, name, players, max, map, mode, state, locked, ff}]
+  SET_FF: 'set_ff', // boolean: takım ateşi (sadece host, lobide)
+  MOVE_BOT: 'move_bot', // {id, team}: host lobide botu diğer takıma taşır
   QUICK_PLAY: 'quick_play', // {name} → ack {ok, code}
   LEAVE_ROOM: 'leave_room',
   SET_TEAM: 'set_team', // 'red' | 'blue'
@@ -22,6 +25,10 @@ export const MSG = {
   ADD_BOT: 'add_bot', // (sadece host) pratik botu ekle
   REMOVE_BOT: 'remove_bot', // (sadece host) bir botu çıkar
   FALL: 'fall', // {v} yere çarpma hızı (m/s) → düşme hasarı
+  SET_LIMITS: 'set_limits', // {score, flags, time} (sadece host, lobide) maç sonu sınırları
+  CHAT: 'chat', // {t: metin, team: bool}
+  RESTART_REQUEST: 'restart_request', // host maçı baştan başlatmak için oylama açar
+  VOTE: 'vote', // {yes: bool} oylamaya cevap
 
   // sunucu → istemci
   ROOM_STATE: 'room_state',
@@ -45,5 +52,7 @@ export const MSG = {
   PICKUP: 'pickup', // {id, by, reserve?}: mermi kutusu alındı / süresi doldu (by=null)
   REWARD: 'reward', // {hp?, reserve, kill?}: FFA öldürme ödülü / şarjör bitmesin diye verilen yedek
   MATCH_END: 'match_end',
+  CHAT_MSG: 'chat_msg', // {id, n, tm, t, team, dead}
+  VOTE_STATE: 'vote_state', // {active, by, yes, no, total, left, voters:[id], result?: 'restart'|'rejected'}
   SPING: 'sping', // sunucunun ping ölçümü (ack ile)
 };

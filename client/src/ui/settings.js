@@ -1,4 +1,5 @@
 const KEY = 'comic-strike-settings';
+const VERSION = 2; // 2: varsayılan grafik LOW oldu
 
 export const DEFAULTS = {
   name: '',
@@ -8,14 +9,20 @@ export const DEFAULTS = {
   sensitivity: 1,
   fov: 80,
   volume: 0.6,
-  quality: 'high',
+  quality: 'low', // varsayılan LOW (akıcı); isteyen ayarlardan HIGH yapar
   autoFullscreen: 'on', // oyuna tıklayınca tam ekrana geç (Ctrl+W koruması da bununla çalışır)
 };
 
 export function loadSettings() {
   try {
     const raw = localStorage.getItem(KEY);
-    return { ...DEFAULTS, ...(raw ? JSON.parse(raw) : {}) };
+    const saved = raw ? JSON.parse(raw) : {};
+    // Eski sürümde kaydedilen HIGH varsayılandı, kullanıcı seçimi değildi: bir kez LOW'a çek
+    if ((saved.v ?? 1) < VERSION) {
+      saved.quality = 'low';
+      saved.v = VERSION;
+    }
+    return { ...DEFAULTS, ...saved, v: VERSION };
   } catch {
     return { ...DEFAULTS };
   }

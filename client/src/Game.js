@@ -14,6 +14,7 @@ import {
   FLAG_STATE,
   TEAMS,
   MARK,
+  playerScore,
 } from "@comic-strike/shared/constants.js";
 import { solidsOf } from "@comic-strike/shared/maps.js";
 import { stepGrenade } from "@comic-strike/shared/grenade.js";
@@ -26,6 +27,7 @@ import { Trajectory } from "./fx/Trajectory.js";
 import { Flags } from "./fx/Flags.js";
 import { Drops } from "./fx/Drops.js";
 import { Marks } from "./fx/Marks.js";
+import { Minimap } from "./ui/Minimap.js";
 
 const r2 = (v) => Math.round(v * 100) / 100;
 const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -61,11 +63,14 @@ export class Game {
     this.local = new LocalPlayer(this.physics);
     this.weapon = new Weapon(this.view.aspect);
     this.view.onResize((a) => this.weapon.setAspect(a));
+    // Şarjör animasyonuyla senkron sesler
+    this.weapon.onReloadStep = (step) => this.sfx.reloadStep(step);
     this.effects = new Effects(this.scene);
     this.trajectory = new Trajectory(this.scene);
     this.flags = new Flags(this.scene);
     this.drops = new Drops(this.scene);
     this.marks = new Marks(this.scene);
+    this.minimap = new Minimap(document.getElementById("minimap"));
     this.deathLook = new THREE.Vector3();
     this.remotes = new Map();
     this.grenades = new Map();
@@ -108,6 +113,7 @@ export class Game {
     this.killerId = null; // ölüm kamerası: bizi öldüren
     this.killerHp = 0;
     this.lastMark = 0;
+    this.chatting = false; // sohbet kutusu açık: hareket / ateş yok
   }
 
   // ---------------- Ağ olayları ----------------
@@ -181,8 +187,9 @@ export class Game {
       k,
       d,
       w,
+      a,
     ] of s.p) {
-      this.stats.set(id, { k, d, rtt });
+      this.stats.set(id, { k, d, a: a ?? 0, rtt });
       if (id === this.myId) {
         this.hp = hp;
         this.myPing = rtt;
@@ -223,6 +230,7 @@ export class Game {
 
   onShot(d) {
     const r = this.remotes.get(d.id);
+    if (r) r.seenAt = performance.now(); // ateş eden rakip mini haritada kısa süre görünür
     if (r && r.visible) r.muzzleWorld(_from);
     else _from.set(d.o[0], d.o[1] - 0.2, d.o[2]);
     const dist = _from.distanceTo(this.camera.position);
@@ -338,7 +346,12 @@ export class Game {
     this.scores = d.s;
     const killer = this.roster.get(d.k) ?? { name: "?", team: "red" };
     const victim = this.roster.get(d.v) ?? { name: "?", team: "blue" };
-    this.hud.killfeed(killer, victim, d.h, d.w);
+    // Asist yapanlar: ölene son 5 sn içinde hasar veren diğer rakipler (silahlarıyla)
+    const assists = (d.a ?? [])
+      .map(([id, w]) => ({ p: this.roster.get(id), w }))
+      .filter((x) => x.p);
+    this.hud.killfeed(killer, victim, d.h, d.w, assists, d.tk === 1);
+    if (assists.some((x) => x.p.id === this.myId)) this.hud.flagNotice("ASİST! +1", "good");
 
     const word = d.h
       ? "HEADSHOT!"
@@ -495,6 +508,16 @@ export class Game {
   // ---------------- Maç yaşam döngüsü ----------------
 
   start(info, myId) {
+    if (this.active) {
+      // Maç baştan başlıyor (oylama): sahnede kalan efektleri, bombaları ve kutuları temizle
+      for (const g of this.grenades.values()) this.scene.remove(g.mesh);
+      this.grenades.clear();
+      this.effects.clear();
+      this.trajectory.hide();
+      this.drops.clear();
+      this.marks.clear();
+      for (const r of this.remotes.values()) r.die();
+    }
     this.reset();
     this.world.load(info.map);
     this.solids = solidsOf(this.world.id);
@@ -505,6 +528,8 @@ export class Game {
     this.input.gameActive = true;
     this.myId = myId;
     this.mode = info.mode ?? "tdm";
+    this.ff = !!info.ff; // takım ateşi
+    this.minimap.setMap(this.world.map);
     this.syncRoster(info.roster);
     this.scores = info.scores;
     this.scoreLimit = info.scoreLimit;
@@ -517,12 +542,18 @@ export class Game {
     this.weapon.visible = false;
     this.applySettings();
     this.hud.show();
+    // Geri sayım sırasında shader'ları derle (maç ortasında ilk atış / ilk patlama takılmasın)
+    if (!this.warmed) {
+      this.warmed = true;
+      this.effects.warmup(this.view.renderer, this.camera);
+      this.weapon.warmup(this.view.renderer);
+    }
   }
 
   stop() {
     this.active = false;
     this.input.gameActive = false;
-    for (const r of this.remotes.values()) r.dispose();
+    for (const r of this.remotes.values()) this.removeRemote(r);
     this.remotes.clear();
     for (const g of this.grenades.values()) this.scene.remove(g.mesh);
     this.grenades.clear();
@@ -548,13 +579,14 @@ export class Game {
       let r = this.remotes.get(p.id);
       if (!r) {
         r = new RemotePlayer(p, this.scene);
+        r.body3 = this.physics.addPlayerBody(); // çarpışma kapsülü
         this.remotes.set(p.id, r);
       } else r.setInfo(p);
       r.setFriendly(this.mode !== "ffa" && p.team === this.team);
     }
     for (const [id, r] of this.remotes) {
       if (!this.roster.has(id)) {
-        r.dispose();
+        this.removeRemote(r);
         this.remotes.delete(id);
       }
     }
@@ -601,6 +633,9 @@ export class Game {
   fire(now, heavy = false) {
     const w = this.weapon.def;
     this.protectedUntil = 0; // ateş eden doğuş korumasını kaybeder (sunucuyla aynı)
+    // Sapma, ateşten ÖNCEKİ duruma göre hesaplanmalı: AWP ateş edince dürbün kapanıyor,
+    // sonra hesaplanınca dürbünlü atış dürbünsüz sapmayla gidiyordu.
+    const spread = this.spread();
     this.weapon.fire(now, heavy);
     this.aim();
 
@@ -628,7 +663,7 @@ export class Game {
     else this.sfx.shot(1);
 
     const a = Math.random() * Math.PI * 2;
-    const r = Math.sqrt(Math.random()) * this.spread();
+    const r = Math.sqrt(Math.random()) * spread;
     _dir
       .copy(_fwd)
       .addScaledVector(_right, Math.cos(a) * r)
@@ -642,7 +677,7 @@ export class Game {
     this.raycaster.far = dist;
     const targets = [];
     for (const rp of this.remotes.values())
-      if (rp.alive && rp.visible && this.isEnemy(rp)) targets.push(rp.body);
+      if (rp.alive && rp.visible && (this.ff || this.isEnemy(rp))) targets.push(rp.body); // takım ateşinde arkadaşlar da
     const ph = targets.length
       ? this.raycaster.intersectObjects(targets, true)[0]
       : null;
@@ -709,8 +744,8 @@ export class Game {
     });
   }
 
-  switchWeapon(id, now) {
-    if (this.weapon.switchTo(id, now)) {
+  switchWeapon(id, now, quick = false) {
+    if (this.weapon.switchTo(id, now, quick)) {
       this.chargeStart = 0;
       this.weapon.charge = 0;
       this.net.emit(MSG.SWITCH, id);
@@ -722,7 +757,7 @@ export class Game {
   reload(now) {
     if (this.weapon.startReload(now)) {
       this.net.emit(MSG.RELOAD);
-      this.sfx.reload();
+      this.sfx.reload(); // başlangıç sesi; şarjör çıkma/takılma sesleri animasyondan gelir
     }
   }
 
@@ -737,15 +772,15 @@ export class Game {
         if (id) this.switchWeapon(id, now);
       }
     }
-    if (input.pressed("KeyQ"))
-      this.switchWeapon(wp.has(wp.previous) ? wp.previous : "knife", now);
+    // Q: son seçilen iki silah arasında hızlı geçiş (daha kısa çekme süresiyle)
+    if (input.pressed("KeyQ")) {
+      const target = wp.quickSwitchTarget;
+      if (target) this.switchWeapon(target, now, true);
+    }
     if (input.wheel) this.switchWeapon(wp.cycle(input.wheel > 0 ? 1 : -1), now);
     if (this.switchBackAt && now >= this.switchBackAt) {
       this.switchBackAt = 0;
-      const back =
-        wp.has(wp.previous) && WEAPONS[wp.previous].kind !== "grenade"
-          ? wp.previous
-          : wp.loadout.primary;
+      const back = wp.quickSwitchTarget ?? wp.loadout.primary;
       this.switchWeapon(back, now);
     }
 
@@ -812,7 +847,7 @@ export class Game {
     const now = performance.now();
     const input = this.input;
     const playing = this.state === "playing";
-    const controls = input.locked && this.alive && playing;
+    const controls = input.locked && this.alive && playing && !this.chatting;
 
     const look = input.locked
       ? input.consumeMouse()
@@ -861,6 +896,7 @@ export class Game {
 
     const renderT = Date.now() - (this.offset ?? 0) - INTERP_DELAY;
     for (const r of this.remotes.values()) r.update(renderT, dt);
+    this.updateBodies();
     this.flags.update(
       dt,
       (id) => this.remotes.get(id)?.root ?? null,
@@ -870,6 +906,47 @@ export class Game {
     this.marks.update(this.camera);
     this.effects.update(dt);
     this.updateHud(now);
+    this.minimap.update(now, this);
+  }
+
+  removeRemote(r) {
+    if (r.body3) this.physics.removeBody(r.body3);
+    r.body3 = null;
+    r.dispose();
+  }
+
+  /**
+   * Diğer oyuncuların çarpışma kapsüllerini ekrandaki konumlarına taşı. Yerel oyuncuyla zaten iç içe
+   * olan (ör. aynı anda doğdular) kapsül o an kapatılır ki ayrılabilsinler; sonra yine katı olur.
+   */
+  updateBodies() {
+    const me = this.local.position;
+    const R2 = PLAYER.RADIUS * 2 - 0.02;
+    const myTop = me.y + (this.local.crouching ? PLAYER.CROUCH_HEIGHT : PLAYER.HEIGHT);
+    for (const r of this.remotes.values()) {
+      const c = r.body3;
+      if (!c) continue;
+      const on = r.alive && r.root.visible && this.alive;
+      if (!on) {
+        if (c.isEnabled()) c.setEnabled(false);
+        continue;
+      }
+      const p = r.root.position;
+      const crouch = r.crouch > 0.5;
+      const h = crouch ? PLAYER.CROUCH_HEIGHT : PLAYER.HEIGHT;
+      const overlap =
+        Math.hypot(p.x - me.x, p.z - me.z) < R2 && p.y < myTop && p.y + h > me.y;
+      if (overlap) {
+        if (c.isEnabled()) c.setEnabled(false);
+        continue;
+      }
+      if (crouch !== c.userCrouch) {
+        c.userCrouch = crouch;
+        c.setHalfHeight(h / 2 - PLAYER.RADIUS);
+      }
+      c.setTranslation({ x: p.x, y: p.y + h / 2, z: p.z });
+      if (!c.isEnabled()) c.setEnabled(true);
+    }
   }
 
   /** Elinde bomba varken nereye düşeceğini göster */
@@ -1014,19 +1091,18 @@ export class Game {
       this.alive && this.state !== "ended",
     );
     if (this.mode === "ffa") {
-      // Herkes Tek: solda benim öldürmelerim, sağda lider (lider bensem ikinci)
+      // Herkes Tek: solda benim puanım, sağda en yüksek puanlı rakip
+      const score = (id) => {
+        const st = this.stats.get(id);
+        return st ? playerScore({ kills: st.k, assists: st.a, deaths: st.d }) : 0;
+      };
       let lead = null;
       for (const p of this.roster.values()) {
         if (p.id === this.myId) continue;
-        const k = this.stats.get(p.id)?.k ?? 0;
-        if (!lead || k > lead.k) lead = { name: p.name, k };
+        const sc = score(p.id);
+        if (!lead || sc > lead.sc) lead = { name: p.name, sc };
       }
-      hud.setFfaScores(
-        this.stats.get(this.myId)?.k ?? 0,
-        lead?.k ?? 0,
-        lead?.name ?? "-",
-        this.scoreLimit,
-      );
+      hud.setFfaScores(score(this.myId), lead?.sc ?? 0, lead?.name ?? "-", this.scoreLimit);
     } else
       hud.setScores(
         this.scores.red,
@@ -1103,13 +1179,15 @@ export class Game {
     const showBoard = this.input.down("Tab") && this.state !== "ended";
     if (showBoard) {
       const rows = [...this.roster.values()].map((p) => {
-        const s = this.stats.get(p.id) ?? { k: 0, d: 0, rtt: 0 };
+        const s = this.stats.get(p.id) ?? { k: 0, d: 0, a: 0, rtt: 0 };
         return {
           id: p.id,
           name: p.name,
           team: p.team,
           k: s.k,
+          a: s.a,
           d: s.d,
+          score: playerScore({ kills: s.k, assists: s.a, deaths: s.d }),
           rtt: s.rtt,
           bot: p.bot,
         };

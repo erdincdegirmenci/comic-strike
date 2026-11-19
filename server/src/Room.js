@@ -1,5 +1,5 @@
 import {
-  PLAYER, FLAG, FALL, CTF, FFA, PAD, isEnemy, DROP, MARK, CHARACTER_IDS, MODE_IDS, DEFAULT_MODE, FLAG_STATE, WEAPONS, WEAPON_ORDER, GRENADE, SPRAY, BUY_TIME, cleanLoadout, MATCH, SERVER_TICK_RATE, MAX_PLAYERS, MAX_PER_TEAM, MIN_PLAYERS_TO_START, INTERP_DELAY, TEAMS,
+  PLAYER, FLAG, FALL, CTF, FFA, PAD, isEnemy, SCORE, LIMITS, CHAT, VOTE, DROP, MARK, CHARACTER_IDS, MODE_IDS, DEFAULT_MODE, FLAG_STATE, WEAPONS, WEAPON_ORDER, GRENADE, SPRAY, BUY_TIME, cleanLoadout, MATCH, SERVER_TICK_RATE, MAX_PLAYERS, MAX_PER_TEAM, MIN_PLAYERS_TO_START, INTERP_DELAY, TEAMS,
 } from '@comic-strike/shared/constants.js';
 import { stepGrenade, throwVelocity } from '@comic-strike/shared/grenade.js';
 import { MSG } from '@comic-strike/shared/protocol.js';
@@ -48,6 +48,11 @@ export class Room {
     this.mode = DEFAULT_MODE;
     this.flags = null; // CTF: { red: {state, pos, carrier, droppedAt}, blue: {...} }
     this.sprays = new Map(); // oyuncu id -> son sticker (sonradan katilanlar da gorsun)
+    // Maç sonu sınırları (host lobide seçer): puan / bayrak sayısı / dakika — hangisi önce gelirse
+    this.limits = { score: LIMITS.SCORE.DEFAULT, flags: LIMITS.FLAGS.DEFAULT, time: LIMITS.TIME.DEFAULT };
+    this.password = ''; // boşsa herkes girer
+    this.ff = false; // takım ateşi: takım arkadaşları birbirini vurabilir
+    this.vote = null; // maçı baştan başlatma oylaması: { by, until, yes:Set, no:Set }
     this.timer = setInterval(() => this.tick(), 1000 / SERVER_TICK_RATE);
   }
 
@@ -106,9 +111,35 @@ export class Room {
     return n;
   }
 
+  /** Bitiş puanı: Takım Savaşı'nda takım puanı, Herkes Tek'te oyuncu puanı, Bayrak Kap'ta bayrak sayısı */
   get scoreLimit() {
-    if (this.ffa) return FFA.KILL_LIMIT;
-    return this.ctf ? CTF.CAPTURE_LIMIT : MATCH.SCORE_LIMIT;
+    return this.ctf ? this.limits.flags : this.limits.score;
+  }
+
+  get timeLimit() {
+    return this.limits.time * 60 * 1000;
+  }
+
+  /** a, b'ye hasar verebilir mi: rakipse her zaman, takım arkadaşıysa sadece takım ateşi açıkken */
+  canHurt(a, b) {
+    return a !== b && (isEnemy(a, b) || this.ff);
+  }
+
+  /** Açık oda listesindeki satır */
+  listing() {
+    const host = this.players.get(this.hostId);
+    return {
+      code: this.code,
+      name: host ? `${host.name} odası` : this.code,
+      players: this.size,
+      humans: this.humans,
+      max: MAX_PLAYERS,
+      map: this.mapId,
+      mode: this.mode,
+      state: this.state,
+      locked: !!this.password,
+      ff: this.ff,
+    };
   }
 
   get inMatch() {
@@ -209,6 +240,9 @@ export class Room {
       mode: this.mode,
       isPublic: this.isPublic,
       scores: this.scores,
+      limits: this.limits,
+      locked: !!this.password,
+      ff: this.ff,
       minPlayers: MIN_PLAYERS,
       maxPlayers: MAX_PLAYERS,
       maxPerTeam: MAX_PER_TEAM,
@@ -226,10 +260,11 @@ export class Room {
       map: this.mapId,
       mode: this.mode,
       flagBases: this.ctf ? flagBases(this.mapId) : null,
+      ff: this.ff,
       roster: [...this.players.values()].map((p) => p.info()),
       scores: this.scores,
       scoreLimit: this.scoreLimit,
-      timeLeft: Math.min(MATCH.TIME_LIMIT, Math.max(0, this.matchEnd - now)),
+      timeLeft: Math.min(this.timeLimit, Math.max(0, this.matchEnd - now)),
       countdown: Math.max(0, this.countdownEnd - now),
     };
   }
@@ -276,6 +311,98 @@ export class Room {
     this.broadcastRoom();
   }
 
+  /** Maç sonu sınırları: {score, flags, time} — host, lobide */
+  onSetLimits(id, d) {
+    if (id !== this.hostId || this.state !== 'lobby' || !d) return;
+    const clamp = (v, L, cur) => {
+      const n = Math.round(Number(v));
+      if (!Number.isFinite(n)) return cur;
+      return Math.max(L.MIN, Math.min(L.MAX, Math.round(n / L.STEP) * L.STEP));
+    };
+    this.limits = {
+      score: clamp(d.score ?? this.limits.score, LIMITS.SCORE, this.limits.score),
+      flags: clamp(d.flags ?? this.limits.flags, LIMITS.FLAGS, this.limits.flags),
+      time: clamp(d.time ?? this.limits.time, LIMITS.TIME, this.limits.time),
+    };
+    this.broadcastRoom();
+  }
+
+  // ---------------- Baştan başlatma oylaması ----------------
+
+  /** Host maç sırasında "baştan başlat" der: oylama açılır, host otomatik EVET */
+  onRestartRequest(id) {
+    const host = this.players.get(id);
+    if (!host || id !== this.hostId || !this.inMatch || this.vote) return;
+    this.vote = { by: host.name, until: Date.now() + VOTE.DURATION, yes: new Set([id]), no: new Set() };
+    console.log(`[room ${this.code}] baştan başlatma oylaması açıldı`);
+    this.checkVote();
+  }
+
+  onVote(id, d) {
+    const p = this.players.get(id);
+    if (!p || p.isBot || !this.vote || !d) return;
+    const v = this.vote;
+    v.yes.delete(id);
+    v.no.delete(id);
+    (d.yes ? v.yes : v.no).add(id);
+    this.checkVote();
+  }
+
+  /** Çoğunluk (botlar hariç oyuncuların yarısından fazlası) EVET → baştan başla; artık olamıyorsa / süre dolduysa → iptal */
+  checkVote(now = Date.now()) {
+    const v = this.vote;
+    if (!v) return;
+    const humans = [...this.players.values()].filter((p) => !p.isBot);
+    const ids = new Set(humans.map((p) => p.id));
+    for (const s of [v.yes, v.no]) for (const id of s) if (!ids.has(id)) s.delete(id); // ayrılanlar sayılmaz
+    const total = humans.length;
+    const need = Math.floor(total / 2) + 1;
+    let result = null;
+    if (v.yes.size >= need) result = 'restart';
+    else if (total - v.no.size < need || now >= v.until) result = 'rejected';
+    const state = {
+      active: !result, by: v.by, yes: v.yes.size, no: v.no.size, total, need,
+      left: Math.max(0, v.until - now), voters: [...v.yes, ...v.no], result,
+    };
+    this.emit(MSG.VOTE_STATE, state);
+    if (!result) return;
+    this.vote = null;
+    console.log(`[room ${this.code}] oylama: ${result} (${state.yes}/${total})`);
+    if (result === 'restart') this.startMatch();
+  }
+
+  /** Takım ateşi aç / kapat (host, lobide) */
+  onSetFF(id, on) {
+    if (id !== this.hostId || this.state !== 'lobby') return;
+    this.ff = !!on;
+    this.broadcastRoom();
+  }
+
+  /** Host lobide bir botu diğer takıma sürükledi */
+  onMoveBot(id, d) {
+    if (id !== this.hostId || this.state !== 'lobby' || this.ffa || !d || !TEAMS.includes(d.team)) return;
+    const bot = this.players.get(d.id);
+    if (!bot?.isBot || bot.team === d.team) return;
+    if (this.teamCount(d.team) >= MAX_PER_TEAM) return this.notice(this.players.get(id), 'Bu takım dolu.');
+    bot.team = d.team;
+    this.broadcastRoom();
+  }
+
+  /** Sohbet: team=true ise sadece takım arkadaşlarına (Herkes Tek'te takım yok, herkese gider) */
+  onChat(id, d) {
+    const p = this.players.get(id);
+    if (!p || !d || typeof d.t !== 'string') return;
+    const t = d.t.replace(/[\u0000-\u001f]/g, '').replace(/\s+/g, ' ').trim().slice(0, CHAT.MAX_LEN);
+    if (!t) return;
+    const now = Date.now();
+    if (now - (p.lastChat ?? 0) < CHAT.COOLDOWN) return;
+    p.lastChat = now;
+    const team = !!d.team && !this.ffa;
+    const msg = { id: p.id, n: p.name, tm: p.team, t, team, dead: this.inMatch && !p.alive };
+    if (!team) return this.emit(MSG.CHAT_MSG, msg);
+    for (const o of this.players.values()) if (o.team === p.team) o.socket.emit(MSG.CHAT_MSG, msg);
+  }
+
   onStartMatch(id) {
     const host = this.players.get(id);
     if (!host || id !== this.hostId || this.state !== 'lobby') return;
@@ -289,7 +416,7 @@ export class Room {
     const now = Date.now();
     this.state = 'countdown';
     this.countdownEnd = now + MATCH.COUNTDOWN;
-    this.matchEnd = this.countdownEnd + MATCH.TIME_LIMIT;
+    this.matchEnd = this.countdownEnd + this.timeLimit;
     this.scores = { red: 0, blue: 0 };
     this.grenades.length = 0;
     this.clouds.length = 0;
@@ -309,13 +436,15 @@ export class Room {
   pickSpawn(p) {
     const points = this.spawnPoints(p);
     const enemies = [...this.players.values()].filter((o) => o.alive && isEnemy(o, p));
-    if (enemies.length === 0) return points[Math.floor(Math.random() * points.length)];
+    const others = [...this.players.values()].filter((o) => o.alive && o !== p);
+    // Doluluk: üstünde / dibinde başka oyuncu olan doğuş noktası (oyuncular iç içe doğmasın)
+    const busy = (sp) => others.some((o) => Math.hypot(o.pos[0] - sp[0], o.pos[2] - sp[2]) < 1.2);
     let best = points[0];
-    let bestScore = -1;
+    let bestScore = -Infinity;
     for (const sp of points) {
-      let nearest = Infinity;
+      let nearest = 60;
       for (const e of enemies) nearest = Math.min(nearest, Math.hypot(e.pos[0] - sp[0], e.pos[2] - sp[2]));
-      const score = nearest + Math.random() * 4;
+      const score = nearest + Math.random() * 4 - (busy(sp) ? 1000 : 0);
       if (score > bestScore) {
         bestScore = score;
         best = sp;
@@ -334,6 +463,8 @@ export class Room {
     p.hp = PLAYER.MAX_HP;
     p.alive = true;
     p.life++;
+    p.dmgBy.clear();
+    if (this.map.forceLoadout) p.loadout = { ...p.loadout, ...this.map.forceLoadout };
     p.resetLoadout();
     if (p.isBot) {
       // Botlar mermi derdine düşmesin
@@ -449,7 +580,7 @@ export class Room {
     const origin = [p.pos[0], p.pos[1] + p.eyeHeight, p.pos[2]];
     const targets = [];
     for (const o of this.players.values()) {
-      if (o.alive && isEnemy(o, p)) {
+      if (o.alive && this.canHurt(p, o)) {
         const past = o.posAt(rewind);
         targets.push({ player: o, pos: past.pos, crouch: past.crouch });
       }
@@ -492,7 +623,7 @@ export class Room {
   onSetLoadout(id, d) {
     const p = this.players.get(id);
     if (!p || !d) return;
-    p.loadout = cleanLoadout(d);
+    p.loadout = { ...cleanLoadout(d), ...(this.map.forceLoadout ?? {}) };
     const now = Date.now();
     const canNow = p.alive && this.inMatch && !p.fired && (this.state === 'countdown' || now - p.spawnedAt < BUY_TIME);
     if (canNow) p.resetLoadout();
@@ -543,7 +674,7 @@ export class Room {
     if (!this.players.has(attacker.id)) return; // atan oyuncu odadan çıktı
     const center = [at[0], at[1] + 0.2, at[2]];
     for (const v of this.players.values()) {
-      if (!v.alive || (v !== attacker && !isEnemy(v, attacker))) continue;
+      if (!v.alive || (v !== attacker && !this.canHurt(attacker, v))) continue;
       const chest = [v.pos[0], v.pos[1] + (v.crouching ? 0.6 : 0.95), v.pos[2]];
       const dx = chest[0] - center[0];
       const dy = chest[1] - center[1];
@@ -574,7 +705,7 @@ export class Room {
       c.next += w.TICK;
       if (this.state !== 'playing' || !this.players.has(c.by.id)) continue;
       for (const v of this.players.values()) {
-        if (!v.alive || (v !== c.by && !isEnemy(v, c.by))) continue;
+        if (!v.alive || (v !== c.by && !this.canHurt(c.by, v))) continue;
         const dx = v.pos[0] - c.pos[0];
         const dz = v.pos[2] - c.pos[2];
         const dy = v.pos[1] - c.pos[1];
@@ -590,6 +721,7 @@ export class Room {
     victim.hp = Math.max(0, victim.hp - dmg);
     const killed = victim.hp <= 0;
     const self = attacker === victim;
+    if (!self) victim.dmgBy.set(attacker.id, { t: now, w: weapon }); // asist için kim, ne zaman, hangi silahla
     if (!self) attacker.socket.emit(MSG.HIT, { v: victim.id, d: dmg, h: head, k: killed, pt: point });
     victim.socket.emit(MSG.DAMAGED, { hp: victim.hp, from, w: weapon });
     if (!killed) return;
@@ -597,18 +729,49 @@ export class Room {
     victim.alive = false;
     victim.deaths++;
     victim.respawnAt = now + PLAYER.RESPAWN_TIME;
-    if (!self) {
+    // Asist: son ASSIST_WINDOW içinde bu oyuncuya hasar veren diğer rakipler
+    const assists = [];
+    for (const [aid, rec] of victim.dmgBy) {
+      if (aid === attacker.id || now - rec.t > SCORE.ASSIST_WINDOW) continue;
+      const ap = this.players.get(aid);
+      if (!ap || !isEnemy(ap, victim)) continue;
+      ap.assists++;
+      assists.push(ap);
+    }
+    const assistList = assists.map((ap) => [ap.id, victim.dmgBy.get(ap.id).w]);
+    victim.dmgBy.clear();
+    const teamKill = !self && !isEnemy(attacker, victim); // takım ateşiyle arkadaşını öldürdü
+    if (teamKill) attacker.tks++;
+    else if (!self) {
       attacker.kills++;
       if (head) attacker.hs++;
       if (this.ffa) this.killReward(attacker, weapon);
-      else if (!this.ctf) this.scores[attacker.team]++; // CTF'de puan sadece bayrakla gelir
+    }
+    // Takım Savaşı: takım puanı = öldürme +3, asist +1, ölüm -1, arkadaş öldürme -3 (Bayrak Kap'ta puan sadece bayrakla gelir)
+    if (!this.ctf && !this.ffa) {
+      if (teamKill) this.scores[attacker.team] += SCORE.TEAMKILL;
+      else if (!self) this.scores[attacker.team] += SCORE.KILL;
+      for (const ap of assists) this.scores[ap.team] += SCORE.ASSIST;
+      this.scores[victim.team] += SCORE.DEATH;
     }
     this.dropFlagOf(victim, now);
     this.dropAmmo(victim, now);
-    // kh: katilin kalan canı (ölüm kamerası için)
-    this.emit(MSG.KILL, { k: attacker.id, v: victim.id, h: head, w: weapon, s: this.scores, kh: attacker.alive ? attacker.hp : 0 });
-    if (!self && this.ffa && attacker.kills >= FFA.KILL_LIMIT) this.endMatch();
-    else if (!self && !this.ctf && !this.ffa && this.scores[attacker.team] >= MATCH.SCORE_LIMIT) this.endMatch();
+    // kh: katilin kalan canı (ölüm kamerası için) · a: asist yapanlar [[id, silah], ...]
+    this.emit(MSG.KILL, {
+      k: attacker.id, v: victim.id, h: head, w: weapon, a: assistList, tk: teamKill ? 1 : 0, s: this.scores, kh: attacker.alive ? attacker.hp : 0,
+    });
+    this.checkScoreLimit();
+  }
+
+  /** Puan sınırına ulaşıldı mı (Takım Savaşı: takım puanı, Herkes Tek: oyuncu puanı) */
+  checkScoreLimit() {
+    if (this.ctf || this.state === 'ended') return;
+    const limit = this.limits.score;
+    if (this.ffa) {
+      for (const p of this.players.values()) if (p.score >= limit) return this.endMatch();
+      return;
+    }
+    if (this.scores.red >= limit || this.scores.blue >= limit) this.endMatch();
   }
 
   // ---------------- Herkes Tek: öldürme ödülü ----------------
@@ -739,7 +902,7 @@ export class Room {
           f.pos = [...bases[t]];
           f.carrier = null;
           this.flagEvent(t, 'capture', c);
-          if (this.scores[c.team] >= CTF.CAPTURE_LIMIT) return this.endMatch();
+          if (this.scores[c.team] >= this.limits.flags) return this.endMatch();
         }
         continue;
       }
@@ -790,6 +953,7 @@ export class Room {
       }
     }
 
+    if (this.vote && now >= this.vote.until) this.checkVote(now);
     if (!this.inMatch) return;
     if (this.state === 'countdown' && now >= this.countdownEnd) this.state = 'playing';
 
@@ -819,13 +983,13 @@ export class Room {
     this.emit(MSG.SNAPSHOT, {
       t: now,
       st: this.state,
-      tl: Math.min(MATCH.TIME_LIMIT, Math.max(0, this.matchEnd - now)),
+      tl: Math.min(this.timeLimit, Math.max(0, this.matchEnd - now)),
       cd: Math.max(0, this.countdownEnd - now),
       s: [this.scores.red, this.scores.blue],
       f: this.flags ? this.flagSnapshot() : undefined,
       p: [...this.players.values()].map((p) => [
         p.id, r2(p.pos[0]), r2(p.pos[1]), r2(p.pos[2]), r3(p.yaw), r3(p.pitch),
-        p.hp, p.alive ? 1 : 0, p.flags | (p.alive && now < p.protectedUntil ? FLAG.PROTECTED : 0), p.rtt, p.kills, p.deaths, WEAPON_ORDER.indexOf(p.weapon),
+        p.hp, p.alive ? 1 : 0, p.flags | (p.alive && now < p.protectedUntil ? FLAG.PROTECTED : 0), p.rtt, p.kills, p.deaths, WEAPON_ORDER.indexOf(p.weapon), p.assists,
       ]),
     });
   }
@@ -839,7 +1003,9 @@ export class Room {
     };
     const out = [];
     const add = (key, title, desc, w) => w && out.push({ key, title, desc, ...w });
+    add('score', 'MAÇIN YILDIZI', 'En yüksek puan', best('score'));
     add('kills', 'TERMİNATÖR', 'En çok öldüren', best('kills'));
+    add('assists', 'TAKIM OYUNCUSU', 'En çok asist', best('assists'));
     add('hs', 'KESKİN NİŞANCI', 'En çok kafadan vuruş', best('hs'));
     if (this.ctf) add('caps', 'BAYRAK USTASI', 'En çok bayrak getiren', best('caps'));
     add('deaths', 'KURŞUN MIKNATISI', 'En çok ölen · mermiler onu çok seviyor', best('deaths', (a, b) => a.kills - b.kills));
@@ -848,6 +1014,10 @@ export class Room {
 
   endMatch() {
     if (this.state === 'ended') return;
+    if (this.vote) {
+      this.vote = null;
+      this.emit(MSG.VOTE_STATE, { active: false, result: 'rejected' });
+    }
     this.state = 'ended';
     this.grenades.length = 0;
     this.clouds.length = 0;
@@ -855,9 +1025,9 @@ export class Room {
     let winner = red > blue ? 'red' : blue > red ? 'blue' : 'draw';
     let winnerId = null;
     if (this.ffa) {
-      // Herkes Tek: en çok öldüren kazanır (eşitlikte az ölen)
-      const top = [...this.players.values()].sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
-      winner = top[0] && top[0].kills > 0 && !(top[1] && top[1].kills === top[0].kills && top[1].deaths === top[0].deaths) ? 'ffa' : 'draw';
+      // Herkes Tek: en yüksek puan kazanır (eşitlikte çok öldüren)
+      const top = [...this.players.values()].sort((a, b) => b.score - a.score || b.kills - a.kills);
+      winner = top[0] && top[0].kills > 0 && !(top[1] && top[1].score === top[0].score && top[1].kills === top[0].kills) ? 'ffa' : 'draw';
       winnerId = winner === 'ffa' ? top[0].id : null;
     }
     console.log(`[room ${this.code}] maç bitti: ${winner} (${red}-${blue})`);

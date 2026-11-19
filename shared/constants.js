@@ -19,8 +19,8 @@ export const INTERP_DELAY = 100; // diğer oyuncular kaç ms geriden gösterilir
 // ---- Takımlar ----
 export const TEAMS = ['red', 'blue'];
 export const TEAM_INFO = {
-  red: { name: 'RED', color: '#e63946', dark: '#8d0801' },
-  blue: { name: 'BLUE', color: '#2a6fdb', dark: '#14325c' },
+  red: { name: 'RED', color: '#c4493d', dark: '#6e2a22' },
+  blue: { name: 'BLUE', color: '#3f6fa8', dark: '#22384f' },
   ffa: { name: 'FFA', color: '#9b5de5', dark: '#3c096c' }, // Herkes Tek: takım yok
 };
 
@@ -93,7 +93,7 @@ export const WEAPONS = {
     DAMAGE: 115, HEADSHOT_MULT: 1, FIRE_INTERVAL: 1450, MAG_SIZE: 5, RESERVE: 20, RELOAD_TIME: 2900, RANGE: 300,
     // Dürbünsüz çok dağınık, dürbünle durunca tam isabet
     SPREAD_BASE: 0.07, SPREAD_MOVE: 0.1, SPREAD_RUN: 0.14, SPREAD_AIR: 0.2,
-    SPREAD_SCOPED: 0.0, SPREAD_SCOPED_MOVE: 0.035, RECOIL: 0.05,
+    SPREAD_SCOPED: 0.0, SPREAD_SCOPED_MOVE: 0.012, RECOIL: 0.028,
     AUTO: false, SPEED_MULT: 0.84,
     ZOOM_FOV: [40, 15], // dürbün seviyeleri (sağ tık)
   },
@@ -233,13 +233,33 @@ export const DROP = { LIFETIME: 25000, RADIUS: 1.3, MAGS: 1 };
 // Takıma işaret (E tuşu / orta tık)
 export const MARK = { RANGE: 150, COOLDOWN: 800, LIFETIME: 5000 };
 
+// Puanlama: öldürme +3, asist +1, ölüm -1. Asist: rakibi vurdun, ASSIST_WINDOW içinde başkası öldürdü.
+// Takım ateşi açıkken takım arkadaşını öldürmek: TEAMKILL puan (öldürme sayılmaz)
+export const SCORE = { KILL: 3, ASSIST: 1, DEATH: -1, TEAMKILL: -3, ASSIST_WINDOW: 5000 };
+/** Oyuncu puanı */
+export const playerScore = (p) =>
+  (p.kills ?? 0) * SCORE.KILL + (p.assists ?? 0) * SCORE.ASSIST + (p.deaths ?? 0) * SCORE.DEATH + (p.tks ?? 0) * SCORE.TEAMKILL;
+
+// Lobide host'un seçebileceği maç sonu sınırları (hangisine önce ulaşılırsa maç biter)
+export const LIMITS = {
+  SCORE: { MIN: 10, MAX: 500, STEP: 10, DEFAULT: 100 },
+  FLAGS: { MIN: 1, MAX: 10, STEP: 1, DEFAULT: 3 },
+  TIME: { MIN: 2, MAX: 30, STEP: 1, DEFAULT: 8 }, // dakika
+};
+
+// Maçı baştan başlatma oylaması: host açar, oyuncuların (botlar hariç) yarısından fazlası EVET derse başlar
+export const VOTE = { DURATION: 20000 };
+
+// Sohbet (Enter: herkese, Y: takıma)
+export const CHAT = { MAX_LEN: 120, COOLDOWN: 600 };
+
 // Snapshot'taki bayrak durumu kodları
 export const FLAG_STATE = { BASE: 0, CARRIED: 1, DROPPED: 2 };
 
 // ---- Maç ----
 export const MATCH = {
-  SCORE_LIMIT: 30,
-  TIME_LIMIT: 8 * 60 * 1000,
+  SCORE_LIMIT: 100, // varsayılan bitiş puanı (takım puanı; Herkes Tek'te oyuncu puanı)
+  TIME_LIMIT: 8 * 60 * 1000, // varsayılan süre
   COUNTDOWN: 3000,
   END_SCREEN: 12000, // maç sonu ekranı (ödüller) süresi
 };

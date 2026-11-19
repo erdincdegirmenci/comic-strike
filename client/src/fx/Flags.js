@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { TEAMS, TEAM_INFO, FLAG_STATE, CTF } from '@comic-strike/shared/constants.js';
-import { part, toon, INK } from './Toon.js';
+import { part, sketchToon, INK } from './Toon.js';
 
 const _q = new THREE.Vector3();
 
@@ -55,7 +55,7 @@ export class Flags {
       knob.position.y = 2.33;
       const clothGeo = new THREE.PlaneGeometry(1.05, 0.68, 10, 1);
       clothGeo.translate(0.525, 0, 0);
-      const cloth = new THREE.Mesh(clothGeo, toon(color).clone());
+      const cloth = new THREE.Mesh(clothGeo, sketchToon({ color }));
       cloth.material.side = THREE.DoubleSide;
       cloth.position.set(0.04, 1.88, 0);
       const edge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(1.05, 0.68).translate(0.525, 0, 0)), new THREE.LineBasicMaterial({ color: INK }));

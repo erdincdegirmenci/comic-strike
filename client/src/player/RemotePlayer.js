@@ -176,9 +176,7 @@ export class RemotePlayer {
     this.body.add(this.arms);
     this.teamParts.push(armR, armL);
 
-    this.body.traverse((o) => {
-      if (o.isMesh && o.material !== undefined && o.material.isMeshToonMaterial) o.castShadow = true;
-    });
+    // Oyuncular gölge haritasına girmez: gölge haritası statik (sadece harita), altlarında yuvarlak gölge var
 
     const shadow = new THREE.Mesh(G.shadow, shadowMat);
     shadow.rotation.x = -Math.PI / 2;

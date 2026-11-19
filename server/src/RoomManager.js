@@ -9,6 +9,10 @@ function cleanName(name) {
   return n || `Player${Math.floor(Math.random() * 900 + 100)}`;
 }
 
+function cleanPassword(p) {
+  return typeof p === 'string' ? p.trim().slice(0, 24) : '';
+}
+
 function cleanChar(c) {
   return CHARACTER_IDS.includes(c) ? c : CHARACTER_IDS[Math.floor(Math.random() * CHARACTER_IDS.length)];
 }
@@ -33,14 +37,16 @@ export class RoomManager {
     return code;
   }
 
-  createRoom(isPublic) {
+  createRoom(isPublic, opts = {}) {
     const code = this.newCode();
     const room = new Room(code, this.io, isPublic, () => {
       this.rooms.delete(code);
       console.log(`[room] ${code} kapandı`);
     });
+    room.password = opts.password ?? '';
+    room.ff = !!opts.ff;
     this.rooms.set(code, room);
-    console.log(`[room] ${code} oluşturuldu (${isPublic ? 'herkese açık' : 'özel'})`);
+    console.log(`[room] ${code} oluşturuldu (${room.password ? 'şifreli' : 'herkese açık'}${room.ff ? ', takım ateşi' : ''})`);
     return room;
   }
 
@@ -56,9 +62,18 @@ export class RoomManager {
     console.log(`[+] Bağlandı: ${socket.id}`);
     const reply = (cb) => (typeof cb === 'function' ? cb : () => {});
 
+    // Açık oda listesi (ana menünün yanında)
+    socket.on(MSG.LIST_ROOMS, (_data, cb) => {
+      const list = [...this.rooms.values()].filter((r) => r.size > 0).map((r) => r.listing());
+      reply(cb)(list);
+    });
+
     socket.on(MSG.CREATE_ROOM, (data, cb) => {
+      const password = data?.locked ? cleanPassword(data?.password) : '';
+      if (data?.locked && !password) return reply(cb)({ ok: false, error: 'Şifreli oda için bir şifre yaz.' });
       this.leave(socket);
-      const room = this.createRoom(false);
+      // Oluşturulan her oda listede görünür; şifreliyse girerken şifre sorulur
+      const room = this.createRoom(!password, { password, ff: !!data?.ff });
       room.addPlayer(socket, cleanName(data?.name), cleanChar(data?.char), data?.loadout);
       reply(cb)({ ok: true, code: room.code });
     });
@@ -69,6 +84,9 @@ export class RoomManager {
       if (!room) return reply(cb)({ ok: false, error: 'Oda bulunamadı.' });
       if (socket.data.room === room) return reply(cb)({ ok: true, code });
       if (!room.canJoin()) return reply(cb)({ ok: false, error: 'Oda dolu.' });
+      if (room.password && cleanPassword(data?.password) !== room.password) {
+        return reply(cb)({ ok: false, needPassword: true, error: data?.password ? 'Şifre yanlış.' : 'Bu oda şifreli. Şifreyi yaz.' });
+      }
       this.leave(socket);
       room.addPlayer(socket, cleanName(data?.name), cleanChar(data?.char), data?.loadout);
       reply(cb)({ ok: true, code });
@@ -76,7 +94,7 @@ export class RoomManager {
 
     socket.on(MSG.QUICK_PLAY, (data, cb) => {
       this.leave(socket);
-      let room = [...this.rooms.values()].find((r) => r.isPublic && r.canJoin());
+      let room = [...this.rooms.values()].find((r) => r.isPublic && !r.password && r.canJoin());
       if (!room) room = this.createRoom(true);
       room.addPlayer(socket, cleanName(data?.name), cleanChar(data?.char), data?.loadout);
       reply(cb)({ ok: true, code: room.code });
@@ -109,6 +127,12 @@ export class RoomManager {
     forward(MSG.MARK, 'onMark');
     forward(MSG.ADD_BOT, 'onAddBot');
     forward(MSG.REMOVE_BOT, 'onRemoveBot');
+    forward(MSG.SET_LIMITS, 'onSetLimits');
+    forward(MSG.SET_FF, 'onSetFF');
+    forward(MSG.MOVE_BOT, 'onMoveBot');
+    forward(MSG.RESTART_REQUEST, 'onRestartRequest');
+    forward(MSG.VOTE, 'onVote');
+    forward(MSG.CHAT, 'onChat');
 
     socket.on('disconnect', () => {
       this.leave(socket);

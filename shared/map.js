@@ -206,13 +206,12 @@ function house(cx, cz, w, d, h, color, stairs) {
   const stairX = sx + stairs * 0.6;
   for (let i = 0; i < n; i++) {
     const st = ((i + 1) * top) / n;
-    box(stairX, z1 - 0.1 - (i + 0.5) * depth, 1.2, depth, st, COL.concrete);
+    const zc = z1 - 0.1 - (i + 0.5) * depth;
+    box(stairX, zc, 1.2, depth, st, COL.concrete);
+    // Korkuluk: her basamakta dikme + basamaklı tırabzan (katı: oyuncu merdivenin yanından geçemez/düşemez)
+    box(stairX + stairs * 0.63, zc, 0.06, 0.06, 0.95, COL.metal, { y: st });
+    box(stairX + stairs * 0.63, zc, 0.06, depth + 0.02, 0.06, COL.metal, { y: st + 0.95 });
   }
-  // Merdiven korkuluğu (dekor)
-  box(stairX + stairs * 0.62, cz, 0.06, d - 0.2, 0.06, COL.metal, {
-    y: top + 0.9,
-    solid: false,
-  });
 }
 
 /** İki köşesi verilen yatay dikdörtgen kutu (ayna dahil) */
@@ -294,14 +293,12 @@ function apartment(cx, cz, w, d, h, color) {
     const st = 0.15 + ((i + 1) * (top - 0.15)) / n;
     const a = xs + out * i * depth;
     rect(a, a + out * depth, zb0, zb1, 0, st, COL.concrete);
+    // Korkuluk (katı): dikme + basamaklı tırabzan, merdivenin açık kenarında
+    rect(a + out * depth * 0.45, a + out * depth * 0.55, zb1 + 0.01, zb1 + 0.07, st, 0.95, COL.metal);
+    rect(a, a + out * depth, zb1 + 0.01, zb1 + 0.07, st + 0.95, 0.06, COL.metal);
     // Basamağın üstünde ayakta duran oyuncunun kafası çatıya değiyorsa buradan itibaren çatı açık
     if (holeFrom === null && st + 1.95 > h) holeFrom = a - out * depth; // bir basamak pay
   }
-  // Merdiven korkuluğu (dekor)
-  box(cx + (out * LANDING) / 2, zb1 + 0.04, len, 0.06, 0.06, COL.metal, {
-    y: top * 0.5 + 0.9,
-    solid: false,
-  });
 
   // Çatı: merdivenin üstünde kapak boşluğu bırakan parçalar
   const rx0 = x0 - 0.25;
@@ -375,7 +372,6 @@ function car(cx, cz, alongZ, color) {
       alongZ ? 0.65 : 0.3,
       0.6,
       COL.tire,
-      { solid: false },
     );
   }
 }
@@ -482,8 +478,8 @@ box(9.5, -27, 7, 2.6, 1.95, "#e76f51", { y: CRAWL });
 box(9.5, -27, 7.08, 2.68, 0.18, COL.gold, { y: CRAWL + 1.2, solid: false });
 for (const x of [6.7, 7.6, 11.4, 12.3])
   for (const z of [-28.15, -25.85])
-    box(x, z, 0.75, 0.3, 0.8, COL.tire, { y: 0.15, solid: false });
-box(6.3, -27, 0.15, 2, CRAWL, COL.metal, { solid: false }); // dorse ayağı (dekor)
+    box(x, z, 0.75, 0.3, 0.8, COL.tire, { y: 0.15 });
+box(6.3, -27, 0.15, 2, CRAWL, COL.metal); // dorse ayağı
 pad(9.5, -31, [0, 12, 4.4]); // dorsenin üstüne
 // Ara sokağı kapatan duvar: ortasında eğilerek geçilen delik
 wall(

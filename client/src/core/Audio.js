@@ -153,11 +153,23 @@ export class Sfx {
     this.noiseBurst({ gain: 0.3, decay: 0.03, freq: 3500, type: 'highpass' });
   }
 
+  /** Reload başlangıcı: kumaş / tutuş sesi */
   reload() {
     if (!this.ready) return;
-    this.noiseBurst({ gain: 0.35, decay: 0.05, freq: 2500, type: 'highpass', delay: 0.15 });
-    this.noiseBurst({ gain: 0.4, decay: 0.06, freq: 1800, type: 'highpass', delay: 0.9 });
-    this.noiseBurst({ gain: 0.5, decay: 0.07, freq: 2200, type: 'highpass', delay: 1.5 });
+    this.noiseBurst({ gain: 0.18, decay: 0.08, freq: 900, q: 0.6 });
+  }
+
+  /** Şarjör animasyonu adımları: 'out' eski şarjör çıktı, 'in' yeni şarjör takıldı */
+  reloadStep(step) {
+    if (!this.ready) return;
+    if (step === 'out') {
+      this.noiseBurst({ gain: 0.35, decay: 0.05, freq: 2500, type: 'highpass' });
+      this.tone({ type: 'triangle', from: 520, to: 380, gain: 0.08, decay: 0.06 });
+    } else {
+      this.noiseBurst({ gain: 0.5, decay: 0.06, freq: 2200, type: 'highpass' });
+      this.tone({ type: 'square', from: 260, to: 140, gain: 0.12, decay: 0.05 });
+      this.noiseBurst({ gain: 0.35, decay: 0.05, freq: 1600, type: 'highpass', delay: 0.12 });
+    }
   }
 
   /** Zıplama pedi */

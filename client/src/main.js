@@ -10,6 +10,10 @@ import { HUD } from './ui/HUD.js';
 import { Menu } from './ui/Menu.js';
 import { loadSettings } from './ui/settings.js';
 import { Game } from './Game.js';
+import { Chat } from './ui/Chat.js';
+import { Vote } from './ui/Vote.js';
+import { makeWeaponIcons } from './ui/weaponIcons.js';
+import { toon } from './fx/Toon.js';
 
 async function boot() {
   const settings = loadSettings();
@@ -32,6 +36,7 @@ async function boot() {
       this.id = id;
       this.group = buildMap(MAPS[id], view.scene, physics);
       view.setSky(MAPS[id].sky);
+      view.refreshShadows(); // statik gölge haritası yeni harita için bir kez çizilsin
       physics.step();
     },
   };
@@ -51,6 +56,14 @@ async function boot() {
   const net = new Network();
   const game = new Game({ view, physics, input, sfx, hud, net, settings, world });
   const menu = new Menu({ net, game, input, sfx, settings, view });
+  new Chat({ net, input, game, hud });
+  new Vote({ net, game, hud });
+  // Öldürme akışındaki silah resimleri: oyunun kendi modellerinden bir kez çizilir
+  try {
+    hud.setWeaponIcons(makeWeaponIcons(view.renderer, game.weapon, [toon('#f1c27d', 'view')]));
+  } catch (err) {
+    console.warn('Silah ikonları oluşturulamadı', err);
+  }
   menu.show('main');
   window.__comic = { game, menu, view }; // tarayıcı konsolundan hata ayıklamak için
 

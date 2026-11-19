@@ -24,6 +24,7 @@
       <!-- ANA MENÜ -->
       <section id="screen-main" class="screen hidden">
         <h1 class="logo">COMIC<br />STRIKE</h1>
+        <div class="main-row">
         <div class="panel menu">
           <label class="field">NAME<input id="inp-name" maxlength="16" placeholder="Takma adın" autocomplete="off" /></label>
           <div class="field">CHARACTER <small>(T tuşuyla duvara sticker'ını yapıştırır)</small>
@@ -36,6 +37,36 @@
           <button class="btn alt" data-action="controls">CONTROLS</button>
           <p id="main-msg" class="msg"></p>
         </div>
+        <!-- Açık odalar: tıklayınca girilir (şifreliyse şifre sorulur) -->
+        <div class="panel rooms-panel">
+          <h2>AÇIK ODALAR</h2>
+          <div id="room-list"></div>
+          <p class="small rooms-note">🔒 şifreli · ⚔ takım ateşi açık</p>
+        </div>
+        </div>
+      </section>
+
+      <!-- ODA KUR -->
+      <section id="screen-create" class="screen hidden">
+        <div class="panel menu">
+          <h2>ODA KUR</h2>
+          <div class="field">ODA TÜRÜ
+            <div class="toggle-row">
+              <button class="btn small opt active" data-action="vis-public" id="vis-public">🌐 HERKESE AÇIK</button>
+              <button class="btn small opt" data-action="vis-locked" id="vis-locked">🔒 ŞİFRELİ</button>
+            </div>
+          </div>
+          <label class="field hidden" id="pass-field">ŞİFRE<input id="inp-pass" maxlength="24" placeholder="Oda şifresi" autocomplete="off" /></label>
+          <div class="field">TAKIM ATEŞİ <small>(açıksa takım arkadaşını da vurabilirsin; arkadaş öldürmek −3 puan)</small>
+            <div class="toggle-row">
+              <button class="btn small opt active" data-action="ff-off" id="ff-off">KAPALI</button>
+              <button class="btn small opt" data-action="ff-on" id="ff-on">⚔ AÇIK</button>
+            </div>
+          </div>
+          <button class="btn big" data-action="create-confirm">ODAYI KUR</button>
+          <button class="btn alt" data-action="back">BACK</button>
+          <p id="create-msg" class="msg"></p>
+        </div>
       </section>
 
       <!-- Köşede tam ekran düğmesi (menülerde görünür) -->
@@ -46,6 +77,7 @@
         <div class="panel menu">
           <h2>JOIN ROOM</h2>
           <label class="field">ROOM CODE<input id="inp-code" maxlength="5" placeholder="ABCDE" autocomplete="off" /></label>
+          <label class="field" id="join-pass-field">ŞİFRE <small>(sadece şifreli odalar)</small><input id="inp-join-pass" maxlength="24" placeholder="Şifre" autocomplete="off" /></label>
           <button class="btn big" data-action="join-confirm">JOIN</button>
           <button class="btn alt" data-action="back">BACK</button>
           <p id="join-msg" class="msg"></p>
@@ -67,8 +99,8 @@
           </label>
           <label class="field">GRAPHICS
             <select id="set-quality">
+              <option value="low">LOW (daha hızlı · varsayılan)</option>
               <option value="high">HIGH (gölgeler açık)</option>
-              <option value="low">LOW (daha hızlı)</option>
             </select>
           </label>
           <label class="field">TAM EKRAN
@@ -137,10 +169,42 @@
             <span class="small">MAP · <i id="map-hint"></i></span>
             <div id="map-pick"></div>
           </div>
+          <!-- Maç sonu: puan sınırı ve süre (hangisine önce ulaşılırsa maç biter) -->
+          <div class="map-row">
+            <span class="small">MAÇ SONU · <i id="limits-hint"></i></span>
+            <div id="limits-pick">
+              <div class="limit-card">
+                <small id="limit-score-label">BİTİŞ PUANI</small>
+                <div class="stepper">
+                  <button class="btn small step" data-action="limit-score-dec">−</button>
+                  <b id="limit-score">100</b>
+                  <button class="btn small step" data-action="limit-score-inc">+</button>
+                </div>
+                <div class="presets" id="limit-score-presets"></div>
+                <small id="limit-score-desc" class="limit-desc">Öldürme +3 · Asist +1 · Ölüm −1</small>
+              </div>
+              <div class="limit-or">YA DA</div>
+              <div class="limit-card">
+                <small>SÜRE</small>
+                <div class="stepper">
+                  <button class="btn small step" data-action="limit-time-dec">−</button>
+                  <b id="limit-time">8 DK</b>
+                  <button class="btn small step" data-action="limit-time-inc">+</button>
+                </div>
+                <div class="presets" id="limit-time-presets"></div>
+                <small class="limit-desc">Hangisine önce ulaşılırsa maç biter</small>
+              </div>
+            </div>
+          </div>
           <div id="bot-row" class="bot-row hidden">
             <span class="small">🤖 PRATİK BOTLARI</span>
             <button id="btn-addbot" class="btn small" data-action="add-bot">+ BOT EKLE</button>
             <button id="btn-rmbot" class="btn small alt" data-action="remove-bot">− BOT ÇIKAR</button>
+            <span class="small bot-hint">Botları sürükleyip diğer takıma bırakabilirsin</span>
+          </div>
+          <div class="ff-row">
+            <span class="small">TAKIM ATEŞİ</span>
+            <button id="btn-ff" class="btn small" data-action="ff-toggle">KAPALI</button>
           </div>
           <p id="lobby-status" class="status"></p>
           <div class="lobby-actions">
@@ -158,6 +222,7 @@
           <h2 id="pause-title">PAUSED</h2>
           <button id="btn-resume" class="btn big" data-action="resume">RESUME</button>
           <button class="btn" data-action="loadout">SİLAH SEÇ (B)</button>
+          <button id="btn-restart" class="btn alt hidden" data-action="restart-vote">↺ MAÇI BAŞTAN BAŞLAT</button>
           <button class="btn alt fs-label" data-action="fullscreen">⛶ TAM EKRAN</button>
           <button class="btn alt" data-action="settings">SETTINGS</button>
           <button class="btn alt" data-action="leave-match">LEAVE MATCH</button>
@@ -192,7 +257,17 @@
       <div id="flag-msg"></div>
       <div id="flag-carry" class="hidden">🚩 BAYRAK SENDE — ÜSSÜNE GÖTÜR! <small id="flag-carry-hint"></small></div>
 
+      <canvas id="minimap"></canvas>
       <div id="killfeed"></div>
+      <!-- Sohbet: Enter herkese, Y takıma -->
+      <div id="chat">
+        <div id="chat-log"></div>
+        <div id="chat-input-row" class="hidden">
+          <span id="chat-mode">HERKES:</span>
+          <input id="chat-input" autocomplete="off" spellcheck="false" />
+        </div>
+        <div id="chat-hint">ENTER: SOHBET · Y: TAKIM</div>
+      </div>
       <div id="ping"></div>
 
       <div id="health" class="hud-box">
@@ -209,6 +284,16 @@
       </div>
 
       <div id="center-msg"></div>
+      <!-- Baştan başlatma oylaması -->
+      <div id="vote" class="hidden">
+        <p id="vote-title"></p>
+        <p id="vote-count"></p>
+        <div id="vote-actions">
+          <button class="btn small" id="vote-yes">F1 · EVET</button>
+          <button class="btn small alt" id="vote-no">F2 · HAYIR</button>
+        </div>
+        <small id="vote-note"></small>
+      </div>
       <div id="comic-pop"></div>
       <div id="protect" class="hidden">
         <p>🛡 KORUMA <b id="protect-time">5</b></p>

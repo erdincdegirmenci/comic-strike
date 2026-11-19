@@ -5,6 +5,12 @@ import { stepGrenade, throwVelocity } from '@comic-strike/shared/grenade.js';
 const MAX_DOTS = 48;
 const DOT_EVERY = 3; // kaç fizik adımında bir nokta
 const _m = new THREE.Matrix4();
+// Bombanın fitil süresince ulaşabileceği en uzak mesafe (yatay / yukarı / aşağı), metre.
+// Bunun dışındaki kutular yörüngeye hiç değemez; elemek sonucu değiştirmez, sadece hızlandırır.
+const REACH_XZ = 32;
+const REACH_UP = 14;
+const REACH_DOWN = 70;
+const REFILTER_DIST = 2; // oyuncu bu kadar yer değiştirince yakın kutu listesi yenilenir
 
 /**
  * Bomba / sis atış önizlemesi: elinde bomba varken atılacağı yörüngeyi noktalarla,
@@ -40,6 +46,30 @@ export class Trajectory {
     this.dots.visible = false;
     this.marker.visible = false;
     scene.add(this.dots, this.marker);
+    this.near = null; // yörüngeye değebilecek kutular
+    this.nearFor = null; // { solids, x, y, z }
+  }
+
+  /** Haritanın yalnızca bombanın erişebileceği kısmındaki kutular (her karede ~600 yerine birkaç düzine) */
+  nearSolids(o, solids) {
+    const f = this.nearFor;
+    if (
+      f &&
+      f.solids === solids &&
+      Math.abs(o[0] - f.x) < REFILTER_DIST &&
+      Math.abs(o[1] - f.y) < REFILTER_DIST &&
+      Math.abs(o[2] - f.z) < REFILTER_DIST
+    )
+      return this.near;
+    const m = REFILTER_DIST;
+    const x0 = o[0] - REACH_XZ - m, x1 = o[0] + REACH_XZ + m;
+    const z0 = o[2] - REACH_XZ - m, z1 = o[2] + REACH_XZ + m;
+    const y0 = o[1] - REACH_DOWN - m, y1 = o[1] + REACH_UP + m;
+    this.near = solids.filter(
+      (b) => b.max[0] > x0 && b.min[0] < x1 && b.max[2] > z0 && b.min[2] < z1 && b.max[1] > y0 && b.min[1] < y1,
+    );
+    this.nearFor = { solids, x: o[0], y: o[1], z: o[2] };
+    return this.near;
   }
 
   hide() {
@@ -58,6 +88,7 @@ export class Trajectory {
     const v = throwVelocity(dir, charge).map((x) => Math.round(x * 100) / 100);
     const g = { p: origin.map((x) => Math.round(x * 100) / 100), v };
     const steps = Math.floor(w.FUSE / 1000 / GRENADE.STEP);
+    solids = this.nearSolids(origin, solids);
     let n = 0;
     for (let i = 1; i <= steps; i++) {
       stepGrenade(g, solids);
