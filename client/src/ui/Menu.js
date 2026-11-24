@@ -44,6 +44,7 @@ export class Menu {
     $('game').addEventListener('click', () => {
       if (this.game.active && !this.input.locked && this.game.state !== 'ended') this.resume();
     });
+    this.setupLobbyFit();
     $('inp-code').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') this.action('join-confirm');
     });
@@ -275,12 +276,31 @@ export class Menu {
     for (const b of $('char-pick').children) b.classList.toggle('active', b.dataset.char === this.settings.char);
   }
 
+  /** Lobi paneli ekrana sığmıyorsa pencere boyutuna göre küçültür (zoom). */
+  setupLobbyFit() {
+    const panel = document.querySelector('#screen-lobby .panel.lobby');
+    if (!panel) return;
+    let queued = false;
+    const fit = () => {
+      queued = false;
+      if (this.current !== 'lobby') return;
+      panel.style.zoom = '1';
+      const w = panel.offsetWidth + 14, h = panel.offsetHeight + 14; // gölge payı
+      const z = Math.max(0.35, Math.min(1, (window.innerHeight - 16) / h, (window.innerWidth - 8) / w));
+      panel.style.zoom = z.toFixed(3);
+    };
+    this.fitLobby = () => { if (!queued) { queued = true; requestAnimationFrame(fit); } };
+    window.addEventListener('resize', this.fitLobby);
+    new MutationObserver(this.fitLobby).observe(panel, { childList: true, subtree: true, characterData: true });
+  }
+
   show(name) {
     if (name !== 'loadout') this.preview?.stop();
     if (name === 'main' && this.current !== 'main') setTimeout(() => this.refreshRooms(), 0);
     for (const s of document.querySelectorAll('.screen')) s.classList.toggle('hidden', s.id !== `screen-${name}`);
     this.current = name;
     document.body.classList.toggle('in-menu', !this.game.active);
+    if (name === 'lobby') this.fitLobby?.();
   }
 
   msg(id, text, error = true) {

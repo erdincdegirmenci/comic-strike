@@ -608,3 +608,6 @@ body.pointer-locked .fs-btn { display: none; }
 #vote.voted #vote-actions { display: none; }
 #vote-note { font: 12px system-ui, sans-serif; color: #6d6052; }
 #btn-restart { background: #f3e1c6; }
+
+/* Lobi: ekrana sığmazsa JS (Menu.setupLobbyFit) küçültür; yine de taşarsa kaydırılabilir */
+#screen-lobby { overflow-y: auto; justify-content: safe center; padding: 8px 0; }
