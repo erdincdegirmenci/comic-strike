@@ -29,7 +29,7 @@ Mesaj isimleri `shared/protocol.js` içindedir.
 | `room_state` | `{code, hostId, state, isPublic, scores, minPlayers, maxPlayers, maxPerTeam, players:[{id,name,team,ready,kills,deaths}]}` |
 | `notice` | metin (ör. "Herkes hazır değil.") |
 | `match_start` | `{map, roster, scores, scoreLimit, timeLeft, countdown}` |
-| `snapshot` | 20/sn: `{t, st, tl, cd, s:[red,blue], p:[[id,x,y,z,yaw,pitch,hp,alive,flags,rtt,kills,deaths,weaponIndex], ...]}` |
+| `snapshot` | 20/sn: `{t, st, tl, cd, s:[red,blue], p:[[id,x,y,z,yaw,pitch,hp,alive,flags,rtt,kills,deaths,weaponIndex,assists,revenges,level], ...]}` |
 | `respawn` | `{id, p, yaw, life, ammo:{rifle,awp}, reserve:{rifle,awp}, nades:{he,smoke}, pr}` — `pr`: kalan doğuş koruması (ms). Snapshot bayraklarında `32` = korumalı |
 | `correction` | `{p, l}`: sunucu hareketini kabul etmedi, bu konuma dön |
 | `shot` | `{id, o, e, w}`: başka bir oyuncu ateş etti (iz ve ses için) |
@@ -59,4 +59,16 @@ Mesaj isimleri `shared/protocol.js` içindedir.
 | `frozen` | sunucu → oyuncu | `{ms}` dondun |
 | `blind` | sunucu → oyuncu | `{ms, k}` flaş körlüğü süresi ve şiddeti |
 
-`kill` mesajında ayrıca `sr` (katilin serisi), `mk` (art arda öldürme) ve `se` (biten kurban serisi) vardır. Snapshot bayraklarına `FROZEN` eklendi.
+`kill` mesajında ayrıca `sr` (katilin serisi), `mk` (art arda öldürme), `se` (biten kurban serisi), `rv` (bu öldürme bir intikam) ve `nm` (katil artık kurbanın ezeli düşmanı) vardır. Snapshot bayraklarına `FROZEN` eklendi.
+
+## Sahte kopya ve Silah Yarışı (sunucu → istemci)
+
+| Mesaj | İçerik |
+| --- | --- |
+| `decoy` | `{id, o, n, c, tm, p, yaw, w, rem}` sahte kopya dikildi (`rem`: kalan süre, ms) |
+| `decoy_end` | `{id, by}` kopya vuruldu (`by`) ya da süresi doldu (`by = null`) |
+| `gun` | `{loadout, ammo, reserve, nades, level}` Silah Yarışı'nda yeni silah / seviye |
+
+## Oyuncak tren
+
+Tren için ağ mesajı yoktur: konumu yalnızca sunucu saatinden hesaplanır (`shared/train.js`), istemci ve sunucu aynı sonucu bulur.

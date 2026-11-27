@@ -52,6 +52,10 @@ export class Player {
     this.streak = 0; // ölmeden yapılan öldürme serisi
     this.multi = 0; // art arda (kısa arayla) öldürme
     this.lastKill = 0;
+    this.revenges = 0; // ezeli düşmandan alınan intikam sayısı
+    this.grudge = new Map(); // rakip id -> ben onu öldüremeden onun beni kaç kez öldürdüğü
+    this.level = 0; // Silah Yarışı basamağı
+    this.gunSet = null; // Silah Yarışı'nda eldeki silahlar (diğer modlarda null)
   }
 
   /** Doğuşta: donma, körlük, kanca durumlarını temizle */
@@ -85,6 +89,18 @@ export class Player {
   /** Doğuşta silah/mermi/bomba sıfırlama */
   resetLoadout() {
     const l = this.loadout;
+    if (this.gunSet) {
+      // Silah Yarışı: sadece sıradaki silah + bıçak, mermi bitmez
+      const [w] = this.gunSet;
+      this.weapon = w;
+      this.ammo = { [w]: WEAPONS[w].MAG_SIZE };
+      this.reserve = { [w]: w === 'knife' ? 0 : 999 };
+      this.nades = {};
+      this.reloadUntil = 0;
+      this.lastShot = 0;
+      this.fired = false;
+      return;
+    }
     this.weapon = l.primary;
     this.ammo = { [l.primary]: WEAPONS[l.primary].MAG_SIZE, [l.pistol]: WEAPONS[l.pistol].MAG_SIZE };
     // Yedek mermi: şarjör değiştirince buradan alınır, bitince o silahla ateş edilemez (doğuşta dolar)
@@ -98,6 +114,7 @@ export class Player {
   /** Bu oyuncunun elinde olabilecek silahlar */
   owns(w) {
     const l = this.loadout;
+    if (this.gunSet) return this.gunSet.includes(w);
     return w === 'knife' || w === l.primary || w === l.pistol || w === l.nade;
   }
 
@@ -127,7 +144,7 @@ export class Player {
   info() {
     return {
       id: this.id, name: this.name, team: this.team, char: this.char, ready: this.ready, kills: this.kills, deaths: this.deaths,
-      assists: this.assists, tks: this.tks, score: this.score, hs: this.hs, caps: this.caps, bot: this.isBot,
+      assists: this.assists, tks: this.tks, score: this.score, hs: this.hs, caps: this.caps, revenges: this.revenges, level: this.level, bot: this.isBot,
     };
   }
 }

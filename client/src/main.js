@@ -39,6 +39,10 @@ async function boot() {
       view.refreshShadows(); // statik gölge haritası yeni harita için bir kez çizilsin
       physics.step();
     },
+    /** Haritadaki hareketli tren (yoksa undefined) */
+    get train() {
+      return this.group?.userData.train;
+    },
   };
   world.load(DEFAULT_MAP);
 

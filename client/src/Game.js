@@ -17,9 +17,13 @@ import {
   HOOK,
   STREAK,
   playerScore,
+  REVENGE,
+  GUN_LADDER,
+  isSolo,
 } from "@comic-strike/shared/constants.js";
 import { solidsOf } from "@comic-strike/shared/maps.js";
 import { stepGrenade, stepRocket } from "@comic-strike/shared/grenade.js";
+import { trainCarry, trainSolids } from "@comic-strike/shared/train.js";
 import { LocalPlayer } from "./player/LocalPlayer.js";
 import { RemotePlayer } from "./player/RemotePlayer.js";
 import { Weapon } from "./player/Weapon.js";
@@ -46,7 +50,7 @@ const NADE_GEO = {
   flash: new THREE.CylinderGeometry(0.07, 0.07, 0.22, 10),
   frost: new THREE.BoxGeometry(0.17, 0.17, 0.17),
 };
-const NADE_COLOR = { he: "#52b788", smoke: "#adb5bd", poison: "#7cb518", mine: "#4a4e3a", molotov: "#9c6644", bazooka: "#5c6b3a", flash: "#e9ecef", frost: "#7fd3f5" };
+const NADE_COLOR = { decoy: "#f4a261", he: "#52b788", smoke: "#adb5bd", poison: "#7cb518", mine: "#4a4e3a", molotov: "#9c6644", bazooka: "#5c6b3a", flash: "#e9ecef", frost: "#7fd3f5" };
 const _yAxis = new THREE.Vector3(0, 1, 0);
 // Ateş sesi: silaha göre
 const SHOT_SOUND = { awp: "awp", shotgun: "shotgun", revolver: "revolver", cannon: "revolver" };
@@ -93,6 +97,7 @@ export class Game {
     this.deathLook = new THREE.Vector3();
     this.remotes = new Map();
     this.grenades = new Map();
+    this.decoys = new Map(); // sahte kopyalar
     this.raycaster = new THREE.Raycaster();
     this.active = false;
     this.reset();
@@ -176,6 +181,9 @@ export class Game {
     on(MSG.DROP, (d) => this.drops.add(d.id, d.p));
     on(MSG.PICKUP, this.onPickup);
     on(MSG.REWARD, this.onReward);
+    on(MSG.DECOY, this.onDecoy);
+    on(MSG.DECOY_END, this.onDecoyEnd);
+    on(MSG.GUN, this.onGun);
     on(MSG.HOOKED, this.onHooked);
     on(MSG.FROZEN, this.onFrozen);
     on(MSG.BLIND, (d) => {
@@ -222,8 +230,10 @@ export class Game {
       d,
       w,
       a,
+      rv,
+      lv,
     ] of s.p) {
-      this.stats.set(id, { k, d, a: a ?? 0, rtt });
+      this.stats.set(id, { k, d, a: a ?? 0, rv: rv ?? 0, lv: lv ?? 0, rtt });
       if (id === this.myId) {
         this.hp = hp;
         this.myPing = rtt;
@@ -252,7 +262,7 @@ export class Game {
       this.protectedUntil =
         performance.now() + (d.pr ?? PLAYER.SPAWN_PROTECTION);
       const kr = this.killerId ? this.remotes.get(this.killerId) : null;
-      if (kr) kr.setFriendly(this.mode !== "ffa" && kr.team === this.team); // etiketi eski haline getir
+      if (kr) kr.setFriendly(!isSolo(this.mode) && kr.team === this.team); // etiketi eski haline getir
       this.killerId = null;
       this.hud.respawn(null);
     } else {
@@ -390,7 +400,7 @@ export class Game {
 
   /** Bu uzak oyuncu bize rakip mi (Herkes Tek'te herkes) */
   isEnemy(rp) {
-    return this.mode === "ffa" || rp.team !== this.team;
+    return isSolo(this.mode) || rp.team !== this.team;
   }
 
   onPickup(d) {
@@ -405,7 +415,7 @@ export class Game {
 
   /** E / orta tık: baktığın yeri takıma işaretle (rakip oyuncuya bakıyorsan "DÜŞMAN!") */
   mark(now) {
-    if (this.mode === "ffa" || now - this.lastMark < MARK.COOLDOWN) return; // Herkes Tek'te takım yok
+    if (isSolo(this.mode) || now - this.lastMark < MARK.COOLDOWN) return; // Herkes Tek'te takım yok
     this.aim();
     const hit = this.physics.raycast(
       _eye,
@@ -490,7 +500,9 @@ export class Game {
       _tmp.copy(r.root.position).y += 2;
       this.effects.word(_tmp, word);
     }
-    this.announceStreak(d, killer, victim);
+    // İntikam / ezeli düşman duyurusu seri duyurusundan önceliklidir (aynı yazı alanı)
+    if (!this.announceRevenge(d, killer, victim))
+      this.announceStreak(d, killer, victim);
     this.ropes.remove(d.v);
     if (d.v === this.myId) {
       this.clearStatus();
@@ -517,6 +529,33 @@ export class Game {
       this.hud.pop(word);
       this.sfx.kill();
     }
+  }
+
+  /** İntikam (herkese) ve ezeli düşman (sadece ilgili iki oyuncuya). Duyuru yapıldıysa true döner */
+  announceRevenge(d, killer, victim) {
+    const iKilled = d.k === this.myId;
+    const iDied = d.v === this.myId;
+    if (d.nm && iDied) this.nemeses.add(d.k);
+    if (d.rv) {
+      if (iKilled) this.nemeses.delete(d.v);
+      const who = iKilled ? "SEN" : killer.name;
+      this.hud.streak(
+        "İNTİKAM!",
+        `${who} ➜ ${victim.name} · +${REVENGE.BONUS} PUAN`,
+        iKilled,
+      );
+      if (iKilled) this.sfx.streak(3);
+      return true;
+    }
+    if (!d.nm || (!iKilled && !iDied)) return false;
+    this.hud.streak(
+      "EZELİ DÜŞMAN!",
+      iDied
+        ? `${killer.name} seni ${REVENGE.KILLS} kez vurdu · intikamını al!`
+        : `${victim.name} artık intikam peşinde!`,
+      true,
+    );
+    return true;
   }
 
   /** Seri öldürme duyurusu: art arda (ikili, üçlü...), ölmeden seri ve biten seri */
@@ -598,6 +637,8 @@ export class Game {
     if (d.fz) {
       // Mayın söndü (süresi doldu / yeni mayın kuruldu): hasarsız küçük duman
       this.effects.poof(_tmp);
+    } else if (d.t === "decoy") {
+      this.effects.poof(_tmp);
     } else if (d.t === "flash") {
       this.effects.flashBurst(_tmp);
       this.sfx.flashbang(Math.max(0.05, 1 - dist / 60));
@@ -618,6 +659,83 @@ export class Game {
       this.effects.smoke(_tmp, w.RADIUS, (d.rem ?? w.DURATION) / 1000, d.t === "poison");
       if (!d.rem) this.sfx.smokePop(Math.max(0.05, 1 - dist / 50));
     }
+  }
+
+  // ---------------- Sahte Kopya ----------------
+
+  onDecoy(d) {
+    const friend = d.o === this.myId || (!isSolo(this.mode) && d.tm === this.team);
+    // Rakipler gerçek oyuncudan ayırt edemesin; atan ve takımı "(KOPYA)" yazısını görür
+    const r = new RemotePlayer(
+      { id: `decoy-${d.id}`, name: friend ? `${d.n} (KOPYA)` : d.n, char: d.c, team: d.tm },
+      this.scene,
+    );
+    r.setWeapon(d.w);
+    r.push(0, d.p[0], d.p[1], d.p[2], d.yaw, 0, true, 0);
+    r.setFriendly(friend);
+    r.owner = d.o;
+    this.decoys.set(d.id, r);
+  }
+
+  onDecoyEnd(d) {
+    const r = this.decoys.get(d.id);
+    if (!r) return;
+    this.decoys.delete(d.id);
+    this.effects.poof(r.root.position);
+    if (d.by) {
+      _tmp.copy(r.root.position).y += 2;
+      this.effects.word(_tmp, "KANDIN!");
+    }
+    if (d.by === this.myId) this.hud.flagNotice("SAHTE KOPYAYMIŞ!", "bad");
+    else if (d.by && r.owner === this.myId) this.hud.flagNotice("KOPYAN BİRİNİ KANDIRDI!", "good");
+    r.dispose();
+  }
+
+  clearDecoys() {
+    for (const r of this.decoys?.values() ?? []) r.dispose();
+    this.decoys = new Map();
+  }
+
+  // ---------------- Silah Yarışı ----------------
+
+  onGun(d) {
+    if (!this.alive) return;
+    this.weapon.reset(d.ammo, d.nades, d.loadout, d.reserve);
+    this.chargeStart = 0;
+    this.switchBackAt = 0;
+    this.sfx.draw();
+    const w = GUN_LADDER[d.level];
+    this.hud.flagNotice(
+      w === "knife" ? "SON SEVİYE: BIÇAKLA BİTİR!" : `SEVİYE ${d.level + 1} · ${WEAPONS[w].NAME}`,
+      "good",
+    );
+  }
+
+  // ---------------- Tren ----------------
+
+  /** Sunucu saati tahmini (tren bu saate göre hareket eder) */
+  get serverNow() {
+    return Date.now() - (this.offset ?? 0);
+  }
+
+  /** Harita + (varsa) hareketli trenin şu anki kutuları: bomba / roket yörüngesi için */
+  get liveSolids() {
+    const t = this.world.map.train;
+    return t ? this.solids.concat(trainSolids(t, this.serverNow)) : this.solids;
+  }
+
+  /** Treni güncel yerine getir; yerel oyuncu trendeyse onu da taşı */
+  updateTrain() {
+    const train = this.world.map.train;
+    if (!train || !this.world.train) return;
+    const t = this.serverNow;
+    if (this.alive && this.state !== "ended" && this.trainT !== null) {
+      const dx = trainCarry(train, this.local.position.toArray(), this.trainT, t);
+      if (dx) this.local.shift(dx);
+    }
+    this.trainT = t;
+    this.world.train.update(t);
+    this.physics.step(); // çarpışma sorguları trenin yeni yerini görsün
   }
 
   onSprayed(d) {
@@ -706,6 +824,9 @@ export class Game {
       for (const r of this.remotes.values()) r.die();
     }
     this.reset();
+    this.nemeses = new Set(); // ezeli düşmanlarım (id)
+    this.clearDecoys();
+    this.trainT = null;
     this.world.load(info.map);
     this.solids = solidsOf(this.world.id);
     this.local.traction = this.world.map.traction ?? 1;
@@ -745,6 +866,7 @@ export class Game {
     this.remotes.clear();
     for (const g of this.grenades.values()) this.scene.remove(g.mesh);
     this.grenades.clear();
+    this.clearDecoys();
     this.effects.clear();
     this.trajectory.hide();
     this.flags.setup(null);
@@ -774,7 +896,7 @@ export class Game {
         r.body3 = this.physics.addPlayerBody(); // çarpışma kapsülü
         this.remotes.set(p.id, r);
       } else r.setInfo(p);
-      r.setFriendly(this.mode !== "ffa" && p.team === this.team);
+      r.setFriendly(!isSolo(this.mode) && p.team === this.team);
     }
     for (const [id, r] of this.remotes) {
       if (!this.roster.has(id)) {
@@ -923,6 +1045,8 @@ export class Game {
     const targets = [];
     for (const rp of this.remotes.values())
       if (rp.alive && rp.visible && (this.ff || this.isEnemy(rp))) targets.push(rp.body); // takım ateşinde arkadaşlar da
+    for (const rp of this.decoys.values())
+      if (rp.owner !== this.myId && (this.ff || this.isEnemy(rp))) targets.push(rp.body);
     const ph = targets.length
       ? this.raycaster.intersectObjects(targets, true)[0]
       : null;
@@ -1088,6 +1212,8 @@ export class Game {
     const controls = input.locked && this.alive && playing && !this.chatting && !frozen;
     if (frozen) this.local.velocity.x = this.local.velocity.z = 0;
 
+    this.updateTrain();
+
     const look = input.locked
       ? input.consumeMouse()
       : (input.consumeMouse(), { dx: 0, dy: 0 });
@@ -1110,7 +1236,7 @@ export class Game {
     if (controls) this.handleWeaponInput(now);
     else this.weapon.aiming = false;
     this.updateTrajectory(controls);
-    if (input.locked && this.state !== "ended" && input.pressed("KeyB"))
+    if (input.locked && this.state !== "ended" && this.mode !== "gun" && input.pressed("KeyB"))
       this.onBuyMenu?.();
     this.weapon.update(dt, now, this.local, look);
 
@@ -1134,7 +1260,11 @@ export class Game {
     this.updateCamera(dt);
 
     const renderT = Date.now() - (this.offset ?? 0) - INTERP_DELAY;
-    for (const r of this.remotes.values()) r.update(renderT, dt);
+    const train = this.world.map.train;
+    const carry =
+      train && ((p, at) => trainCarry(train, [p.x, p.y, p.z], at, this.serverNow));
+    for (const r of this.remotes.values()) r.update(renderT, dt, carry);
+    for (const r of this.decoys.values()) r.update(renderT, dt);
     this.updateBodies();
     this.flags.update(
       dt,
@@ -1220,23 +1350,24 @@ export class Game {
       d,
       r2(this.charge),
       wp.current,
-      this.solids,
+      this.liveSolids,
       !!this.chargeStart,
     );
   }
 
   /** Sunucuyla aynı sabit adımlı fizikle bombaları ilerlet */
   updateGrenades(now) {
+    const solids = this.liveSolids;
     for (const [gid, g] of this.grenades) {
       const target = Math.floor((now - g.born) / 1000 / (1 / 60));
       let n = 0;
       while (g.steps < target && n++ < 600) {
         g.steps++;
         if (g.rocket) {
-          stepRocket(g.sim, this.solids);
+          stepRocket(g.sim, solids);
           continue;
         }
-        stepGrenade(g.sim, this.solids);
+        stepGrenade(g.sim, g.mine ? this.solids : solids);
         // Sekme sesi: dikey hız yön değiştirdiyse
         if (g.lastVy < -2 && g.sim.v[1] > 0) {
           _tmp.set(g.sim.p[0], g.sim.p[1], g.sim.p[2]);
@@ -1354,11 +1485,22 @@ export class Game {
       wp.nades,
       this.alive && this.state !== "ended",
     );
-    if (this.mode === "ffa") {
+    if (this.mode === "gun") {
+      const level = (id) => this.stats.get(id)?.lv ?? 0;
+      let lead = null;
+      for (const p of this.roster.values()) {
+        if (p.id === this.myId) continue;
+        if (!lead || level(p.id) > lead.lv) lead = { name: p.name, lv: level(p.id) };
+      }
+      const next = GUN_LADDER[level(this.myId) + 1];
+      hud.setGunScores(level(this.myId) + 1, (lead?.lv ?? 0) + 1, lead?.name ?? "-", GUN_LADDER.length, next ? WEAPONS[next].NAME : "ZAFER");
+    } else if (this.mode === "ffa") {
       // Herkes Tek: solda benim puanım, sağda en yüksek puanlı rakip
       const score = (id) => {
         const st = this.stats.get(id);
-        return st ? playerScore({ kills: st.k, assists: st.a, deaths: st.d }) : 0;
+        return st
+          ? playerScore({ kills: st.k, assists: st.a, deaths: st.d, revenges: st.rv })
+          : 0;
       };
       let lead = null;
       for (const p of this.roster.values()) {
@@ -1457,7 +1599,16 @@ export class Game {
           k: s.k,
           a: s.a,
           d: s.d,
-          score: playerScore({ kills: s.k, assists: s.a, deaths: s.d }),
+          score:
+            this.mode === "gun"
+              ? (s.lv ?? 0) + 1
+              : playerScore({
+                  kills: s.k,
+                  assists: s.a,
+                  deaths: s.d,
+                  revenges: s.rv,
+                }),
+          nemesis: this.nemeses.has(p.id),
           rtt: s.rtt,
           bot: p.bot,
         };

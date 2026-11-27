@@ -17,7 +17,9 @@ export class Physics {
   }
 
   addBox(x, y, z, hx, hy, hz) {
-    this.mapColliders.push(this.world.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(x, y, z)));
+    const c = this.world.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(x, y, z));
+    this.mapColliders.push(c);
+    return c;
   }
 
   /** Harita değişirken eski haritanın kutularını kaldır */

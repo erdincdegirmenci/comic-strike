@@ -1,5 +1,5 @@
 import { MSG } from '@comic-strike/shared/protocol.js';
-import { TEAM_INFO, CHARACTERS, CHARACTER_IDS, WEAPONS, LOADOUT_OPTIONS, cleanLoadout, MODES, MODE_IDS, LIMITS, DAMAGE_ZONE } from '@comic-strike/shared/constants.js';
+import { TEAM_INFO, CHARACTERS, CHARACTER_IDS, WEAPONS, LOADOUT_OPTIONS, cleanLoadout, MODES, MODE_IDS, LIMITS, DAMAGE_ZONE, GUN_LADDER, isSolo } from '@comic-strike/shared/constants.js';
 import { MAPS, MAP_IDS } from '@comic-strike/shared/maps.js';
 import { saveSettings } from './settings.js';
 import { drawSpray } from '../fx/Sprays.js';
@@ -132,6 +132,7 @@ export class Menu {
         stats.textContent = w.SPRAY ? `${(w.DAMAGE * 1000) / w.FIRE_INTERVAL} HASAR/sn · ${w.RANGE} m · ${w.MAG_SIZE}+${w.RESERVE}`
           : w.id === 'flash' ? `${w.BLIND / 1000} sn'ye kadar körlük · ${w.COUNT} ADET`
           : w.id === 'frost' ? `${w.FREEZE_MS / 1000} sn donma · ${w.RADIUS} m`
+          : w.id === 'decoy' ? `${w.DURATION / 1000} sn kopya · ${w.COUNT} ADET`
           : w.ROCKET ? `PATLAMA ${w.DAMAGE} · ${w.RADIUS} m · ${w.MAG_SIZE}+${w.RESERVE} ROKET`
           : w.PELLETS ? `${w.PELLETS}×${w.DAMAGE} SAÇMA · ŞARJÖR ${w.MAG_SIZE}+${w.RESERVE}`
           : w.kind === 'gun'
@@ -165,6 +166,7 @@ export class Menu {
       ? `Saniyede ${(w.DAMAGE * 1000) / w.FIRE_INTERVAL} HASAR · MENZİL ${w.RANGE} m · ${w.CHILL ? `${(w.CHILL * w.FIRE_INTERVAL) / 1000} sn püskürtünce ${w.FREEZE_MS / 1000} sn dondurur · ` : ''}ŞARJÖR ${w.MAG_SIZE} · YEDEK ${w.RESERVE}`
       : w.id === 'flash' ? `Patlamayı gören herkes (sen de!) ${w.BLIND / 1000} sn'ye kadar kör olur · arkanı dönersen çok daha kısa · ${w.COUNT} ADET`
       : w.id === 'frost' ? `${w.RADIUS} m alandaki herkes (sen ve takımın da!) ${w.FREEZE_MS / 1000} sn donar · hasar vermez`
+      : w.id === 'decoy' ? `Düştüğü yerde ${w.DURATION / 1000} sn senin kopyan durur · rakipler ve botlar ateş eder · ${w.COUNT} ADET · basılı tut, uzağa at`
       : w.ROCKET
       ? `Roket çarptığı yerde patlar · ${w.DAMAGE} HASAR · ETKİ ALANI ${w.RADIUS} m · ŞARJÖR ${w.MAG_SIZE} · YEDEK ${w.RESERVE} · kendine de zarar verir`
       : w.PELLETS
@@ -219,7 +221,7 @@ export class Menu {
       b.dataset.action = `map-${id}`;
       b.dataset.map = id;
       b.textContent = MAPS[id].name;
-      const note = MAPS[id].ffaOnly ? 'SADECE HERKES TEK' : MAPS[id].desc;
+      const note = MAPS[id].ffaOnly ? 'SADECE TAKIMSIZ MODLAR' : MAPS[id].desc;
       if (note) {
         const tag = document.createElement('small');
         tag.textContent = note;
@@ -574,13 +576,17 @@ export class Menu {
     this.net.on(MSG.MATCH_START, (info) => {
       this.game.start(info, this.net.id);
       $('btn-restart').classList.add('hidden');
+      // Silah Yarışı'nda silahı seviye belirler: seçim düğmesi gizlenir
+      document
+        .querySelector('#screen-pause [data-action="loadout"]')
+        ?.classList.toggle('hidden', info.mode === 'gun');
       $('pause-title').textContent = 'GET READY!';
       $('btn-resume').textContent = 'CLICK TO FIGHT';
       // Maç başında önce silah seçimi (silahı sabit haritalarda — sadece AWP — seçim ekranı açılmaz)
       this.net.emit(MSG.SET_LOADOUT, this.settings.loadout);
       const force = MAPS[info.map]?.forceLoadout;
       this.forceNote = force?.primary ? `Bu haritada ana silah her zaman ${WEAPONS[force.primary].NAME}.` : '';
-      if (force) {
+      if (force || info.mode === 'gun') {
         this.show('pause');
         this.input.unlock();
       } else this.openLoadout();
@@ -642,6 +648,15 @@ export class Menu {
       for (const b of document.querySelectorAll('#limit-score-presets .preset')) b.classList.toggle('active', Number(b.dataset.value) === scoreVal);
       for (const b of document.querySelectorAll('#limit-time-presets .preset')) b.classList.toggle('active', Number(b.dataset.value) === rs.limits.time);
       $('limits-hint').textContent = isHost ? 'Puan ya da süre — hangisi önce gelirse' : 'Sınırları host seçer';
+      // Silah Yarışı: bitiş sınırı sabit (bütün silahlar), sadece süre seçilir
+      if (rs.mode === 'gun') {
+        $('limit-score-label').textContent = 'SİLAH SAYISI';
+        $('limit-score-desc').textContent = 'Son silah bıçak · bıçaklanan bir seviye düşer';
+        $('limit-score').textContent = `${GUN_LADDER.length} SEVİYE`;
+        for (const b of document.querySelectorAll('#limits-pick button')) {
+          if (b.dataset.action?.startsWith('limit-score')) b.disabled = true;
+        }
+      }
     }
     if (!this.game.active && rs.map) this.game.world.load(rs.map);
     $('lobby-type').textContent = rs.locked ? '🔒 ŞİFRELİ ODA' : '🌐 HERKESE AÇIK ODA';
@@ -651,7 +666,7 @@ export class Menu {
     ffBtn.classList.toggle('active', !!rs.ff);
     ffBtn.disabled = !isHost || rs.state !== 'lobby';
     // Herkes Tek: takım yok, herkes tek listede
-    const ffa = rs.mode === 'ffa';
+    const ffa = isSolo(rs.mode);
     document.querySelector('#screen-lobby .teams').classList.toggle('ffa', ffa);
     document.querySelector('#screen-lobby .team.red h3').textContent = ffa ? 'OYUNCULAR — HERKES HERKESE RAKİP' : 'RED TEAM';
     for (const team of ['red', 'blue']) {

@@ -1,4 +1,4 @@
-import { TEAM_INFO, WEAPONS, SLOT_OF_CAT, FLAG_STATE, TEAMS } from '@comic-strike/shared/constants.js';
+import { TEAM_INFO, WEAPONS, SLOT_OF_CAT, FLAG_STATE, TEAMS, MODES, isSolo } from '@comic-strike/shared/constants.js';
 
 // Silah resmi yoksa (düşme vb.) gösterilecek metin
 const KF_TEXT = { fall: '⤓ DÜŞTÜ', water: '≈ BOĞULDU' };
@@ -159,8 +159,17 @@ export class HUD {
     });
   }
 
+  /** Silah Yarışı skor çubuğu: benim seviyem / en iyi rakibin seviyesi */
+  setGunScores(mine, best, bestName, total, next) {
+    this.set('scores', `gun|${mine}|${best}|${bestName}|${next}`, () => {
+      $('score-red').textContent = mine;
+      $('score-blue').textContent = best;
+      $('score-limit').textContent = `SEVİYE / ${total} · SIRADA: ${next} · ${bestName}`;
+    });
+  }
+
   setMode(mode) {
-    $('topbar').classList.toggle('ffa', mode === 'ffa');
+    $('topbar').classList.toggle('ffa', isSolo(mode));
     $('flagbar').classList.toggle('hidden', mode !== 'ctf');
     if (mode !== 'ctf') $('flag-carry').classList.add('hidden');
   }
@@ -340,17 +349,17 @@ export class HUD {
     const key = JSON.stringify(rows) + JSON.stringify(scores) + mode;
     this.set('sb', key, () => {
       sb.replaceChildren();
-      for (const team of mode === 'ffa' ? ['ffa'] : ['red', 'blue']) {
+      for (const team of isSolo(mode) ? ['ffa'] : ['red', 'blue']) {
         const box = el('div', `sb-team ${team}`);
-        box.append(el('h3', '', team === 'ffa' ? 'HERKES TEK' : `${TEAM_INFO[team].name} — ${scores ? scores[team] : 0}`));
+        box.append(el('h3', '', team === 'ffa' ? MODES[mode].name : `${TEAM_INFO[team].name} — ${scores ? scores[team] : 0}`));
         const table = el('table');
         const head = el('tr');
-        for (const h of ['İSİM', 'K', 'A', 'D', 'PUAN', 'PING']) head.append(el('th', '', h));
+        for (const h of ['İSİM', 'K', 'A', 'D', mode === 'gun' ? 'SEVİYE' : 'PUAN', 'PING']) head.append(el('th', '', h));
         table.append(head);
         for (const r of rows.filter((x) => x.team === team).sort((a, b) => b.score - a.score || b.k - a.k)) {
           const tr = el('tr', r.id === myId ? 'me' : '');
           tr.append(
-            el('td', '', (r.bot ? '🤖 ' : '') + r.name),
+            el('td', '', (r.nemesis ? '☠ ' : '') + (r.bot ? '🤖 ' : '') + r.name),
             el('td', '', r.k),
             el('td', '', r.a),
             el('td', '', r.d),
@@ -362,7 +371,7 @@ export class HUD {
         box.append(table);
         sb.append(box);
       }
-      sb.append(el('p', 'sb-note', 'Öldürme +3 · Asist +1 · Ölüm −1 (asist: 5 sn içinde vurduğun rakibi başkası öldürdü)'));
+      sb.append(el('p', 'sb-note', 'Öldürme +3 · Asist +1 · Ölüm −1 · İntikam +2 · ☠ ezeli düşmanın (asist: 5 sn içinde vurduğun rakibi başkası öldürdü)'));
     });
   }
 
@@ -390,7 +399,7 @@ export class HUD {
 
   end(data, myTeam, names, myId = null) {
     const e = $('end-screen');
-    if (data.mode === 'ffa') {
+    if (isSolo(data.mode)) {
       // Herkes Tek: kazanan oyuncu
       const w = data.players.find((p) => p.id === data.winnerId);
       const me = data.winnerId && data.winnerId === myId;
@@ -398,7 +407,7 @@ export class HUD {
       e.replaceChildren(
         el('h1', `end-title ${w ? 'ffa' : 'draw'}`, !w ? 'BERABERE!' : me ? 'KAZANDIN!' : `${wName} KAZANDI!`),
         el('p', 'end-sub', !w ? 'Kimse öne geçemedi.' : me ? 'HERKESİ ALT ETTİN!' : 'Bir dahaki sefere...'),
-        el('p', 'end-score', w ? `${w.score ?? 0} puan · ${w.kills} öldürme` : ''),
+        el('p', 'end-score', w ? `${data.mode === 'gun' ? `seviye ${w.level + 1}` : `${w.score ?? 0} puan`} · ${w.kills} öldürme` : ''),
       );
     } else {
       const title = data.winner === 'draw' ? 'BERABERE!' : `${TEAM_INFO[data.winner].name} WINS!`;
@@ -410,8 +419,8 @@ export class HUD {
       );
     }
     // Maç sonu ödülleri
-    const ICON = { score: '⭐', kills: '💀', assists: '🤝', hs: '🎯', caps: '🚩', deaths: '🧲' };
-    const UNIT = { score: 'puan', kills: 'öldürme', assists: 'asist', hs: 'kafadan', caps: 'bayrak', deaths: 'ölüm' };
+    const ICON = { score: '⭐', kills: '💀', assists: '🤝', hs: '🎯', caps: '🚩', deaths: '🧲', revenges: '😈' };
+    const UNIT = { score: 'puan', kills: 'öldürme', assists: 'asist', hs: 'kafadan', caps: 'bayrak', deaths: 'ölüm', revenges: 'intikam' };
     if (data.awards?.length) {
       const row = el('div', 'awards');
       data.awards.forEach((a, i) => {

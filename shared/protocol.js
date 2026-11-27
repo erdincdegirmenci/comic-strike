@@ -59,5 +59,8 @@ export const MSG = {
   MATCH_END: 'match_end',
   CHAT_MSG: 'chat_msg', // {id, n, tm, t, team, dead}
   VOTE_STATE: 'vote_state', // {active, by, yes, no, total, left, voters:[id], result?: 'restart'|'rejected'}
+  DECOY: 'decoy', // {id, o, n, c, tm, p, yaw, w, rem}: sahte kopya dikildi
+  DECOY_END: 'decoy_end', // {id, by}: kopya vuruldu (by) ya da süresi doldu (by=null)
+  GUN: 'gun', // {loadout, ammo, reserve, nades, level}: Silah Yarışı'nda yeni silah
   SPING: 'sping', // sunucunun ping ölçümü (ack ile)
 };
