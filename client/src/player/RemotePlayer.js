@@ -26,7 +26,7 @@ const G = {
 const iceMat = new THREE.MeshBasicMaterial({ color: '#a8e6ff', transparent: true, opacity: 0.45, depthWrite: false });
 const iceEdgeMat = new THREE.LineBasicMaterial({ color: '#e8fbff' });
 const iceEdges = new THREE.EdgesGeometry(G.ice);
-const NADE_COLOR = { he: '#52b788', smoke: '#adb5bd', poison: '#7cb518', mine: '#4a4e3a', molotov: '#9c6644', flash: '#e9ecef', frost: '#7fd3f5' };
+const NADE_COLOR = { decoy: '#f4a261', he: '#52b788', smoke: '#adb5bd', poison: '#7cb518', mine: '#4a4e3a', molotov: '#9c6644', flash: '#e9ecef', frost: '#7fd3f5' };
 const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false });
 
 function lerpAngle(a, b, k) {
@@ -179,7 +179,7 @@ export class RemotePlayer {
     const flamer = simple(0.6, '#c4493d', -0.82, -0.12, 0.12);
     const freezer = simple(0.6, '#7fd3f5', -0.82, -0.12, 0.12);
     this.guns = {
-      flamer, freezer, flash: nade, frost: nade,
+      flamer, freezer, flash: nade, frost: nade, decoy: nade,
       rifle, awp, knife, he: nade, smoke: nade, poison: nade, mine: nade, molotov: nade,
       carbine, smg, lmg, popper, cannon, revolver, shotgun, bazooka,
     };
@@ -282,7 +282,8 @@ export class RemotePlayer {
     this.root.visible = true;
   }
 
-  update(renderT, dt) {
+  /** carry(konum, an): o anda trendeki oyuncunun ekranda ne kadar kaydırılacağı */
+  update(renderT, dt, carry) {
     if (this.alive === false) {
       this.deadT += dt;
       this.ice.visible = false;
@@ -315,12 +316,17 @@ export class RemotePlayer {
     while (buf.length > 2 && buf[1].t < renderT - 250) buf.shift();
 
     this.root.position.set(a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k, a.z + (b.z - a.z) * k);
+    // Tren güncel yerinde çizilir, oyuncular ise biraz geriden: trendekini trenle aynı hizaya getir
+    const ride = carry ? carry(this.root.position, renderT) : 0;
+    this.root.position.x += ride;
     this.root.rotation.y = lerpAngle(a.yaw, b.yaw, k);
     this.pitch = a.pitch + (b.pitch - a.pitch) * k;
 
     // Animasyon
-    const moved = Math.hypot(this.root.position.x - this.prev.x, this.root.position.z - this.prev.z);
+    // Yürüme animasyonu trenin hareketini saymaz
+    const moved = Math.hypot(this.root.position.x - ride - this.prev.x, this.root.position.z - this.prev.z);
     this.prev.copy(this.root.position);
+    this.prev.x -= ride;
     const speedNow = dt > 0 ? moved / dt : 0;
     this.speed += (speedNow - this.speed) * Math.min(1, dt * 10);
     const airborne = (b.flags & 4) !== 0;

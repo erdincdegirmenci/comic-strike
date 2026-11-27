@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { toon, addOutline, sketchToon, sketchOutline, sketchSegments } from '../fx/Toon.js';
+import { createTrain } from './Train.js';
+import { addScenery } from './Scenery.js';
 
 /**
  * Harita verisinden (kutu listesi) görsel ve fizik dünyası oluşturur.
@@ -94,6 +96,12 @@ export function buildMap(map, scene, physics) {
   if (map.water) addWater(group, map.water);
   if (map.pads) for (const p of map.pads) addPad(group, p);
   if (!map.indoor) addClouds(group); // kapalı mekânda (dev oda) bulut yok
+  addScenery(group, map);
+  if (map.train) {
+    const train = createTrain(map.train, physics);
+    group.add(train.group);
+    group.userData.train = train;
+  }
   scene.add(group);
   return group;
 }

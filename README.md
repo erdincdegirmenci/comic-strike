@@ -1,6 +1,6 @@
 # COMIC STRIKE WEB
 
-Tarayıcıda oynanan, çizgi roman görünümlü multiplayer FPS. Takım Savaşı, Bayrak Kap, Herkes Tek ve Ölüm Yarışı modları; 9 harita, 15 silah ve bomba, pratik botları, oda kodu ile lobi, sunucu doğrulamalı hasar ve skor.
+Tarayıcıda oynanan, çizgi roman görünümlü multiplayer FPS. Takım Savaşı, Bayrak Kap, Herkes Tek, Ölüm Yarışı ve Silah Yarışı modları; 8 harita, 21 silah ve bomba, pratik botları, oda kodu ile lobi, sunucu doğrulamalı hasar ve skor.
 
 ![Şehir Arenası](docs/images/sehir-arenasi.jpg)
 
@@ -30,12 +30,12 @@ Sunucunun ayakta olup olmadığını şuradan görebilirsin: https://comic-strik
 ## Öne çıkanlar
 
 - **Çizgi roman görünümü:** toon gölgelendirme, el çizimi konturlar, kâğıt dokusu, KAPOW! / BLAM! yazıları, mürekkep lekeleri.
-- **4 oyun modu:** Takım Savaşı, Bayrak Kap, Herkes Tek, Ölüm Yarışı.
-- **9 harita:** şehirden uzay istasyonuna, havuz partisinden dev bir çocuk odasına.
-- **19 silah ve bomba:** tüfekler, pompalı, bazuka, AWP, alev silahı, dondurucu, tabancalar, bıçak, mayın, molotof, flaş ve daha fazlası.
+- **5 oyun modu:** Takım Savaşı, Bayrak Kap, Herkes Tek, Ölüm Yarışı, Silah Yarışı.
+- **8 harita:** şehirden uzay istasyonuna, havuz partisinden dev bir çocuk odasına.
+- **21 silah ve bomba:** tüfekler, pompalı, bazuka, AWP, alev silahı, dondurucu, tabancalar, bıçak, mayın, molotof, flaş, sahte kopya ve daha fazlası.
 - **Kanca (F):** çatılara ve raflara fırlayıp tırman.
 - **Vuruş bölgeleri:** kafaya vuruş çok daha fazla, bacağa daha az hasar verir.
-- **Pratik botları:** sunucuda çalışır, yol bulur, ateş eder, Bayrak Kap'ta saldırır ve savunur.
+- **Pratik botları:** sunucuda çalışır, yol bulur, ateş eder, bomba atar, zıplama pedi kullanır, Bayrak Kap'ta saldırır ve savunur.
 - **Sunucu doğrulamalı:** hasar, ölüm, skor ve atışlar sunucuda hesaplanır (gecikme telafisiyle).
 
 ## Gereksinimler
@@ -63,7 +63,7 @@ Ana menünün yanında **AÇIK ODALAR** listesi var: aktif odalar (mod, harita, 
 ### Tek başına pratik (botlarla)
 
 Lobide host olarak **+ BOT EKLE** düğmesine bas; her basışta az kalabalık takıma bir bot eklenir (en fazla 8 oyuncu). **− BOT ÇIKAR** ile çıkarırsın.
-Botlar sunucuda çalışır: haritada yol bulur (A\*), gördüğü rakibe ateş eder; Bayrak Kap modunda bir kısmı saldırır, bir kısmı üssü korur.
+Botlar sunucuda çalışır: haritada yol bulur (A\*), gördüğü rakibe ateş eder; Bayrak Kap modunda bir kısmı saldırır, bir kısmı üssü korur. Her bot rastgele silahlarla gelir, silahına göre mesafe ayarlar (pompalıyla yaklaşır, AWP ile uzak durur), arada bomba ya da sahte kopya atar, zıplama pediyle yukarı çıkıp çatıdan aşağı atlayabilir.
 
 Eski yöntem (ayrı süreçte basit test botları) hâlâ çalışır: `npm run bots -- ODAKODU 3`
 
@@ -123,8 +123,9 @@ Sen **http://localhost:3000**, arkadaşların **http://BILGISAYAR_IP:3000** adre
 | **Bayrak Kap** | Rakip bayrağını kendi üssündeki halkaya getir; seçilen sayıda (varsayılan 3) bayrak getiren kazanır. Taşıyan ölürse bayrak düşer, sahibi dokunursa üsse döner (20 sn sonra kendiliğinden döner). |
 | **Herkes Tek** (FFA) | Takım yok, herkes herkese rakip; oyuncu puanı bitiş puanına ilk ulaşan kazanır. Her öldürmede **+25 can** (100'ü geçmez) ve öldürdüğün silaha **+1 şarjör**. Şarjör hiç tamamen bitmez. |
 | **Ölüm Yarışı** | Seçilen öldürme sayısına (varsayılan 30, 10–100 arası) ilk ulaşan takım kazanır. Sadece rakip öldürmek sayılır; takım arkadaşını öldürmek takımdan 1 öldürme düşer. |
+| **Silah Yarışı** | Takım yok. Herkes aynı silahla başlar; o silahla her öldürmede sıradaki silaha geçilir (12 seviye: INK-47 → STREAK-4 → BUZZ-5 → THUNDER → KA-CHUNK → BAZOOKA → AWP → DRAGON → SIXER → HAND CANNON → POPGUN → bıçak). Son seviyede bıçakla öldüren kazanır. Bıçakla vurulan **bir seviye geri düşer**. Silah seçimi yoktur, yedek mermi bitmez. Süre dolarsa en yüksek seviyedeki kazanır. |
 
-Lobide host maç sonu sınırını (puan / bayrak / öldürme sayısı) ve **süreyi** (varsayılan 8 dk) seçer; hangisine önce ulaşılırsa maç biter.
+Lobide host maç sonu sınırını (puan / bayrak / öldürme sayısı) ve **süreyi** (varsayılan 8 dk) seçer; hangisine önce ulaşılırsa maç biter (Silah Yarışı'nda puan sınırı yerine 12 seviye vardır).
 
 ## Haritalar
 
@@ -134,13 +135,14 @@ Lobide host maç sonu sınırını (puan / bayrak / öldürme sayısı) ve **sü
 | **HAVUZ PARTİSİ** | Hepsi | Ortada havuz (suda kalan saniyede 3 can kaybeder), kaydırak kuleleri, çit labirenti, havuz evlerinin çatıları |
 | **BUZ ARENASI** | Hepsi | Kaygan buz zemin, igluler, tüneller |
 | **HURDALIK** | Hepsi | En büyük klasik harita: yüksek platform ve köprüler, depo, iskele, konteyner sahası, boru rafı, iki katlı ofis, basamaklı hurda tepesi |
-| **NİŞANCI DÜELLOSU** | Hepsi | **Sadece AWP**, uzun menzil: kum torbası hatları, çatılı kuleler, çatısına çıkılan yıkık ev, basamaklı tepe |
+| **NİŞANCI DÜELLOSU** | Hepsi | **Sadece AWP**, uzun menzil: doğuş noktalarını koruyan taş siper duvarları, kum torbası hatları, çatılı kuleler, çatısına çıkılan yıkık ev, basamaklı tepe |
 | **NİŞAN ARENASI** | Hepsi | **Sadece AWP**: yüksek doğuş balkonları, pencereli orta duvar, köşe kuleleri, zıplayıp bakmak için sandıklar |
-| **AVLU** | Hepsi | Çatısına merdivenle çıkılan karşılıklı evler, sütunlu revaklar, kuyulu havuz, pazar tezgâhları |
 | **SIFIR YERÇEKİMİ** | Hepsi | Düşük yerçekimli uzay istasyonu (zıplama ~2 kat yüksek). **A:** kontrol merkezi, **B:** reaktör odası (reaktörün etrafında halka iskele), **orta:** kurşun geçirmez cam koridor; yaşam modülü, laboratuvar, itme pedleri |
-| **DEV ODA** | Sadece Herkes Tek | Minicik oyuncular dev bir çocuk odasında: masa, iki katlı kitaplık, altına saklanılan yatak ve kanepe, oyuncak kale, karton kutu kalesi, oyuncak tren, trambolinler |
+| **DEV ODA** | Sadece Herkes Tek ve Silah Yarışı | Minicik oyuncular dev bir çocuk odasında: masa, iki katlı kitaplık, altına saklanılan yatak ve kanepe, oyuncak kale, karton kutu kalesi, **hareket eden oyuncak tren**, trambolinler |
 
-Sadece AWP olan haritalarda maç başında silah seçme ekranı açılmaz. Dev Oda seçilince mod kendiliğinden Herkes Tek olur.
+**Oyuncak tren:** dev masanın altındaki düz rayda iki durak arasında gidip gelir, uçlarda 5 sn bekler. Yan kapılardan vagona binilir; tren seni taşır. Ayakta pencereden görüp ateş edebilirsin (vurulabilirsin de), çömelince duvarın arkasında tamamen saklanırsın. Mayın ve sahte kopya trenin üstünde durmaz.
+
+Sadece AWP olan haritalarda maç başında silah seçme ekranı açılmaz. Takımlı bir moddayken Dev Oda seçilince mod kendiliğinden Herkes Tek olur.
 
 - **Zıplama pedleri / trambolinler** (yeşil oklu diskler): üstüne basınca seni çatılara, platformlara, rafa ya da yatağa fırlatır; pedden inişte düşme hasarı yok.
 - **Eğilerek geçilen yerler:** tır dorsesinin altı, çit kemerleri, kale duvarındaki gizli delik, boru rafı, havada duran konteyner, havalandırma deliği, yatak ve kanepe altı… Ayakta geçilmez, **Ctrl / C** ile çömelince geçilir.
@@ -188,12 +190,14 @@ Basılı tut: ne kadar uzun tutarsan o kadar uzağa atılır; atış yolu ekrand
 | **MOLOTOF** | Çarptığı yerde 7 sn yanan 3,2 m'lik alev; içindekiler saniyede 15 can kaybeder (atan da yanar) |
 | **FLASH** | Flaş (2 adet): patlamayı gören herkes (atan dahil) 3,5 sn'ye kadar kör olur; arkası dönük olan çok daha az etkilenir |
 | **BUZ KÜPÜ** | Dondurma: 4,5 m alandaki herkes (takım arkadaşı ve atan dahil) 3 sn donar, hasar yok |
+| **SAHTE KOPYA** | (2 adet) Düştüğü yerde senin kopyan dikilir (ismin, karakterin, silahın). Rakipleri kandırır; 40 canı vardır, 20 sn durur, aynı anda en fazla 2 |
 
 ## Oyun içinde
 
 - **Seri öldürme duyuruları:** art arda öldürme (ikili, üçlü...), ölmeden seri (3, 5, 7, 10) ve 5+ serinin bitirilmesi herkese duyurulur.
 - **Ölüm kamerası:** ölünce kamera seni vuranın omzunun arkasına gider; silahı ve mesafe yazılır.
 
+- **İntikam:** bir rakip seni (sen onu hiç öldüremeden) 3 kez öldürürse **EZELİ DÜŞMAN** olur ve skor tablosunda ☠ ile işaretlenir. Onu öldürünce herkese **İNTİKAM!** duyurulur, +2 puan alırsın (Takım Savaşı'nda takıma da yazılır). Maç sonunda en çok intikam alana İNTİKAMCI ödülü.
 - **Puanlama:** öldürme +3, asist +1, ölüm −1. Asist: rakibi vurdun ama öldüremedin, rakip 5 saniye içinde başkasının elinden öldü.
 - **Öldürme akışı:** sağ üstte öldürenin silahının resmi; ölene son 5 saniyede hasar veren başka oyuncular da kendi silahlarıyla "+ isim" olarak yazılır. Kafadan vuruş ⌖ ile işaretlenir.
 - **Can ve hareket:** 100 can, stamina ile hızlı koşu (bitince bir süre koşulamaz), çömelme, yüksekten düşünce az miktarda hasar.
@@ -203,6 +207,7 @@ Basılı tut: ne kadar uzun tutarsan o kadar uzağa atılır; atış yolu ekrand
 - **Karakterler:** CAPTAIN MAX, ZIGGY ZAP, ROXY ve MR. BONES; her birinin **T** ile duvara yapıştırılan kendi sticker'ı var.
 - **Takıma işaret ve sohbet:** **E** ile "BURADA!" / "DÜŞMAN!" işareti, **Enter** herkese, **Y** takıma sohbet.
 - **Maç sonu ödülleri:** MAÇIN YILDIZI (en yüksek puan), TERMİNATÖR (en çok öldüren), TAKIM OYUNCUSU (en çok asist), KESKİN NİŞANCI (en çok kafadan vuruş), BAYRAK USTASI (Bayrak Kap'ta en çok bayrak) ve en çok ölene KURŞUN MIKNATISI.
+- **Görsel süslemeler:** duvarlarda çizgi roman afişleri; açık haritalarda renk geçişli gökyüzü ve temaya göre ufuk silüetleri.
 - **Sonradan katılanlar:** maç ortasında gelen oyuncu yerdeki mayınları, süren zehir bulutlarını ve alevleri de görür.
 
 ## Ayarlanabilir değerler
@@ -213,7 +218,7 @@ Haritalar kutu listelerinden oluşur (doğuş noktaları, bayrak üsleri, zıpla
 
 - `shared/map.js`: Şehir Arenası
 - `shared/maps.js`: Havuz Partisi, Buz Arenası, Hurdalık ve harita listesi
-- `shared/funmaps.js`: Nişancı Düellosu, Nişan Arenası, Avlu, Sıfır Yerçekimi
+- `shared/funmaps.js`: Nişancı Düellosu, Nişan Arenası, Sıfır Yerçekimi
 - `shared/toyroom.js`: Dev Oda
 
 Sunucu ortam değişkenleri:
@@ -248,11 +253,12 @@ Ayrıntılar: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/PROTOCOL.md]
 - [x] Phase 11: Production build, chunk ayırma, yayına alma rehberi
 - [x] Phase 12: Bayrak Kap, Herkes Tek ve Ölüm Yarışı modları, pratik botları
 - [x] Phase 13: Silah seçimi, bombalar, mayın, molotof, pompalı, bazuka, vuruş bölgeleri
-- [x] Phase 14: Eğlence haritaları (sadece AWP haritaları, Avlu, Sıfır Yerçekimi, Dev Oda)
+- [x] Phase 14: Eğlence haritaları (sadece AWP haritaları, Sıfır Yerçekimi, Dev Oda)
+- [x] Phase 15: İntikam sistemi, Sahte Kopya, hareketli oyuncak tren, Silah Yarışı, gelişmiş botlar, görsel süslemeler
 
 ## Bilinen sınırlamalar
 
 - Sunucu hareket hızını ve harita sınırlarını kontrol eder, ama duvar içinden geçmeyi kontrol etmez.
-- Botlar merdiven ve trambolin kullanmaz; çatılara, raflara ve iskelelere çıkmaz, zemin katta dolaşırlar. Bomba ve özel silah kullanmazlar.
+- Botlar merdiven kullanmaz ve yol planlamaları zemin katta yapılır; yukarı sadece zıplama pediyle çıkarlar.
 - Maç ortasında katılan oyuncu, süren sis bulutlarını görmez.
-- Botlar kanca, alev silahı, dondurucu ve özel bombaları kullanmaz (ama onlardan etkilenir).
+- Botlar kanca kullanmaz; bomba olarak mayın, sis ve zehir atmazlar (ama onlardan etkilenir).

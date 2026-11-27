@@ -1,3 +1,4 @@
+import { isSolo } from '@comic-strike/shared/constants.js';
 import { MSG } from '@comic-strike/shared/protocol.js';
 import { CHAT } from '@comic-strike/shared/constants.js';
 
@@ -27,7 +28,7 @@ export class Chat {
         if (e.code !== 'Enter' && e.code !== 'NumpadEnter' && e.code !== 'KeyY') return;
         if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
         e.preventDefault();
-        this.show(e.code === 'KeyY' && this.game.mode !== 'ffa');
+        this.show(e.code === 'KeyY' && !isSolo(this.game.mode));
       },
       true,
     );

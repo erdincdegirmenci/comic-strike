@@ -73,6 +73,7 @@ export class Weapon {
     this.buildSprayer("freezer", { body: "#3e6c9c", tank: "#a8e6ff", nozzle: "#dfe7ef", tip: "#e8fbff" });
     this.buildGrenade("flash", "#e9ecef");
     this.buildGrenade("frost", "#7fd3f5");
+    this.buildGrenade("decoy", "#f4a261");
     this.computeAdsHeights();
     this.hand = 1; // 1 sağ el, -1 sol el
 
@@ -666,7 +667,7 @@ export class Weapon {
   /** Eldeki silahlar, yuva sırasıyla */
   get owned() {
     const l = this.loadout;
-    return [l.primary, l.pistol, "knife", l.nade];
+    return l.only ?? [l.primary, l.pistol, "knife", l.nade]; // only: Silah Yarışı
   }
 
   slotWeapon(slot) {
@@ -707,6 +708,8 @@ export class Weapon {
   reset(ammo, nades, loadout, reserve) {
     if (loadout) this.loadout = { ...loadout };
     const l = this.loadout;
+    // Silah Yarışı'nda sadece verilen silahlar vardır
+    const [first, second] = l.only ? [l.only[0], l.only[1] ?? l.only[0]] : [l.primary, l.pistol];
     this.ammo = {
       [l.primary]: ammo?.[l.primary] ?? WEAPONS[l.primary].MAG_SIZE,
       [l.pistol]: ammo?.[l.pistol] ?? WEAPONS[l.pistol].MAG_SIZE,
@@ -727,9 +730,14 @@ export class Weapon {
     this.aiming = false;
     this.adsT = 0;
     for (const m of Object.values(this.models)) this.resetMag(m);
-    this.current = l.primary;
-    this.previous = l.pistol;
-    this.history = [l.primary, l.pistol];
+    if (l.only) {
+      this.ammo = { [first]: ammo?.[first] ?? WEAPONS[first].MAG_SIZE };
+      this.reserve = { [first]: reserve?.[first] ?? 0 };
+      this.nades = {};
+    }
+    this.current = first;
+    this.previous = second;
+    this.history = [...new Set([first, second])];
     this.deployTime = null;
     this.drawStart = performance.now();
     this.show(this.current);

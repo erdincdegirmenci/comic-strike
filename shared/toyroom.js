@@ -227,24 +227,10 @@ export function toyRoom(builder) {
   box(15.5, 26, 2.5, 0.3, 0.02, '#c4a04a', { y: 2.4, solid: false }); // bant
   box(2.8, 26.5, 1.8, 1.8, 1.8, C.cardboard2);
 
-  // ---------------- Oyuncak tren (masanın çevresinde ray) ----------------
-  const TX = 14.5;
-  const TZ = 10.5;
-  for (const s of [-1, 1]) {
-    box(s * TX, 0, 0.12, TZ * 2, 0.06, C.rail, { solid: false });
-    box(s * (TX - 0.9), 0, 0.12, TZ * 2, 0.06, C.rail, { solid: false });
-    box(0, s * TZ, TX * 2, 0.12, 0.06, C.rail, { solid: false });
-    box(0, s * (TZ - 0.9), TX * 2, 0.12, 0.06, C.rail, { solid: false });
-  }
-  for (let z = -9; z <= 9; z += 1.5) box(-TX + 0.45, z, 1.5, 0.3, 0.03, C.sleeper, { solid: false });
-  // Lokomotif ve vagonlar (siper)
-  const lx = -TX + 0.45;
-  box(lx, -4, 1.5, 3.4, 1.4, C.red, { y: 0.2 });
-  box(lx, -2.9, 1.5, 1.4, 1.2, C.blue, { y: 1.6 });
-  box(lx, -5.2, 0.5, 0.5, 1.0, C.dark, { y: 1.6 });
-  box(lx, 0.2, 1.4, 3, 1.2, C.yellow, { y: 0.2 });
-  box(lx, 3.8, 1.4, 3, 1.2, C.green, { y: 0.2 });
-  for (const z of [-5, -3, -0.8, 1.2, 2.8, 4.8]) box(lx, z, 1.7, 0.5, 0.5, C.dark, { y: 0.05, solid: false });
+  // ---------------- Oyuncak tren: masanın altından geçen düz ray (tren shared/train.js'te, hareketli) ----------------
+  for (const z of [-0.9, 0.9]) box(-0.9, z, 40.2, 0.14, 0.07, C.rail, { solid: false });
+  for (let x = -20.6; x <= 19; x += 1.2) box(x, 0, 0.35, 2.5, 0.04, C.sleeper, { solid: false });
+  for (const x of [-21.2, 19.4]) box(x, 0, 0.25, 2.8, 0.5, C.red, { solid: false }); // ray sonu tamponu
 
   // ---------------- Dağınık oyuncaklar ----------------
   const block = (x, z, s, col, y = 0) => box(x, z, s, s, s, col, { y });
@@ -276,7 +262,7 @@ export function toyRoom(builder) {
 
   // ---------------- Doğuş noktaları (her yere dağılmış) ----------------
   const ffa = [
-    [0, -22, 0], [-20, 0, -Math.PI / 2], [20, -6, Math.PI / 2], [1, 20, Math.PI], [-21, -21, -Math.PI / 4],
+    [0, -22, 0], [-20, 4, -Math.PI / 2], [20, -6, Math.PI / 2], [1, 20, Math.PI], [-21, -21, -Math.PI / 4],
     [21, 24, Math.PI], [-8, 26, Math.PI], [-27, -5, -Math.PI / 2], [6, -26, 0], [16, 8, Math.PI / 2],
     [-9, -10, 0], [3, -10, 0], [-24, 19, Math.PI / 2], [12, 14, Math.PI],
   ].map(([x, z, yaw]) => [x, 0.1, z, yaw]);
@@ -285,6 +271,7 @@ export function toyRoom(builder) {
     name: 'DEV ODA',
     ffaOnly: true,
     indoor: true,
+    train: { z: 0, from: -17.4, to: 13, speed: 3, dwell: 5 },
     boxes,
     pads,
     spawns: { ffa, red: ffa.slice(0, 7), blue: ffa.slice(7) },

@@ -1,5 +1,5 @@
 // Eğlence haritaları: tek fikre dayalı haritalar (keskin nişancı düellosu, AWP nişan arenası,
-// avlu çatışması, uzay istasyonu). Hepsi özgün tasarım; renkleri el çizimi / suluboya görünümüne uygun soluk tonlar.
+// uzay istasyonu). Hepsi özgün tasarım; renkleri el çizimi / suluboya görünümüne uygun soluk tonlar.
 // Kırmızı takım -Z, mavi takım +Z tarafında; haritalar Z=0'a göre aynalanır.
 // builder: maps.js'teki kutu yardımcıları (bkz. builder()).
 // Hatırlatma: karakter 0.4 m'ye kadar basamağı kendiliğinden çıkar, zıplama ~1.1 m, çömelince 1.15 m'lik boşluktan geçer.
@@ -80,6 +80,13 @@ export function sniperDuel(builder) {
     rect(a + 0.2, b - 0.2, -44.3, -43.7, 1.0, 0.12, C.sand2);
   }
 
+  // Doğuş siperi: üssün önünde boydan boya yüksek taş duvar; karşı taraftan doğuş noktaları görülmez.
+  // Dört geçitten çıkılır (iki orta, iki kenar), geçitlerin önünde kum torbası hattı yarım siper olur.
+  for (const [a, b] of [[-17.5, -11], [-7, 7], [11, 17.5]]) {
+    rect(a, b, -45.9, -45.3, 0, 2.8, C.wall);
+    rect(a - 0.1, b + 0.1, -46, -45.2, 2.8, 0.2, C.cap);
+  }
+
   // Köşe nişancı kuleleri (merdiveni üs tarafında, çatılı)
   for (const sx of [-1, 1]) {
     const x = sx * 18;
@@ -129,7 +136,7 @@ export function sniperDuel(builder) {
     box(x, z, 1.4, 1.1, 0.35, C.grass, { solid: false });
   }
 
-  const list = [[-8, -50], [-4, -51], [0, -50], [4, -51], [8, -50], [-6, -47.5], [6, -47.5], [0, -47]];
+  const list = [[-13, -50], [-4, -51], [0, -50], [4, -51], [13, -50], [-6, -47.5], [6, -47.5], [0, -47]];
   return {
     id: 'sniper',
     name: 'NİŞANCI DÜELLOSU',
@@ -252,130 +259,6 @@ export function aimArena(builder) {
     flags: flagsFrom(0, -33.2, PH + 0.1),
     bounds: { x: BX - 0.6, z: BZ - 0.6, minY: -5, maxY: 20 },
     sky: '#e9dfc8',
-  };
-}
-
-// ======================================================================
-// AVLU — iki geleneksel ev karşılıklı; aradaki avluda kuyu ve havuz, pazar tezgâhları, ağaçlar, at arabası.
-// Evlerin içinden geçilir, dış merdivenle çatıya çıkılır (çatıda siper var). İki yanda sütunlu revaklar.
-// ======================================================================
-export function courtyard(builder) {
-  const { boxes, pads, box, hut } = builder();
-  const C = {
-    ground: '#d6c8a8',
-    stone: '#c3b597',
-    plaster: '#ece3cf',
-    base: '#9c9488',
-    pillar: '#9e3b2f',
-    roof: '#5a606b',
-    wood: '#8a6a4b',
-    wood2: '#a7845e',
-    floor: '#9a7a58',
-    cloth: '#6f9a8d',
-    cloth2: '#c9a24f',
-    jar: '#7d5a40',
-    trunk: '#6b5440',
-    leaf: '#7f9a6a',
-    leaf2: '#93ab7c',
-    well: '#8f8a80',
-    water: '#7fa7b5',
-    lantern: '#c0503d',
-    hay: '#d1b25a',
-    red: '#a2483c',
-    blue: '#4d6b8a',
-  };
-  const BX = 22;
-  const BZ = 32;
-  arena(box, BX, BZ, 3.4, C.ground, C.base);
-  box(0, -BZ - 0.25, BX * 2 + 1.4, 0.9, 0.3, C.roof, { y: 3.4 });
-  box(-BX - 0.25, 0, 0.9, BZ * 2 + 1.4, 0.3, C.roof, { y: 3.4, mirror: false });
-  box(BX + 0.25, 0, 0.9, BZ * 2 + 1.4, 0.3, C.roof, { y: 3.4, mirror: false });
-
-  // Avlu taş yolları (görünüm)
-  box(0, 0, 3, 40, 0.02, C.stone, { mirror: false, solid: false });
-  box(0, 0, 30, 3, 0.02, C.stone, { mirror: false, solid: false });
-
-  // Ev: avluya bakan iki kapı + pencere, arkada kapı (doğuş bahçesine), doğu yüzünde çatı merdiveni
-  hut(0, -23, 14, 6, 3.2, C.plaster, {
-    doors: [{ side: 'n', at: -3.5 }, { side: 'n', at: 3.5 }, { side: 's', at: 0, w: 1.6 }],
-    windows: [{ side: 'n', at: 0, w: 1.6 }, { side: 'w', at: 0 }],
-    roof: C.roof,
-    floor: C.floor,
-    roofStairs: 'e',
-    stairColor: C.stone,
-    capColor: C.base,
-  });
-  // Saçak ve kırmızı sütunlar (ön cephe)
-  box(0, -19.6, 14.4, 1.4, 0.2, C.roof, { y: 3.3 });
-  for (const x of [-6.4, -1.7, 1.7, 6.4]) box(x, -19.1, 0.3, 0.3, 3.3, C.pillar);
-  // İç: masa, sandık
-  box(-4.4, -24.3, 2, 1, 0.8, C.wood);
-  box(4.6, -24.5, 1.2, 1.2, 1.2, C.wood2);
-  // Kapı fenerleri (görünüm)
-  for (const x of [-3.5, 3.5]) box(x + 1.1, -19.4, 0.35, 0.35, 0.5, C.lantern, { y: 2.3, solid: false });
-
-  // Orta: kuyu + etrafında alçak havuz kenarı (köşelerden geçilir)
-  box(0, 0, 2.2, 2.2, 0.9, C.well, { mirror: false });
-  box(-0.95, 0, 0.2, 0.2, 2.2, C.wood, { mirror: false });
-  box(0.95, 0, 0.2, 0.2, 2.2, C.wood, { mirror: false });
-  box(0, 0, 2.6, 1.4, 0.15, C.roof, { y: 2.2, mirror: false });
-  box(0, 0, 6.4, 6.4, 0.03, C.water, { mirror: false, solid: false });
-  box(0, -3.4, 5, 0.5, 0.6, C.stone);
-  box(-3.4, 0, 0.5, 5, 0.6, C.stone, { mirror: false });
-  box(3.4, 0, 0.5, 5, 0.6, C.stone, { mirror: false });
-
-  // İki yanda sütunlu revaklar: üstü kapalı, yan duvara yaslı koridor
-  for (const sx of [-1, 1]) {
-    box(sx * 19.6, 0, 5, 30, 0.25, C.roof, { y: 3.1, mirror: false });
-    for (let z = -14; z <= 14; z += 4) box(sx * 17.3, z, 0.45, 0.45, 3.1, C.pillar, { mirror: false });
-    for (const z of [-10, 2]) box(sx * 17.3, z + 2, 0.6, 1.8, 0.8, C.stone, { mirror: false }); // saksılık
-    for (const z of [-6, 6]) box(sx * 20.5, z, 0.9, 0.9, 1.1, C.jar, { mirror: false }); // küpler
-  }
-
-  // Pazar tezgâhları: masa + direkler + tente
-  const stall = (x, z, cloth) => {
-    box(x, z, 3.2, 1.2, 0.9, C.wood);
-    box(x, z, 3.2, 1.2, 0.1, C.wood2, { y: 0.9, solid: false });
-    box(x - 0.5, z, 0.5, 0.5, 0.35, C.jar, { y: 1.0 });
-    box(x + 0.6, z, 0.7, 0.5, 0.25, C.cloth2, { y: 1.0 });
-    for (const dx of [-1.55, 1.55]) box(x + dx, z + 0.7, 0.12, 0.12, 2.4, C.wood);
-    box(x, z + 0.2, 3.6, 1.9, 0.08, cloth, { y: 2.4 });
-  };
-  stall(-10, -8, C.cloth);
-  stall(10, -8, C.cloth2);
-
-  // At arabası (saman yüklü) ve fıçılar
-  box(-7, -13, 3.2, 1.6, 0.5, C.wood, { y: 0.6 });
-  box(-7, -13, 2.8, 1.3, 0.8, C.hay, { y: 1.1 });
-  for (const dx of [-1, 1]) box(-7 + dx * 1.1, -13, 0.25, 1.9, 0.9, C.trunk);
-  for (const [x, z] of [[-14.5, -16], [-13.6, -16.6], [13.4, -17], [6, -4], [-6, -3.5], [9, -14]]) box(x, z, 0.9, 0.9, 1.1, C.jar);
-  box(13, -3, 2.4, 1.4, 1.3, C.wood2); // sandık yığını
-  box(13.2, -3, 1.2, 1.2, 1.1, C.wood, { y: 1.3 });
-
-  // Ağaçlar: gövde + iki katlı yaprak (yapraklar havada, altından geçilir)
-  const tree = (x, z) => {
-    box(x, z, 0.5, 0.5, 3.4, C.trunk);
-    box(x, z, 3.2, 3.2, 1.4, C.leaf, { y: 3.0, solid: false });
-    box(x + 0.3, z - 0.2, 2.2, 2.2, 1.0, C.leaf2, { y: 4.2, solid: false });
-  };
-  tree(-12.5, -12);
-  tree(13, -11);
-  tree(-8, -2);
-
-  // Doğuş bahçesi: takım renkli yaygı ve çit
-  box(0, -29.4, 10, 2.2, 0.03, C.red, { solid: false, mirrorColor: C.blue });
-  for (const sx of [-1, 1]) box(sx * 15, -27, 0.6, 5, 1.2, C.leaf);
-
-  const list = [[-5, -29], [-2.5, -30], [0, -29], [2.5, -30], [5, -29], [-11, -29], [11, -29.5], [-8.5, -30.5]];
-  return {
-    id: 'yard',
-    name: 'AVLU',
-    boxes,
-    pads,
-    spawns: spawnsFrom(list),
-    flags: flagsFrom(0, -30.8),
-    bounds: { x: BX - 0.6, z: BZ - 0.6, minY: -5, maxY: 18 },
-    sky: '#ebe1ca',
   };
 }
 

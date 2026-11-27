@@ -3,7 +3,7 @@
 // Kırmızı takım -Z, mavi takım +Z tarafında; haritalar Z=0'a göre aynalanır.
 import { CITY_ARENA } from "./map.js";
 import { addTunnel, carve, tunnelExits } from "./tunnel.js";
-import { sniperDuel, aimArena, courtyard, spaceStation } from "./funmaps.js";
+import { sniperDuel, aimArena, spaceStation } from "./funmaps.js";
 import { toyRoom } from "./toyroom.js";
 
 /** Kutu ekleme yardımcıları ve hazır yapılar (kulübe, merdiven, duvar). */
@@ -1278,7 +1278,6 @@ export const MAPS = {
   // Eğlence haritaları (shared/funmaps.js)
   sniper: sniperDuel(builder),
   aim: aimArena(builder),
-  yard: courtyard(builder),
   station: spaceStation(builder),
   giant: toyRoom(builder), // sadece Herkes Tek (shared/toyroom.js)
 };

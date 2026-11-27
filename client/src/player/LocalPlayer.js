@@ -115,6 +115,12 @@ export class LocalPlayer {
     }
   }
 
+  /** Hareketli zemin (tren) oyuncuyu dx kadar taşır */
+  shift(dx) {
+    this.position.x += dx;
+    this.collider.setTranslation({ x: this.position.x, y: this.position.y + this.center, z: this.position.z });
+  }
+
   /** Kancayı point noktasına at: oyuncu oraya çekilir */
   startHook(point) {
     this.hook = { p: new THREE.Vector3(point.x, point.y, point.z), until: performance.now() + HOOK.MAX_TIME, best: Infinity, stuck: 0 };

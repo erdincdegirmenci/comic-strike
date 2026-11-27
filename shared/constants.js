@@ -249,17 +249,24 @@ export const STREAK = {
   ENDED: 5, // bu kadarlık seriyi bitiren de duyurulur
 };
 
+// Sahte Kopya: düştüğü yerde atanın karton kopyası dikilir; rakipler (ve botlar) ona ateş eder
+WEAPONS.decoy = {
+  id: 'decoy', cat: 'grenade', NAME: 'SAHTE KOPYA', kind: 'grenade', DESC: 'Düştüğü yerde senin kopyan dikilir, rakibi kandırır',
+  FUSE: 1500, DURATION: 20000, HP: 40, MAX_ACTIVE: 2, FIRE_INTERVAL: 900, COUNT: 2, SPEED_MULT: 1, MAG_SIZE: 0,
+  SPREAD_BASE: 0, SPREAD_MOVE: 0, SPREAD_RUN: 0, SPREAD_AIR: 0, RECOIL: 0,
+};
+
 WEAPONS.awp.KICK = 1.6;
 WEAPONS.cannon.KICK = 1.8;
 
 // Snapshot'ta silah sırası (indeks). Yeni silahlar sona eklenir.
-export const WEAPON_ORDER = ['rifle', 'awp', 'knife', 'he', 'smoke', 'carbine', 'smg', 'lmg', 'popper', 'cannon', 'poison', 'mine', 'revolver', 'shotgun', 'bazooka', 'molotov', 'flamer', 'freezer', 'flash', 'frost'];
+export const WEAPON_ORDER = ['rifle', 'awp', 'knife', 'he', 'smoke', 'carbine', 'smg', 'lmg', 'popper', 'cannon', 'poison', 'mine', 'revolver', 'shotgun', 'bazooka', 'molotov', 'flamer', 'freezer', 'flash', 'frost', 'decoy'];
 
 // Seçilebilir silahlar
 export const LOADOUT_OPTIONS = {
   primary: ['rifle', 'carbine', 'smg', 'lmg', 'shotgun', 'bazooka', 'awp', 'flamer', 'freezer'],
   pistol: ['cannon', 'popper', 'revolver'],
-  nade: ['he', 'smoke', 'poison', 'mine', 'molotov', 'flash', 'frost'],
+  nade: ['he', 'smoke', 'poison', 'mine', 'molotov', 'flash', 'frost', 'decoy'],
 };
 export const DEFAULT_LOADOUT = { primary: 'rifle', pistol: 'cannon', nade: 'he' };
 export const BUY_TIME = 10000; // doğduktan sonra ateş etmeden bu süre içinde silah değiştirilebilir
@@ -309,7 +316,12 @@ export const MODES = {
   ctf: { id: 'ctf', name: 'BAYRAK KAP', desc: 'Rakip bayrağını kendi üssüne getir' },
   ffa: { id: 'ffa', name: 'HERKES TEK', desc: 'Takım yok, herkes herkese rakip' },
   kills: { id: 'kills', name: 'ÖLÜM YARIŞI', desc: 'Belirlenen öldürme sayısına ilk ulaşan takım kazanır' },
+  gun: { id: 'gun', name: 'SİLAH YARIŞI', desc: 'Her öldürmede silahın değişir, son öldürme bıçakla' },
 };
+/** Takımsız modlar: herkes herkese rakip */
+export const isSolo = (mode) => mode === 'ffa' || mode === 'gun';
+// Silah Yarışı sırası. Son basamak bıçak; bıçaklanan (son basamağa kadar) bir seviye geri düşer.
+export const GUN_LADDER = ['rifle', 'carbine', 'smg', 'lmg', 'shotgun', 'bazooka', 'awp', 'flamer', 'revolver', 'cannon', 'popper', 'knife'];
 // Herkes Tek (FFA): öldürme ödülü ve kazanma şartı
 export const FFA = {
   KILL_LIMIT: 20, // bu kadar öldüren kazanır
@@ -335,9 +347,11 @@ export const MARK = { RANGE: 150, COOLDOWN: 800, LIFETIME: 5000 };
 // Puanlama: öldürme +3, asist +1, ölüm -1. Asist: rakibi vurdun, ASSIST_WINDOW içinde başkası öldürdü.
 // Takım ateşi açıkken takım arkadaşını öldürmek: TEAMKILL puan (öldürme sayılmaz)
 export const SCORE = { KILL: 3, ASSIST: 1, DEATH: -1, TEAMKILL: -3, ASSIST_WINDOW: 5000 };
+// İntikam: bir rakip seni (sen onu hiç öldüremeden) KILLS kez öldürürse "ezeli düşman" olur; onu öldürünce BONUS puan
+export const REVENGE = { KILLS: 3, BONUS: 2 };
 /** Oyuncu puanı */
 export const playerScore = (p) =>
-  (p.kills ?? 0) * SCORE.KILL + (p.assists ?? 0) * SCORE.ASSIST + (p.deaths ?? 0) * SCORE.DEATH + (p.tks ?? 0) * SCORE.TEAMKILL;
+  (p.kills ?? 0) * SCORE.KILL + (p.assists ?? 0) * SCORE.ASSIST + (p.deaths ?? 0) * SCORE.DEATH + (p.tks ?? 0) * SCORE.TEAMKILL + (p.revenges ?? 0) * REVENGE.BONUS;
 
 // Lobide host'un seçebileceği maç sonu sınırları (hangisine önce ulaşılırsa maç biter)
 export const LIMITS = {

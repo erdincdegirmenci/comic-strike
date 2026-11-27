@@ -1,9 +1,10 @@
 import {
-  PLAYER, DAMAGE_ZONE, WATER, FLAG, FALL, CTF, FFA, PAD, isEnemy, SCORE, LIMITS, CHAT, VOTE, DROP, MARK, CHARACTER_IDS, MODE_IDS, DEFAULT_MODE, FLAG_STATE, WEAPONS, WEAPON_ORDER, GRENADE, SPRAY, BUY_TIME, cleanLoadout, FREEZE, HOOK, STREAK, MATCH, SERVER_TICK_RATE, MAX_PLAYERS, MAX_PER_TEAM, MIN_PLAYERS_TO_START, INTERP_DELAY, TEAMS,
+  PLAYER, DAMAGE_ZONE, WATER, FLAG, FALL, CTF, FFA, PAD, isEnemy, SCORE, LIMITS, CHAT, VOTE, DROP, MARK, CHARACTER_IDS, MODE_IDS, DEFAULT_MODE, FLAG_STATE, WEAPONS, WEAPON_ORDER, GRENADE, SPRAY, BUY_TIME, cleanLoadout, FREEZE, HOOK, STREAK, MATCH, REVENGE, GUN_LADDER, isSolo, LOADOUT_OPTIONS, SERVER_TICK_RATE, MAX_PLAYERS, MAX_PER_TEAM, MIN_PLAYERS_TO_START, INTERP_DELAY, TEAMS,
 } from '@comic-strike/shared/constants.js';
 import { stepGrenade, throwVelocity } from '@comic-strike/shared/grenade.js';
 import { MSG } from '@comic-strike/shared/protocol.js';
 import { MAPS, MAP_IDS, DEFAULT_MAP, solidsOf, flagBases } from '@comic-strike/shared/maps.js';
+import { trainSolids, trainCarry, onTrain } from '@comic-strike/shared/train.js';
 import { Player } from './Player.js';
 import { castShot } from './HitScan.js';
 import { BotSocket, BotBrain, botName } from './Bot.js';
@@ -55,6 +56,7 @@ export class Room {
     this.endTimer = null;
     this.grenades = [];
     this.clouds = []; // aktif zehir bulutları
+    this.decoys = new Map(); // id -> sahte kopya
     this.drops = new Map(); // yerdeki mermi kutuları: id -> {id, p, until}
     this.nextDropId = 1;
     this.botSeq = 0;
@@ -87,8 +89,19 @@ export class Room {
     return this.mode === 'ctf';
   }
 
+  /** Takımsız mod mu (Herkes Tek ve Silah Yarışı) */
   get ffa() {
-    return this.mode === 'ffa';
+    return isSolo(this.mode);
+  }
+
+  /** Silah Yarışı */
+  get gun() {
+    return this.mode === 'gun';
+  }
+
+  /** t anındaki bütün katı kutular: harita + (varsa) hareketli tren */
+  solidsAt(t = Date.now()) {
+    return this.map.train ? this.solids.concat(trainSolids(this.map.train, t)) : this.solids;
   }
 
   /** Ölüm Yarışı: takım puanı = takımın öldürme sayısı */
@@ -205,6 +218,7 @@ export class Room {
   /** Maç ortasında gelen oyuncuya yerdeki mayınları ve süren zehir/alev alanlarını gönder */
   sendActiveHazards(socket) {
     const now = Date.now();
+    for (const d of this.decoys.values()) socket.emit(MSG.DECOY, this.decoyInfo(d, now));
     for (const g of this.grenades) {
       if (g.t !== 'mine') continue;
       // age: mayın ne kadar önce atıldı (kurulma / yanıp sönme zamanı doğru görünsün)
@@ -222,6 +236,8 @@ export class Room {
     this.dropFlagOf(p, Date.now());
     this.players.delete(id);
     this.sprays.delete(id);
+    for (const o of this.players.values()) o.grudge.delete(id);
+    for (const d of [...this.decoys.values()]) if (d.owner === p) this.removeDecoy(d);
     console.log(`[room ${this.code}] ${p.name} ayrıldı`);
     // Odada sadece botlar kaldıysa oda kapanır
     if (this.humans === 0) {
@@ -244,6 +260,9 @@ export class Room {
     const p = new Player(sock, botName(n), team, CHARACTER_IDS[n % CHARACTER_IDS.length]);
     p.ready = true;
     p.bot = new BotBrain(p, this);
+    // Botlar da farklı silah ve bombalar kullansın
+    const pick = (list) => list[Math.floor(Math.random() * list.length)];
+    p.loadout = cleanLoadout({ primary: pick(LOADOUT_OPTIONS.primary), pistol: pick(LOADOUT_OPTIONS.pistol), nade: pick(['he', 'he', 'molotov', 'frost', 'flash', 'decoy']) });
     this.players.set(p.id, p);
     console.log(`[room ${this.code}] ${p.name} eklendi (${team})`);
     this.broadcastRoom();
@@ -456,6 +475,8 @@ export class Room {
     this.scores = { red: 0, blue: 0 };
     this.grenades.length = 0;
     this.clouds.length = 0;
+    this.decoys.clear();
+    this.gunWinner = null;
     this.drops.clear();
     this.sprays.clear();
     this.resetFlags();
@@ -501,11 +522,12 @@ export class Room {
     p.resetStatus();
     p.life++;
     p.dmgBy.clear();
+    p.gunSet = this.gun ? this.gunSetFor(p.level) : null;
     if (this.map.forceLoadout) p.loadout = { ...p.loadout, ...this.map.forceLoadout };
     p.resetLoadout();
     if (p.isBot) {
       // Botlar mermi derdine düşmesin
-      for (const k of Object.keys(p.reserve)) p.reserve[k] = 999;
+      for (const k of Object.keys(p.reserve)) if (k !== 'knife') p.reserve[k] = 999;
       p.bot.onSpawn();
     }
     p.spawnedAt = now;
@@ -517,7 +539,7 @@ export class Room {
     p.lastInput = now;
     p.record(now);
     this.emit(MSG.RESPAWN, {
-      id: p.id, p: p.pos, yaw: p.yaw, life: p.life, ammo: p.ammo, reserve: p.reserve, nades: p.nades, loadout: p.loadout, pr: p.protectedUntil - now,
+      id: p.id, p: p.pos, yaw: p.yaw, life: p.life, ammo: p.ammo, reserve: p.reserve, nades: p.nades, loadout: this.loadoutFor(p), pr: p.protectedUntil - now,
     });
   }
 
@@ -540,7 +562,10 @@ export class Room {
     const up = y - p.pos[1];
     // Kancayla çekilen oyuncu normalden hızlı gidebilir
     const hooked = now < p.hookUntil;
-    const maxHoriz = (hooked ? HOOK.SPEED : PLAYER.RUN_SPEED) * 1.35 * dt + 0.35;
+    // Trendeki oyuncu trenin hızı kadar fazladan yol alır
+    const train = this.map.train;
+    const riding = !!train && (onTrain(train, p.pos, now - p.rtt) || onTrain(train, d.p, now));
+    const maxHoriz = (hooked ? HOOK.SPEED : PLAYER.RUN_SPEED) * 1.35 * dt + 0.35 + (riding ? train.speed * 1.5 * dt + 0.4 : 0);
     // Zıplama pedine basan oyuncu bir süre normalden hızlı yükselebilir
     if (this.onPad(p.pos) || this.onPad(d.p)) p.padUntil = now + 2500;
     const vUp = hooked ? HOOK.SPEED : now < (p.padUntil ?? 0) ? PAD.MAX_VY : PLAYER.JUMP_VELOCITY;
@@ -550,7 +575,7 @@ export class Room {
 
     p.lastInput = now;
     // Donmuş oyuncu yürüyemez (sadece düşebilir). Haber ona ulaşana kadar gecikme payı tanınır.
-    const stuck = now < p.frozenUntil && now > p.frozenAt + p.rtt + 200 && (horiz > 0.3 || up > 0.3);
+    const stuck = now < p.frozenUntil && now > p.frozenAt + p.rtt + 200 && ((!riding && horiz > 0.3) || up > 0.3);
     if (horiz > maxHoriz || up > maxUp || outside || stuck) {
       // Şüpheli hareket: sunucudaki son geçerli konuma geri çek
       p.socket.emit(MSG.CORRECTION, { p: p.pos, l: p.life });
@@ -609,7 +634,7 @@ export class Room {
 
   onSwitch(id, w) {
     const p = this.players.get(id);
-    if (!p || typeof w !== 'string' || !WEAPONS[w] || p.weapon === w || !p.owns(w) || p.frozen) return;
+    if (!p || typeof w !== 'string' || !Object.hasOwn(WEAPONS, w) || p.weapon === w || !p.owns(w) || p.frozen) return;
     p.weapon = w;
     p.reloadUntil = 0; // silah değişince şarjör değiştirme iptal
   }
@@ -638,16 +663,24 @@ export class Room {
     // Lag compensation: hedefleri, atış yapanın gördüğü ana geri sar
     const rewind = now - Math.min(p.rtt + INTERP_DELAY, 400);
     const origin = [p.pos[0], p.pos[1] + p.eyeHeight, p.pos[2]];
+    // Atış yapanın ekranında tren bu andaki yerindeydi
+    const viewT = now - Math.min(p.rtt, 400);
+    const train = this.map.train;
     const targets = [];
     for (const o of this.players.values()) {
       if (o.alive && this.canHurt(p, o)) {
         const past = o.posAt(rewind);
-        targets.push({ player: o, pos: past.pos, crouch: past.crouch });
+        let pos = past.pos;
+        // Trendeki hedef ekranda trenle birlikte çizilir
+        if (train) pos = [pos[0] + trainCarry(train, pos, rewind, viewT), pos[1], pos[2]];
+        targets.push({ player: o, pos, crouch: past.crouch });
       }
     }
-    if (w.SPRAY) return this.fireSpray(p, w, dir, origin, targets, now);
-    if (w.PELLETS) return this.firePellets(p, w, dir, d.ds, origin, targets, now);
-    const hit = castShot(origin, dir, this.solids, targets, w.RANGE);
+    targets.push(...this.decoyTargets(p));
+    const solids = this.solidsAt(viewT);
+    if (w.SPRAY) return this.fireSpray(p, w, dir, origin, targets, now, solids);
+    if (w.PELLETS) return this.firePellets(p, w, dir, d.ds, origin, targets, now, solids);
+    const hit = castShot(origin, dir, solids, targets, w.RANGE);
     const end = hit.point.map(r2);
 
     p.socket.to(this.code).emit(MSG.SHOT, { id: p.id, o: origin.map(r2), e: end, w: w.id });
@@ -658,8 +691,8 @@ export class Room {
   }
 
   /** Alev / dondurucu: bakış yönündeki koninin içinde, menzilde ve görünürde olan herkes etkilenir */
-  fireSpray(p, w, dir, origin, targets, now) {
-    const wall = castShot(origin, dir, this.solids, [], w.RANGE);
+  fireSpray(p, w, dir, origin, targets, now, solids = this.solidsAt(now)) {
+    const wall = castShot(origin, dir, solids, [], w.RANGE);
     p.socket.to(this.code).emit(MSG.SHOT, { id: p.id, o: origin.map(r2), e: wall.point.map(r2), w: w.id });
     for (const { player: v, pos, crouch } of targets) {
       // Gövdenin birkaç noktasından biri koninin içinde ve görünürse isabet
@@ -672,7 +705,7 @@ export class Room {
         const angle = Math.acos(Math.max(-1, Math.min(1, u[0] * dir[0] + u[1] * dir[1] + u[2] * dir[2])));
         // Yakındaki oyuncu ekranda büyük yer kaplar: gövde yarıçapı kadar pay ver
         if (angle > w.CONE + Math.atan2(PLAYER.RADIUS, dist)) return false;
-        return castShot(origin, u, this.solids, [], dist).distance >= dist - 0.05;
+        return castShot(origin, u, solids, [], dist).distance >= dist - 0.05;
       });
       if (!touched || now < v.protectedUntil) continue;
       this.applyDamage(p, v, false, [r2(pos[0]), r2(pos[1] + 1), r2(pos[2])], now, w.DAMAGE, w.id);
@@ -683,7 +716,7 @@ export class Room {
 
   /** Dondurucu isabeti: yeterince üst üste gelirse dondur */
   chill(v, w, now) {
-    if (v.frozen || now < v.frozenUntil + FREEZE.IMMUNE) return;
+    if (v.isDecoy || v.frozen || now < v.frozenUntil + FREEZE.IMMUNE) return;
     if (now - v.chillAt > FREEZE.CHILL_WINDOW) v.chill = 0;
     v.chillAt = now;
     if (++v.chill >= w.CHILL) this.freeze(v, w.FREEZE_MS, now);
@@ -728,7 +761,7 @@ export class Room {
       const to = [v.pos[0] - center[0], v.pos[1] + h - center[1], v.pos[2] - center[2]];
       const dist = Math.hypot(...to);
       if (dist < 0.05) return true;
-      return castShot(center, to.map((c) => c / dist), this.solids, [], dist).distance >= dist - 0.05;
+      return castShot(center, to.map((c) => c / dist), this.solidsAt(), [], dist).distance >= dist - 0.05;
     });
   }
 
@@ -768,7 +801,7 @@ export class Room {
    * Pompalı: istemcinin gönderdiği saçma yönleri (ds) ana yönden çok sapmıyorsa kullanılır, eksikler sunucuda üretilir.
    * Her kurbana tek seferde toplam hasar verilir (bir saçma kafaya geldiyse kafadan sayılır).
    */
-  firePellets(p, w, dir, ds, origin, targets, now) {
+  firePellets(p, w, dir, ds, origin, targets, now, solids = this.solidsAt(now)) {
     const cosMax = Math.cos(w.PELLET_SPREAD * 1.6 + 0.03);
     const dirs = [];
     if (Array.isArray(ds)) {
@@ -782,7 +815,7 @@ export class Room {
     const per = new Map();
     const ends = [];
     for (const pd of dirs) {
-      const hit = castShot(origin, pd, this.solids, targets, w.RANGE);
+      const hit = castShot(origin, pd, solids, targets, w.RANGE);
       ends.push(hit.point.map(r2));
       if (!hit.player) continue;
       const k = Math.max(w.MIN_FALLOFF, 1 - Math.max(0, hit.distance - near) / (far - near) * (1 - w.MIN_FALLOFF));
@@ -803,7 +836,7 @@ export class Room {
   /** Bazuka: roket mermisi oluştur (bomba listesinde, kendi adımıyla ilerler) */
   fireRocket(p, w, dir, now) {
     const eye = [p.pos[0], p.pos[1] + p.eyeHeight, p.pos[2]];
-    const wall = castShot(eye, dir, this.solids, [], 0.8);
+    const wall = castShot(eye, dir, this.solidsAt(now), [], 0.8);
     const ahead = Math.max(0, Math.min(0.6, wall.distance - 0.15));
     const o = [eye[0] + dir[0] * ahead, eye[1] + dir[1] * ahead - 0.08, eye[2] + dir[2] * ahead].map(r2);
     const v = dir.map((c) => r2(c * w.SPEED));
@@ -822,7 +855,8 @@ export class Room {
     for (const o of this.players.values()) {
       if (o.alive && o !== g.by && this.canHurt(g.by, o)) targets.push({ player: o, pos: o.pos, crouch: o.crouching });
     }
-    const hit = castShot(g.sim.p, dir, this.solids, targets, len);
+    targets.push(...this.decoyTargets(g.by));
+    const hit = castShot(g.sim.p, dir, this.solidsAt(), targets, len);
     if (hit.distance < len) {
       const back = Math.min(0.1, hit.distance);
       g.sim.p = [hit.point[0] - dir[0] * back, hit.point[1] - dir[1] * back, hit.point[2] - dir[2] * back];
@@ -848,7 +882,7 @@ export class Room {
 
     const eye = [p.pos[0], p.pos[1] + p.eyeHeight, p.pos[2]];
     // Elden biraz ileride başlasın; duvarın dibindeysen gözden başla
-    const wall = castShot(eye, dir, this.solids, [], 0.6);
+    const wall = castShot(eye, dir, this.solidsAt(now), [], 0.6);
     const ahead = Math.max(0, Math.min(0.5, wall.distance - 0.15));
     const o = [eye[0] + dir[0] * ahead, eye[1] + dir[1] * ahead - 0.1, eye[2] + dir[2] * ahead].map(r2);
     const v = throwVelocity(dir, typeof d.c === 'number' ? d.c : 1).map(r2);
@@ -865,7 +899,7 @@ export class Room {
   /** Silah seçimi: doğduktan sonra BUY_TIME içinde ve ateş etmeden hemen, yoksa sonraki doğuşta uygulanır */
   onSetLoadout(id, d) {
     const p = this.players.get(id);
-    if (!p || !d) return;
+    if (!p || !d || this.gun) return;
     p.loadout = { ...cleanLoadout(d), ...(this.map.forceLoadout ?? {}) };
     const now = Date.now();
     const canNow = p.alive && this.inMatch && !p.fired && (this.state === 'countdown' || now - p.spawnedAt < BUY_TIME);
@@ -882,6 +916,7 @@ export class Room {
     if (!n) return;
     const eye = [p.pos[0], p.pos[1] + p.eyeHeight, p.pos[2]];
     if (Math.hypot(d.p[0] - eye[0], d.p[1] - eye[1], d.p[2] - eye[2]) > SPRAY.RANGE + 1.5) return;
+    if (this.map.train && onTrain(this.map.train, d.p, now - p.rtt)) return; // hareketli trene sticker yapışmaz
     p.lastSpray = now;
     const s = { id: p.id, c: p.char, p: d.p.map(r3), n: n.map(r3) };
     this.sprays.set(p.id, s);
@@ -894,8 +929,10 @@ export class Room {
       const target = Math.floor((now - g.born) / 1000 / GRENADE.STEP);
       const w = WEAPONS[g.t];
       let impact = false;
+      // Mayın ve kopya hareketli trene takılmaz (üstünde asılı kalmasın)
+      const solids = g.t === 'mine' || g.t === 'decoy' ? this.solids : this.solidsAt(now);
       while (g.steps < target && !impact) {
-        impact = w.ROCKET ? this.stepRocket(g) : stepGrenade(g.sim, this.solids) && !!w.IMPACT;
+        impact = w.ROCKET ? this.stepRocket(g) : stepGrenade(g.sim, solids) && !!w.IMPACT;
         g.steps++;
       }
       if (w.ROCKET || w.IMPACT) {
@@ -949,6 +986,7 @@ export class Room {
   explode(g, now) {
     const at = g.sim.p.map(r2);
     this.emit(MSG.BOOM, { g: g.g, t: g.t, p: at });
+    if (g.t === 'decoy') return this.placeDecoy(g, now);
     if (g.t === 'poison' || g.t === 'molotov') {
       // Zehir bulutu / alev halısı: süre boyunca içindekilere hasar
       const w = WEAPONS[g.t];
@@ -964,6 +1002,11 @@ export class Room {
     const attacker = g.by;
     if (!this.players.has(attacker.id)) return; // atan oyuncu odadan çıktı
     const center = [at[0], at[1] + 0.2, at[2]];
+    for (const d of [...this.decoys.values()]) {
+      if (d === g.direct || Math.hypot(d.pos[0] - at[0], d.pos[1] + 0.9 - center[1], d.pos[2] - at[2]) < w.RADIUS) {
+        if (d.owner !== attacker && this.canHurt(attacker, d)) this.removeDecoy(d, attacker);
+      }
+    }
     for (const v of this.players.values()) {
       if (!v.alive || (v !== attacker && !this.canHurt(attacker, v))) continue;
       const chest = [v.pos[0], v.pos[1] + (v.crouching ? 0.6 : 0.95), v.pos[2]];
@@ -974,7 +1017,7 @@ export class Room {
       if (dist >= w.RADIUS && v !== g.direct) continue;
       // Duvar arkasındakiler etkilenmez
       if (dist > 0.05 && v !== g.direct) {
-        const los = castShot(center, [dx / dist, dy / dist, dz / dist], this.solids, [], dist);
+        const los = castShot(center, [dx / dist, dy / dist, dz / dist], this.solidsAt(now), [], dist);
         if (los.distance < dist - 0.05) continue;
       }
       // Roketin doğrudan çarptığı oyuncu tam hasar alır
@@ -1009,6 +1052,7 @@ export class Room {
   }
 
   applyDamage(attacker, victim, head, point, now, dmg, weapon, from = attacker.pos) {
+    if (victim.isDecoy) return this.hitDecoy(victim, attacker, dmg);
     if (now < victim.protectedUntil) return;
     victim.hp = Math.max(0, victim.hp - dmg);
     const killed = victim.hp <= 0;
@@ -1040,15 +1084,24 @@ export class Room {
     const assistList = assists.map((ap) => [ap.id, victim.dmgBy.get(ap.id).w]);
     victim.dmgBy.clear();
     const teamKill = !self && !isEnemy(attacker, victim); // takım ateşiyle arkadaşını öldürdü
+    let revenge = false; // katil, ezeli düşmanını öldürdü
+    let nemesis = false; // bu ölümle katil, kurbanın ezeli düşmanı oldu
     if (teamKill) attacker.tks++;
     else if (!self) {
+      revenge = (attacker.grudge.get(victim.id) ?? 0) >= REVENGE.KILLS;
+      if (revenge) attacker.revenges++;
+      attacker.grudge.delete(victim.id);
+      const grudge = (victim.grudge.get(attacker.id) ?? 0) + 1;
+      victim.grudge.set(attacker.id, grudge);
+      nemesis = grudge === REVENGE.KILLS;
       attacker.kills++;
       if (head) attacker.hs++;
       attacker.multi = now - attacker.lastKill <= STREAK.MULTI_WINDOW ? attacker.multi + 1 : 1;
       attacker.lastKill = now;
       // Öldükten sonra patlayan bomba seriyi büyütmez
       if (attacker.alive) attacker.streak++;
-      if (this.ffa) this.killReward(attacker, weapon);
+      if (this.mode === 'ffa') this.killReward(attacker, weapon);
+      if (this.gun) this.gunKill(attacker, victim, weapon);
     }
     // Takım Savaşı: takım puanı = öldürme +3, asist +1, ölüm -1, arkadaş öldürme -3 (Bayrak Kap'ta puan sadece bayrakla gelir)
     if (this.killRace) {
@@ -1058,6 +1111,7 @@ export class Room {
     } else if (!this.ctf && !this.ffa) {
       if (teamKill) this.scores[attacker.team] += SCORE.TEAMKILL;
       else if (!self) this.scores[attacker.team] += SCORE.KILL;
+      if (revenge) this.scores[attacker.team] += REVENGE.BONUS;
       for (const ap of assists) this.scores[ap.team] += SCORE.ASSIST;
       this.scores[victim.team] += SCORE.DEATH;
     }
@@ -1068,6 +1122,7 @@ export class Room {
     this.emit(MSG.KILL, {
       k: attacker.id, v: victim.id, h: head, w: weapon, a: assistList, tk: teamKill ? 1 : 0, s: this.scores, kh: attacker.alive ? attacker.hp : 0,
       sr: !self && !teamKill && attacker.alive ? attacker.streak : 0, mk: !self && !teamKill ? attacker.multi : 0, se: ended,
+      rv: revenge ? 1 : 0, nm: nemesis ? 1 : 0,
     });
     this.checkScoreLimit();
   }
@@ -1075,12 +1130,85 @@ export class Room {
   /** Puan sınırına ulaşıldı mı (Takım Savaşı: takım puanı, Herkes Tek: oyuncu puanı) */
   checkScoreLimit() {
     if (this.ctf || this.state === 'ended') return;
+    if (this.gun) {
+      if (this.gunWinner) this.endMatch();
+      return;
+    }
     const limit = this.scoreLimit;
     if (this.ffa) {
       for (const p of this.players.values()) if (p.score >= limit) return this.endMatch();
       return;
     }
     if (this.scores.red >= limit || this.scores.blue >= limit) this.endMatch();
+  }
+
+  // ---------------- Sahte Kopya ----------------
+
+  /** Bombanın düştüğü yerin altındaki zemine atanın kopyasını dik */
+  placeDecoy(g, now) {
+    const owner = g.by;
+    if (this.state !== 'playing' || !this.players.has(owner.id)) return;
+    const [x, y, z] = g.sim.p;
+    let ground = null;
+    for (const b of this.solids) {
+      if (x > b.min[0] - 0.1 && x < b.max[0] + 0.1 && z > b.min[2] - 0.1 && z < b.max[2] + 0.1 && b.max[1] <= y + 0.3 && (ground === null || b.max[1] > ground)) ground = b.max[1];
+    }
+    if (ground === null) return;
+    const mine = [...this.decoys.values()].filter((d) => d.owner === owner);
+    while (mine.length >= WEAPONS.decoy.MAX_ACTIVE) this.removeDecoy(mine.shift());
+    const d = {
+      id: g.g, owner, team: owner.team, pos: [r2(x), r2(ground), r2(z)], yaw: owner.yaw, weapon: owner.loadout.primary,
+      hp: WEAPONS.decoy.HP, until: now + WEAPONS.decoy.DURATION, isDecoy: true, alive: true, crouching: false,
+    };
+    this.decoys.set(d.id, d);
+    this.emit(MSG.DECOY, this.decoyInfo(d, now));
+  }
+
+  decoyInfo(d, now) {
+    return { id: d.id, o: d.owner.id, n: d.owner.name, c: d.owner.char, tm: d.team, p: d.pos, yaw: d.yaw, w: d.weapon, rem: d.until - now };
+  }
+
+  /** p'nin vurabileceği kopyalar (isabet hedefi olarak) */
+  decoyTargets(p) {
+    return [...this.decoys.values()].filter((d) => d.owner !== p && this.canHurt(p, d)).map((d) => ({ player: d, pos: d.pos, crouch: false }));
+  }
+
+  hitDecoy(d, attacker, dmg) {
+    d.hp -= dmg;
+    if (d.hp <= 0) this.removeDecoy(d, attacker);
+  }
+
+  removeDecoy(d, by = null) {
+    if (this.decoys.delete(d.id)) this.emit(MSG.DECOY_END, { id: d.id, by: by?.id ?? null });
+  }
+
+  // ---------------- Silah Yarışı ----------------
+
+  gunSetFor(level) {
+    const w = GUN_LADDER[Math.min(level, GUN_LADDER.length - 1)];
+    return w === 'knife' ? ['knife'] : [w, 'knife'];
+  }
+
+  loadoutFor(p) {
+    return p.gunSet ? { ...p.loadout, only: p.gunSet } : p.loadout;
+  }
+
+  /** Sıradaki silahla (ya da bıçakla) öldüren bir basamak çıkar; bıçaklanan bir basamak iner */
+  gunKill(attacker, victim, weapon) {
+    const last = GUN_LADDER.length - 1;
+    // Önceki silahtan geç gelen isabet (roket vb.) basamak atlatmaz
+    if (weapon !== 'knife' && weapon !== GUN_LADDER[attacker.level]) return;
+    if (attacker.level >= last) {
+      if (weapon === 'knife') this.gunWinner = attacker;
+      return;
+    }
+    if (weapon === 'knife') victim.level = Math.max(0, victim.level - 1);
+    attacker.level++;
+    if (!attacker.alive) return; // yeniden doğunca yeni silah
+    attacker.gunSet = this.gunSetFor(attacker.level);
+    attacker.resetLoadout();
+    if (attacker.isBot) for (const k of Object.keys(attacker.reserve)) if (k !== 'knife') attacker.reserve[k] = 999;
+    attacker.socket.emit(MSG.GUN, { loadout: this.loadoutFor(attacker), ammo: attacker.ammo, reserve: attacker.reserve, nades: attacker.nades, level: attacker.level });
   }
 
   // ---------------- Herkes Tek: öldürme ödülü ----------------
@@ -1105,6 +1233,8 @@ export class Room {
   // ---------------- Mermi kutuları ----------------
 
   dropAmmo(victim, now) {
+    if (this.gun) return;
+    if (this.map.train && onTrain(this.map.train, victim.pos, now)) return; // trende kutu havada kalırdı
     if (victim.pos[1] < this.map.bounds.minY + 1) return;
     const d = { id: this.nextDropId++, p: [r2(victim.pos[0]), r2(victim.pos[1]), r2(victim.pos[2])], until: now + DROP.LIFETIME };
     this.drops.set(d.id, d);
@@ -1280,7 +1410,16 @@ export class Room {
       }
       if (!p.alive && this.state === 'playing' && (p.respawnAt === 0 || now >= p.respawnAt)) this.spawn(p);
     }
-    for (const p of this.players.values()) if (p.bot && p.alive) p.bot.update(now, 1 / SERVER_TICK_RATE);
+    const train = this.map.train;
+    const prevTick = this.lastTick ?? now;
+    this.lastTick = now;
+    for (const p of this.players.values()) {
+      if (!p.bot || !p.alive) continue;
+      // Trendeki (ya da trenin çarptığı) bot trenle birlikte kayar
+      if (train) p.pos[0] += trainCarry(train, p.pos, prevTick, now);
+      p.bot.update(now, 1 / SERVER_TICK_RATE);
+    }
+    for (const d of [...this.decoys.values()]) if (now >= d.until) this.removeDecoy(d);
     if (this.state === 'playing') this.updateDrops(now);
     if (this.state === 'playing' && this.map.water) this.updateWater(now);
 
@@ -1299,7 +1438,7 @@ export class Room {
       f: this.flags ? this.flagSnapshot() : undefined,
       p: [...this.players.values()].map((p) => [
         p.id, r2(p.pos[0]), r2(p.pos[1]), r2(p.pos[2]), r3(p.yaw), r3(p.pitch),
-        p.hp, p.alive ? 1 : 0, p.flags | (p.alive && now < p.protectedUntil ? FLAG.PROTECTED : 0) | (p.alive && p.frozen ? FLAG.FROZEN : 0), p.rtt, p.kills, p.deaths, WEAPON_ORDER.indexOf(p.weapon), p.assists,
+        p.hp, p.alive ? 1 : 0, p.flags | (p.alive && now < p.protectedUntil ? FLAG.PROTECTED : 0) | (p.alive && p.frozen ? FLAG.FROZEN : 0), p.rtt, p.kills, p.deaths, WEAPON_ORDER.indexOf(p.weapon), p.assists, p.revenges, p.level,
       ]),
     });
   }
@@ -1317,6 +1456,7 @@ export class Room {
     add('kills', 'TERMİNATÖR', 'En çok öldüren', best('kills'));
     add('assists', 'TAKIM OYUNCUSU', 'En çok asist', best('assists'));
     add('hs', 'KESKİN NİŞANCI', 'En çok kafadan vuruş', best('hs'));
+    add('revenges', 'İNTİKAMCI', 'En çok intikam alan', best('revenges'));
     if (this.ctf) add('caps', 'BAYRAK USTASI', 'En çok bayrak getiren', best('caps'));
     add('deaths', 'KURŞUN MIKNATISI', 'En çok ölen · mermiler onu çok seviyor', best('deaths', (a, b) => a.kills - b.kills));
     return out;
@@ -1331,10 +1471,18 @@ export class Room {
     this.state = 'ended';
     this.grenades.length = 0;
     this.clouds.length = 0;
+    this.decoys.clear();
     const { red, blue } = this.scores;
     let winner = red > blue ? 'red' : blue > red ? 'blue' : 'draw';
     let winnerId = null;
-    if (this.ffa) {
+    if (this.gun) {
+      // Silah Yarışı: bitiren, süre dolduysa en yüksek basamaktaki kazanır
+      const top = [...this.players.values()].sort((a, b) => b.level - a.level || b.kills - a.kills);
+      const tie = top[1] && top[1].level === top[0].level && top[1].kills === top[0].kills;
+      const win = this.gunWinner ?? (top[0]?.level > 0 && !tie ? top[0] : null);
+      winner = win ? 'ffa' : 'draw';
+      winnerId = win?.id ?? null;
+    } else if (this.ffa) {
       // Herkes Tek: en yüksek puan kazanır (eşitlikte çok öldüren)
       const top = [...this.players.values()].sort((a, b) => b.score - a.score || b.kills - a.kills);
       winner = top[0] && top[0].kills > 0 && !(top[1] && top[1].score === top[0].score && top[1].kills === top[0].kills) ? 'ffa' : 'draw';
