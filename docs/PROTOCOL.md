@@ -48,3 +48,15 @@ Mesaj isimleri `shared/protocol.js` içindedir.
 
 ## Oda durumları
 `lobby → countdown (3 sn) → playing → ended (8 sn) → lobby`
+
+## Kanca, donma, flaş
+
+| Mesaj | Yön | İçerik |
+| --- | --- | --- |
+| `hook` | istemci → sunucu | `{p}` kancanın saplandığı nokta (menzil ve bekleme süresi sunucuda denetlenir) |
+| `unhook` | istemci → sunucu | kanca bırakıldı |
+| `hooked` | sunucu → herkes | `{id, p}` halat; `p = null` bırakıldı |
+| `frozen` | sunucu → oyuncu | `{ms}` dondun |
+| `blind` | sunucu → oyuncu | `{ms, k}` flaş körlüğü süresi ve şiddeti |
+
+`kill` mesajında ayrıca `sr` (katilin serisi), `mk` (art arda öldürme) ve `se` (biten kurban serisi) vardır. Snapshot bayraklarına `FROZEN` eklendi.

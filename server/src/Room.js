@@ -1,5 +1,5 @@
 import {
-  PLAYER, DAMAGE_ZONE, WATER, FLAG, FALL, CTF, FFA, PAD, isEnemy, SCORE, LIMITS, CHAT, VOTE, DROP, MARK, CHARACTER_IDS, MODE_IDS, DEFAULT_MODE, FLAG_STATE, WEAPONS, WEAPON_ORDER, GRENADE, SPRAY, BUY_TIME, cleanLoadout, MATCH, SERVER_TICK_RATE, MAX_PLAYERS, MAX_PER_TEAM, MIN_PLAYERS_TO_START, INTERP_DELAY, TEAMS,
+  PLAYER, DAMAGE_ZONE, WATER, FLAG, FALL, CTF, FFA, PAD, isEnemy, SCORE, LIMITS, CHAT, VOTE, DROP, MARK, CHARACTER_IDS, MODE_IDS, DEFAULT_MODE, FLAG_STATE, WEAPONS, WEAPON_ORDER, GRENADE, SPRAY, BUY_TIME, cleanLoadout, FREEZE, HOOK, STREAK, MATCH, SERVER_TICK_RATE, MAX_PLAYERS, MAX_PER_TEAM, MIN_PLAYERS_TO_START, INTERP_DELAY, TEAMS,
 } from '@comic-strike/shared/constants.js';
 import { stepGrenade, throwVelocity } from '@comic-strike/shared/grenade.js';
 import { MSG } from '@comic-strike/shared/protocol.js';
@@ -498,6 +498,7 @@ export class Room {
     p.pitch = 0;
     p.hp = PLAYER.MAX_HP;
     p.alive = true;
+    p.resetStatus();
     p.life++;
     p.dmgBy.clear();
     if (this.map.forceLoadout) p.loadout = { ...p.loadout, ...this.map.forceLoadout };
@@ -529,7 +530,7 @@ export class Room {
 
     p.yaw = d.y;
     p.pitch = Math.max(-1.6, Math.min(1.6, d.pi));
-    p.flags = (d.f | 0) & ~FLAG.PROTECTED; // koruma bayrağını sadece sunucu koyar
+    p.flags = (d.f | 0) & ~(FLAG.PROTECTED | FLAG.FROZEN); // bu bayrakları sadece sunucu koyar
     if (this.state !== 'playing') return; // geri sayımda sadece bakış açısı
 
     const now = Date.now();
@@ -537,16 +538,20 @@ export class Room {
     const [x, y, z] = d.p;
     const horiz = Math.hypot(x - p.pos[0], z - p.pos[2]);
     const up = y - p.pos[1];
-    const maxHoriz = PLAYER.RUN_SPEED * 1.35 * dt + 0.35;
+    // Kancayla çekilen oyuncu normalden hızlı gidebilir
+    const hooked = now < p.hookUntil;
+    const maxHoriz = (hooked ? HOOK.SPEED : PLAYER.RUN_SPEED) * 1.35 * dt + 0.35;
     // Zıplama pedine basan oyuncu bir süre normalden hızlı yükselebilir
     if (this.onPad(p.pos) || this.onPad(d.p)) p.padUntil = now + 2500;
-    const vUp = now < (p.padUntil ?? 0) ? PAD.MAX_VY : PLAYER.JUMP_VELOCITY;
+    const vUp = hooked ? HOOK.SPEED : now < (p.padUntil ?? 0) ? PAD.MAX_VY : PLAYER.JUMP_VELOCITY;
     const maxUp = vUp * 1.3 * dt + 0.5;
     const B = this.map.bounds;
     const outside = Math.abs(x) > B.x + 0.5 || Math.abs(z) > B.z + 0.5 || y < B.minY || y > B.maxY;
 
     p.lastInput = now;
-    if (horiz > maxHoriz || up > maxUp || outside) {
+    // Donmuş oyuncu yürüyemez (sadece düşebilir). Haber ona ulaşana kadar gecikme payı tanınır.
+    const stuck = now < p.frozenUntil && now > p.frozenAt + p.rtt + 200 && (horiz > 0.3 || up > 0.3);
+    if (horiz > maxHoriz || up > maxUp || outside || stuck) {
       // Şüpheli hareket: sunucudaki son geçerli konuma geri çek
       p.socket.emit(MSG.CORRECTION, { p: p.pos, l: p.life });
       return;
@@ -596,7 +601,7 @@ export class Room {
 
   onReload(id) {
     const p = this.players.get(id);
-    if (!p || !p.alive || p.reloadUntil) return;
+    if (!p || !p.alive || p.reloadUntil || p.frozen) return;
     const w = WEAPONS[p.weapon];
     if (w.kind !== 'gun' || !(p.ammo[w.id] < w.MAG_SIZE) || !(p.reserve[w.id] > 0)) return;
     p.reloadUntil = Date.now() + w.RELOAD_TIME;
@@ -604,14 +609,14 @@ export class Room {
 
   onSwitch(id, w) {
     const p = this.players.get(id);
-    if (!p || typeof w !== 'string' || !WEAPONS[w] || p.weapon === w || !p.owns(w)) return;
+    if (!p || typeof w !== 'string' || !WEAPONS[w] || p.weapon === w || !p.owns(w) || p.frozen) return;
     p.weapon = w;
     p.reloadUntil = 0; // silah değişince şarjör değiştirme iptal
   }
 
   onShoot(id, d) {
     const p = this.players.get(id);
-    if (!p || !p.alive || this.state !== 'playing' || !d || !isVec(d.d)) return;
+    if (!p || !p.alive || p.frozen || this.state !== 'playing' || !d || !isVec(d.d)) return;
     const w = WEAPONS[p.weapon];
     if (w.kind === 'grenade') return;
     const now = Date.now();
@@ -640,6 +645,7 @@ export class Room {
         targets.push({ player: o, pos: past.pos, crouch: past.crouch });
       }
     }
+    if (w.SPRAY) return this.fireSpray(p, w, dir, origin, targets, now);
     if (w.PELLETS) return this.firePellets(p, w, dir, d.ds, origin, targets, now);
     const hit = castShot(origin, dir, this.solids, targets, w.RANGE);
     const end = hit.point.map(r2);
@@ -649,6 +655,113 @@ export class Room {
     const base = heavy ? w.HEAVY_DAMAGE : w.DAMAGE;
     const dmg = Math.round(base * (hit.head ? w.HEADSHOT_MULT : hit.leg ? DAMAGE_ZONE.LEG : 1));
     this.applyDamage(p, hit.player, hit.head, end, now, dmg, w.id);
+  }
+
+  /** Alev / dondurucu: bakış yönündeki koninin içinde, menzilde ve görünürde olan herkes etkilenir */
+  fireSpray(p, w, dir, origin, targets, now) {
+    const wall = castShot(origin, dir, this.solids, [], w.RANGE);
+    p.socket.to(this.code).emit(MSG.SHOT, { id: p.id, o: origin.map(r2), e: wall.point.map(r2), w: w.id });
+    for (const { player: v, pos, crouch } of targets) {
+      // Gövdenin birkaç noktasından biri koninin içinde ve görünürse isabet
+      const heights = crouch ? [0.3, 0.65, 1.0] : [0.4, 0.95, 1.45];
+      const touched = heights.some((h) => {
+        const to = [pos[0] - origin[0], pos[1] + h - origin[1], pos[2] - origin[2]];
+        const dist = Math.hypot(...to);
+        if (dist > w.RANGE || dist < 0.01) return false;
+        const u = to.map((c) => c / dist);
+        const angle = Math.acos(Math.max(-1, Math.min(1, u[0] * dir[0] + u[1] * dir[1] + u[2] * dir[2])));
+        // Yakındaki oyuncu ekranda büyük yer kaplar: gövde yarıçapı kadar pay ver
+        if (angle > w.CONE + Math.atan2(PLAYER.RADIUS, dist)) return false;
+        return castShot(origin, u, this.solids, [], dist).distance >= dist - 0.05;
+      });
+      if (!touched || now < v.protectedUntil) continue;
+      this.applyDamage(p, v, false, [r2(pos[0]), r2(pos[1] + 1), r2(pos[2])], now, w.DAMAGE, w.id);
+      if (this.state === 'ended') return;
+      if (w.CHILL && v.alive) this.chill(v, w, now);
+    }
+  }
+
+  /** Dondurucu isabeti: yeterince üst üste gelirse dondur */
+  chill(v, w, now) {
+    if (v.frozen || now < v.frozenUntil + FREEZE.IMMUNE) return;
+    if (now - v.chillAt > FREEZE.CHILL_WINDOW) v.chill = 0;
+    v.chillAt = now;
+    if (++v.chill >= w.CHILL) this.freeze(v, w.FREEZE_MS, now);
+  }
+
+  /** Oyuncuyu ms boyunca dondur: yürüyemez, ateş edemez */
+  freeze(v, ms, now) {
+    if (!v.alive || now < v.protectedUntil) return;
+    if (!v.frozen) v.frozenAt = now;
+    v.frozenUntil = Math.max(v.frozenUntil, now + ms);
+    v.chill = 0;
+    v.reloadUntil = 0;
+    v.hookUntil = 0;
+    this.emit(MSG.HOOKED, { id: v.id, p: null });
+    v.socket.emit(MSG.FROZEN, { ms: v.frozenUntil - now });
+  }
+
+  /** Kanca: noktayı doğrula, bir süre hızlı harekete izin ver, halatı herkese göster */
+  onHook(id, d) {
+    const p = this.players.get(id);
+    if (!p || !p.alive || p.frozen || this.state !== 'playing' || !d || !isVec(d.p)) return;
+    const now = Date.now();
+    if (now < p.nextHook) return;
+    const eye = [p.pos[0], p.pos[1] + p.eyeHeight, p.pos[2]];
+    if (Math.hypot(d.p[0] - eye[0], d.p[1] - eye[1], d.p[2] - eye[2]) > HOOK.RANGE + 2) return;
+    p.nextHook = now + HOOK.COOLDOWN * 0.8;
+    p.hookUntil = now + HOOK.MAX_TIME + 1200; // bırakınca kalan hız için pay
+    p.protectedUntil = Math.min(p.protectedUntil, now); // kancayla saldırıya geçen korumasını kaybeder
+    this.emit(MSG.HOOKED, { id: p.id, p: d.p.map(r2) });
+  }
+
+  onUnhook(id) {
+    const p = this.players.get(id);
+    if (!p || !p.hookUntil) return;
+    p.hookUntil = Math.min(p.hookUntil, Date.now() + 1200);
+    this.emit(MSG.HOOKED, { id: p.id, p: null });
+  }
+
+  /** Patlama noktasından oyuncunun göğsü ya da gözü görünüyor mu */
+  exposed(center, v) {
+    return [v.eyeHeight, 0.8].some((h) => {
+      const to = [v.pos[0] - center[0], v.pos[1] + h - center[1], v.pos[2] - center[2]];
+      const dist = Math.hypot(...to);
+      if (dist < 0.05) return true;
+      return castShot(center, to.map((c) => c / dist), this.solids, [], dist).distance >= dist - 0.05;
+    });
+  }
+
+  /** Flaş: patlamayı gören herkesin gözü kamaşır (takım fark etmez) */
+  flashBang(center, now) {
+    const w = WEAPONS.flash;
+    for (const v of this.players.values()) {
+      if (!v.alive || now < v.protectedUntil) continue;
+      const to = [center[0] - v.pos[0], center[1] - v.pos[1] - v.eyeHeight, center[2] - v.pos[2]];
+      const dist = Math.hypot(...to);
+      if (dist >= w.RADIUS || !this.exposed(center, v)) continue;
+      // Bakış yönü (istemciyle aynı: ileri = -Z)
+      const cp = Math.cos(v.pitch);
+      const look = [-Math.sin(v.yaw) * cp, Math.sin(v.pitch), -Math.cos(v.yaw) * cp];
+      const dot = dist < 0.1 ? 1 : (look[0] * to[0] + look[1] * to[1] + look[2] * to[2]) / dist;
+      const facing = dot > 0.5 ? 1 : dot > -0.2 ? 0.55 : 0.2;
+      const near = Math.min(1, (1 - dist / w.RADIUS) * 1.6);
+      const k = facing * near;
+      const ms = Math.round(w.BLIND * k);
+      if (ms < 250) continue;
+      v.blindUntil = Math.max(v.blindUntil, now + ms);
+      v.socket.emit(MSG.BLIND, { ms, k: r2(Math.min(1, k * 1.3)) });
+    }
+  }
+
+  /** Dondurma bombası: alandaki herkes donar (atan ve takım arkadaşları dahil) */
+  frostBomb(center, now) {
+    const w = WEAPONS.frost;
+    for (const v of this.players.values()) {
+      if (!v.alive) continue;
+      const dist = Math.hypot(v.pos[0] - center[0], v.pos[1] + 0.9 - center[1], v.pos[2] - center[2]);
+      if (dist < w.RADIUS && this.exposed(center, v)) this.freeze(v, w.FREEZE_MS, now);
+    }
   }
 
   /**
@@ -722,7 +835,7 @@ export class Room {
 
   onThrow(id, d) {
     const p = this.players.get(id);
-    if (!p || !p.alive || this.state !== 'playing' || !d || !isVec(d.d)) return;
+    if (!p || !p.alive || p.frozen || this.state !== 'playing' || !d || !isVec(d.d)) return;
     const w = WEAPONS[p.weapon];
     const now = Date.now();
     if (w.kind !== 'grenade' || !(p.nades[w.id] > 0) || now < p.lastShot) return;
@@ -842,6 +955,10 @@ export class Room {
       this.clouds.push({ t: g.t, by: g.by, pos: at, until: now + w.DURATION, next: now + w.TICK });
       return;
     }
+    if (this.state === 'playing' && (g.t === 'flash' || g.t === 'frost')) {
+      const above = [at[0], at[1] + 0.3, at[2]];
+      return g.t === 'flash' ? this.flashBang(above, now) : this.frostBomb(above, now);
+    }
     if (!EXPLOSIVE.has(g.t) || this.state !== 'playing') return;
     const w = WEAPONS[g.t];
     const attacker = g.by;
@@ -904,6 +1021,13 @@ export class Room {
     victim.alive = false;
     victim.deaths++;
     victim.respawnAt = now + PLAYER.RESPAWN_TIME;
+    victim.frozenUntil = 0;
+    victim.blindUntil = 0;
+    victim.hookUntil = 0;
+    this.emit(MSG.HOOKED, { id: victim.id, p: null });
+    const ended = victim.streak; // kurbanın bitirilen serisi
+    victim.streak = 0;
+    victim.multi = 0;
     // Asist: son ASSIST_WINDOW içinde bu oyuncuya hasar veren diğer rakipler
     const assists = [];
     for (const [aid, rec] of victim.dmgBy) {
@@ -920,6 +1044,10 @@ export class Room {
     else if (!self) {
       attacker.kills++;
       if (head) attacker.hs++;
+      attacker.multi = now - attacker.lastKill <= STREAK.MULTI_WINDOW ? attacker.multi + 1 : 1;
+      attacker.lastKill = now;
+      // Öldükten sonra patlayan bomba seriyi büyütmez
+      if (attacker.alive) attacker.streak++;
       if (this.ffa) this.killReward(attacker, weapon);
     }
     // Takım Savaşı: takım puanı = öldürme +3, asist +1, ölüm -1, arkadaş öldürme -3 (Bayrak Kap'ta puan sadece bayrakla gelir)
@@ -936,8 +1064,10 @@ export class Room {
     this.dropFlagOf(victim, now);
     this.dropAmmo(victim, now);
     // kh: katilin kalan canı (ölüm kamerası için) · a: asist yapanlar [[id, silah], ...]
+    // sr: katilin ölmeden yaptığı seri · mk: art arda öldürme sayısı · se: biten kurban serisi
     this.emit(MSG.KILL, {
       k: attacker.id, v: victim.id, h: head, w: weapon, a: assistList, tk: teamKill ? 1 : 0, s: this.scores, kh: attacker.alive ? attacker.hp : 0,
+      sr: !self && !teamKill && attacker.alive ? attacker.streak : 0, mk: !self && !teamKill ? attacker.multi : 0, se: ended,
     });
     this.checkScoreLimit();
   }
@@ -1169,7 +1299,7 @@ export class Room {
       f: this.flags ? this.flagSnapshot() : undefined,
       p: [...this.players.values()].map((p) => [
         p.id, r2(p.pos[0]), r2(p.pos[1]), r2(p.pos[2]), r3(p.yaw), r3(p.pitch),
-        p.hp, p.alive ? 1 : 0, p.flags | (p.alive && now < p.protectedUntil ? FLAG.PROTECTED : 0), p.rtt, p.kills, p.deaths, WEAPON_ORDER.indexOf(p.weapon), p.assists,
+        p.hp, p.alive ? 1 : 0, p.flags | (p.alive && now < p.protectedUntil ? FLAG.PROTECTED : 0) | (p.alive && p.frozen ? FLAG.FROZEN : 0), p.rtt, p.kills, p.deaths, WEAPON_ORDER.indexOf(p.weapon), p.assists,
       ]),
     });
   }

@@ -11,7 +11,7 @@ const $ = (id) => document.getElementById(id);
 const CONTROLS = [
   ['HAREKET'],
   ['İLERİ', 'W', ''], ['GERİ', 'S', ''], ['SOL', 'A', ''], ['SAĞ', 'D', ''],
-  ['ZIPLA', 'SPACE', ''], ['HIZLI KOŞ (STAMINA)', 'LEFT SHIFT', ''], ['ÇÖMEL', 'LEFT CTRL / C', ''],
+  ['ZIPLA', 'SPACE', ''], ['HIZLI KOŞ (STAMINA)', 'LEFT SHIFT', ''], ['ÇÖMEL', 'LEFT CTRL / C', ''], ['KANCA', 'F', ''],
   ['SAVAŞ'],
   ['ATEŞ / BOMBA AT', '', 'LEFT MOUSE BUTTON'], ['NİŞAN AL / DÜRBÜN / AĞIR BIÇAK', '', 'RIGHT MOUSE BUTTON'],
   ['ŞARJÖR DEĞİŞTİR', 'R', ''],
@@ -44,7 +44,7 @@ export class Menu {
     $('game').addEventListener('click', () => {
       if (this.game.active && !this.input.locked && this.game.state !== 'ended') this.resume();
     });
-    this.setupLobbyFit();
+    this.setupPanelFit();
     $('inp-code').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') this.action('join-confirm');
     });
@@ -87,23 +87,29 @@ export class Menu {
     };
   }
 
+  /** Her grup (HAREKET, SAVAŞ, DİĞER) ayrı bir kutu; CSS bunları yan yana dizer */
   buildControls() {
-    const t = $('controls-table');
-    const row = (cells, cls) => {
-      const tr = document.createElement('tr');
-      if (cls) tr.className = cls;
-      for (const [tag, text, c] of cells) {
-        const td = document.createElement(tag);
-        td.textContent = text;
-        if (c) td.className = c;
-        tr.append(td);
-      }
-      t.append(tr);
+    const list = $('controls-list');
+    const el = (tag, cls, text = '') => {
+      const e = document.createElement(tag);
+      e.className = cls;
+      e.textContent = text;
+      return e;
     };
-    row([['th', 'EYLEM'], ['th', 'KLAVYE'], ['th', 'FARE']]);
+    let group = null;
     for (const [action, key, mouse] of CONTROLS) {
-      if (key === undefined) row([['td', action, 'group'], ['td', ''], ['td', '']], 'group-row');
-      else row([['td', action, 'act'], ['td', key, 'key'], ['td', mouse, 'key']]);
+      if (key === undefined) {
+        group = el('div', 'ctl-group');
+        group.dataset.group = action;
+        group.append(el('h3', '', action));
+        list.append(group);
+        continue;
+      }
+      const keys = el('span', 'ctl-keys');
+      for (const k of [key, mouse]) if (k) keys.append(el('kbd', '', k));
+      const row = el('div', 'ctl-row');
+      row.append(el('span', 'ctl-act', action), keys);
+      group.append(row);
     }
   }
 
@@ -123,7 +129,10 @@ export class Menu {
         const desc = document.createElement('span');
         desc.textContent = w.DESC ?? '';
         const stats = document.createElement('i');
-        stats.textContent = w.ROCKET ? `PATLAMA ${w.DAMAGE} · ${w.RADIUS} m · ${w.MAG_SIZE}+${w.RESERVE} ROKET`
+        stats.textContent = w.SPRAY ? `${(w.DAMAGE * 1000) / w.FIRE_INTERVAL} HASAR/sn · ${w.RANGE} m · ${w.MAG_SIZE}+${w.RESERVE}`
+          : w.id === 'flash' ? `${w.BLIND / 1000} sn'ye kadar körlük · ${w.COUNT} ADET`
+          : w.id === 'frost' ? `${w.FREEZE_MS / 1000} sn donma · ${w.RADIUS} m`
+          : w.ROCKET ? `PATLAMA ${w.DAMAGE} · ${w.RADIUS} m · ${w.MAG_SIZE}+${w.RESERVE} ROKET`
           : w.PELLETS ? `${w.PELLETS}×${w.DAMAGE} SAÇMA · ŞARJÖR ${w.MAG_SIZE}+${w.RESERVE}`
           : w.kind === 'gun'
           ? `HASAR ${w.DAMAGE} · ŞARJÖR ${w.MAG_SIZE}+${w.RESERVE} · ${Math.round(60000 / w.FIRE_INTERVAL)} RPM`
@@ -152,7 +161,11 @@ export class Menu {
     this.preview.show(id);
     $('lo-name').textContent = w.NAME;
     $('lo-desc').textContent = w.DESC ?? '';
-    $('lo-stats').textContent = w.ROCKET
+    $('lo-stats').textContent = w.SPRAY
+      ? `Saniyede ${(w.DAMAGE * 1000) / w.FIRE_INTERVAL} HASAR · MENZİL ${w.RANGE} m · ${w.CHILL ? `${(w.CHILL * w.FIRE_INTERVAL) / 1000} sn püskürtünce ${w.FREEZE_MS / 1000} sn dondurur · ` : ''}ŞARJÖR ${w.MAG_SIZE} · YEDEK ${w.RESERVE}`
+      : w.id === 'flash' ? `Patlamayı gören herkes (sen de!) ${w.BLIND / 1000} sn'ye kadar kör olur · arkanı dönersen çok daha kısa · ${w.COUNT} ADET`
+      : w.id === 'frost' ? `${w.RADIUS} m alandaki herkes (sen ve takımın da!) ${w.FREEZE_MS / 1000} sn donar · hasar vermez`
+      : w.ROCKET
       ? `Roket çarptığı yerde patlar · ${w.DAMAGE} HASAR · ETKİ ALANI ${w.RADIUS} m · ŞARJÖR ${w.MAG_SIZE} · YEDEK ${w.RESERVE} · kendine de zarar verir`
       : w.PELLETS
       ? `${w.PELLETS} saçma × ${w.DAMAGE} HASAR (yakında en fazla ${w.PELLETS * w.DAMAGE}) · ${w.FALLOFF[0]} m'den sonra hasar düşer · ŞARJÖR ${w.MAG_SIZE} · YEDEK ${w.RESERVE}`
@@ -276,22 +289,29 @@ export class Menu {
     for (const b of $('char-pick').children) b.classList.toggle('active', b.dataset.char === this.settings.char);
   }
 
-  /** Lobi paneli ekrana sığmıyorsa pencere boyutuna göre küçültür (zoom). */
-  setupLobbyFit() {
-    const panel = document.querySelector('#screen-lobby .panel.lobby');
-    if (!panel) return;
+  /** Lobi, kontroller ve silah seçimi panelleri ekrana sığmazsa küçültülür (kaydırma çubuğu çıkmaz) */
+  setupPanelFit() {
+    const panels = {
+      lobby: document.querySelector('#screen-lobby .panel.lobby'),
+      controls: document.querySelector('#screen-controls .panel'),
+      loadout: document.querySelector('#screen-loadout .panel'),
+    };
     let queued = false;
     const fit = () => {
       queued = false;
-      if (this.current !== 'lobby') return;
+      const panel = panels[this.current];
+      if (!panel) return;
       panel.style.zoom = '1';
-      const w = panel.offsetWidth + 14, h = panel.offsetHeight + 14; // gölge payı
+      const w = panel.offsetWidth + 24, h = panel.offsetHeight + 24; // gölge ve eğiklik payı
       const z = Math.max(0.35, Math.min(1, (window.innerHeight - 16) / h, (window.innerWidth - 8) / w));
       panel.style.zoom = z.toFixed(3);
     };
-    this.fitLobby = () => { if (!queued) { queued = true; requestAnimationFrame(fit); } };
-    window.addEventListener('resize', this.fitLobby);
-    new MutationObserver(this.fitLobby).observe(panel, { childList: true, subtree: true, characterData: true });
+    this.fitPanel = () => { if (!queued) { queued = true; requestAnimationFrame(fit); } };
+    window.addEventListener('resize', this.fitPanel);
+    document.fonts?.ready.then(this.fitPanel); // yazı tipi geç yüklenirse boyutlar değişir
+    for (const panel of Object.values(panels)) {
+      new MutationObserver(this.fitPanel).observe(panel, { childList: true, subtree: true, characterData: true });
+    }
   }
 
   show(name) {
@@ -300,7 +320,7 @@ export class Menu {
     for (const s of document.querySelectorAll('.screen')) s.classList.toggle('hidden', s.id !== `screen-${name}`);
     this.current = name;
     document.body.classList.toggle('in-menu', !this.game.active);
-    if (name === 'lobby') this.fitLobby?.();
+    this.fitPanel?.();
   }
 
   msg(id, text, error = true) {

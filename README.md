@@ -32,7 +32,8 @@ Sunucunun ayakta olup olmadığını şuradan görebilirsin: https://comic-strik
 - **Çizgi roman görünümü:** toon gölgelendirme, el çizimi konturlar, kâğıt dokusu, KAPOW! / BLAM! yazıları, mürekkep lekeleri.
 - **4 oyun modu:** Takım Savaşı, Bayrak Kap, Herkes Tek, Ölüm Yarışı.
 - **9 harita:** şehirden uzay istasyonuna, havuz partisinden dev bir çocuk odasına.
-- **15 silah ve bomba:** tüfekler, pompalı, bazuka, AWP, tabancalar, bıçak, mayın, molotof ve daha fazlası.
+- **19 silah ve bomba:** tüfekler, pompalı, bazuka, AWP, alev silahı, dondurucu, tabancalar, bıçak, mayın, molotof, flaş ve daha fazlası.
+- **Kanca (F):** çatılara ve raflara fırlayıp tırman.
 - **Vuruş bölgeleri:** kafaya vuruş çok daha fazla, bacağa daha az hasar verir.
 - **Pratik botları:** sunucuda çalışır, yol bulur, ateş eder, Bayrak Kap'ta saldırır ve savunur.
 - **Sunucu doğrulamalı:** hasar, ölüm, skor ve atışlar sunucuda hesaplanır (gecikme telafisiyle).
@@ -103,6 +104,7 @@ Sen **http://localhost:3000**, arkadaşların **http://BILGISAYAR_IP:3000** adre
 | Fare tekeri    | Silah değiştir                                                           |
 | Q              | Son seçilen iki silah arasında hızlı geçiş (daha kısa çekme süresi)      |
 | R              | Şarjör değiştir                                                          |
+| F              | Kanca: baktığın yüzeye at (en fazla 28 m, 5 sn'de bir); tekrar F ya da Space bırakır |
 | T              | Karakterine özel sticker'ı duvara yapıştır                               |
 | E / orta tık   | Takıma işaret ("BURADA!", rakibe bakıyorsan "DÜŞMAN!")                   |
 | Tab            | Skor tablosu (öldürme / asist / ölüm / puan)                             |
@@ -160,7 +162,9 @@ Her oyuncu bir ana silah, bir tabanca ve bir bomba seçer (**B** tuşu ya da ma�
 | **THUNDER** | Ağır makineli | 23 / 60 / 16 | 100 + 200 | Uzun şarjör değiştirme, yavaş |
 | **KA-CHUNK** | Pompalı | 9 saçma × 13 | 6 + 24 | Yakında öldürür, 6 m'den sonra hasar düşer |
 | **BAZOOKA** | Roketatar | 130 patlama, 5 m alan | 1 + 3 | Roket ilk çarptığı yerde patlar; atana da zarar verir |
-| **AWP** | Keskin nişancı | 85 / 170 / 60 | 5 + 20 | Kafaya tek atış; 2 seviye dürbün, dürbünde çok az sapma |
+| **AWP** | Keskin nişancı | 85 / 170 / 60 | 5 + 20 | Kafaya tek atış; 2 seviye dürbün; dürbünle dururken sapma yok |
+| **DRAGON** | Alev silahı | saniyede 60 (7 m) | 60 + 120 | Menzildeki herkesi yakar, duvar arkasını etkilemez |
+| **BRRR-9** | Dondurucu | saniyede 30 (8 m) | 50 + 100 | 0,8 sn püskürtünce rakip 2,5 sn donar; çözülünce 1,5 sn bağışıklık |
 
 ### Tabanca ve bıçak
 
@@ -182,8 +186,13 @@ Basılı tut: ne kadar uzun tutarsan o kadar uzağa atılır; atış yolu ekrand
 | **STINKY** | Zehir: 10 sn zehirli bulut, içindekiler saniyede 10 can kaybeder |
 | **TIK-TAK** | Mayın (2 adet): yere oturunca 1,5 sn'de kurulur, rakip yaklaşınca 140 hasarla patlar; aynı anda en fazla 2 mayın, 90 sn sonra söner |
 | **MOLOTOF** | Çarptığı yerde 7 sn yanan 3,2 m'lik alev; içindekiler saniyede 15 can kaybeder (atan da yanar) |
+| **FLASH** | Flaş (2 adet): patlamayı gören herkes (atan dahil) 3,5 sn'ye kadar kör olur; arkası dönük olan çok daha az etkilenir |
+| **BUZ KÜPÜ** | Dondurma: 4,5 m alandaki herkes (takım arkadaşı ve atan dahil) 3 sn donar, hasar yok |
 
 ## Oyun içinde
+
+- **Seri öldürme duyuruları:** art arda öldürme (ikili, üçlü...), ölmeden seri (3, 5, 7, 10) ve 5+ serinin bitirilmesi herkese duyurulur.
+- **Ölüm kamerası:** ölünce kamera seni vuranın omzunun arkasına gider; silahı ve mesafe yazılır.
 
 - **Puanlama:** öldürme +3, asist +1, ölüm −1. Asist: rakibi vurdun ama öldüremedin, rakip 5 saniye içinde başkasının elinden öldü.
 - **Öldürme akışı:** sağ üstte öldürenin silahının resmi; ölene son 5 saniyede hasar veren başka oyuncular da kendi silahlarıyla "+ isim" olarak yazılır. Kafadan vuruş ⌖ ile işaretlenir.
@@ -246,3 +255,4 @@ Ayrıntılar: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/PROTOCOL.md]
 - Sunucu hareket hızını ve harita sınırlarını kontrol eder, ama duvar içinden geçmeyi kontrol etmez.
 - Botlar merdiven ve trambolin kullanmaz; çatılara, raflara ve iskelelere çıkmaz, zemin katta dolaşırlar. Bomba ve özel silah kullanmazlar.
 - Maç ortasında katılan oyuncu, süren sis bulutlarını görmez.
+- Botlar kanca, alev silahı, dondurucu ve özel bombaları kullanmaz (ama onlardan etkilenir).

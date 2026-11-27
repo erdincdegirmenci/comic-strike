@@ -34,6 +34,7 @@ export class Player {
     this.lastShot = 0;
     this.lastSpray = 0;
     this.resetLoadout();
+    this.resetStatus();
 
     this.dmgBy = new Map(); // bu canında bana hasar verenler: id -> {t, w} (asist için)
     this.lastInput = 0;
@@ -48,6 +49,24 @@ export class Player {
     this.deaths = 0;
     this.hs = 0; // kafadan vuruşla öldürme
     this.caps = 0; // CTF: getirilen bayrak
+    this.streak = 0; // ölmeden yapılan öldürme serisi
+    this.multi = 0; // art arda (kısa arayla) öldürme
+    this.lastKill = 0;
+  }
+
+  /** Doğuşta: donma, körlük, kanca durumlarını temizle */
+  resetStatus() {
+    this.frozenAt = 0;
+    this.frozenUntil = 0;
+    this.blindUntil = 0;
+    this.chill = 0;
+    this.chillAt = 0;
+    this.hookUntil = 0;
+    this.nextHook = 0;
+  }
+
+  get frozen() {
+    return Date.now() < this.frozenUntil;
   }
 
   /** Puan: öldürme +3, asist +1, ölüm -1 */

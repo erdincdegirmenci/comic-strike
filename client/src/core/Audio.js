@@ -116,6 +116,50 @@ export class Sfx {
     this.noiseBurst({ gain: 0.9 * volume, decay: 1.2, freq: 500, q: 0.3, type: 'lowpass', delay: 0.05 });
   }
 
+  /** Alev silahı: kısa uğultu (sürekli ateşte üst üste biner) */
+  flame(volume = 1) {
+    if (!this.ready || volume <= 0.01) return;
+    this.noiseBurst({ gain: 0.55 * volume, decay: 0.22, freq: 650, q: 0.4, type: 'lowpass' });
+  }
+
+  /** Dondurucu: tıslama */
+  frost(volume = 1) {
+    if (!this.ready || volume <= 0.01) return;
+    this.noiseBurst({ gain: 0.22 * volume, decay: 0.18, freq: 5200, q: 0.8, type: 'highpass' });
+  }
+
+  flashbang(volume = 1) {
+    if (!this.ready || volume <= 0.01) return;
+    this.noiseBurst({ gain: 1.2 * volume, decay: 0.18, freq: 2600, q: 0.4 });
+    this.tone({ type: 'square', from: 300, to: 60, gain: 0.35 * volume, decay: 0.15 });
+  }
+
+  /** Flaş yiyince kulak çınlaması */
+  ring(seconds, strength = 1) {
+    if (!this.ready) return;
+    this.tone({ type: 'sine', from: 3900, to: 3600, gain: 0.09 * strength, decay: seconds });
+  }
+
+  /** Buz çatırtısı (dondurma bombası / donma) */
+  ice(volume = 1) {
+    if (!this.ready || volume <= 0.01) return;
+    for (let i = 0; i < 5; i++) this.tone({ type: 'triangle', from: 1500 + i * 420, to: 900 + i * 300, gain: 0.14 * volume, decay: 0.12, delay: i * 0.045 });
+    this.noiseBurst({ gain: 0.4 * volume, decay: 0.3, freq: 4200, type: 'highpass' });
+  }
+
+  hook(volume = 1) {
+    if (!this.ready || volume <= 0.01) return;
+    this.noiseBurst({ gain: 0.3 * volume, decay: 0.2, freq: 2400, q: 2 });
+    this.tone({ type: 'square', from: 900, to: 220, gain: 0.12 * volume, decay: 0.14 });
+  }
+
+  /** Seri duyurusu: yükselen üç nota (level arttıkça daha tiz) */
+  streak(level = 2) {
+    if (!this.ready) return;
+    const base = 330 + Math.min(level, 6) * 45;
+    [1, 1.26, 1.5].forEach((k, i) => this.tone({ type: 'square', from: base * k, gain: 0.13, decay: 0.16, delay: i * 0.09 }));
+  }
+
   knife(volume = 1) {
     if (!this.ready || volume <= 0.01) return;
     this.noiseBurst({ gain: 0.35 * volume, decay: 0.12, freq: 3200, q: 1.5 });

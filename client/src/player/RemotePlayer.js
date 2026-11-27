@@ -21,8 +21,12 @@ const G = {
   nade: new THREE.SphereGeometry(0.08, 10, 8),
   crest: new THREE.BoxGeometry(0.07, 0.12, 0.32),
   shadow: new THREE.CircleGeometry(0.42, 20),
+  ice: new THREE.BoxGeometry(0.95, 1.9, 0.85),
 };
-const NADE_COLOR = { he: '#52b788', smoke: '#adb5bd', poison: '#7cb518', mine: '#4a4e3a', molotov: '#9c6644' };
+const iceMat = new THREE.MeshBasicMaterial({ color: '#a8e6ff', transparent: true, opacity: 0.45, depthWrite: false });
+const iceEdgeMat = new THREE.LineBasicMaterial({ color: '#e8fbff' });
+const iceEdges = new THREE.EdgesGeometry(G.ice);
+const NADE_COLOR = { he: '#52b788', smoke: '#adb5bd', poison: '#7cb518', mine: '#4a4e3a', molotov: '#9c6644', flash: '#e9ecef', frost: '#7fd3f5' };
 const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false });
 
 function lerpAngle(a, b, k) {
@@ -172,7 +176,10 @@ export class RemotePlayer {
     const revolver = simple(0.26, '#8a5a3b', -0.48, -0.08, 0.06);
     const shotgun = simple(0.66, '#5a4030', -0.88, -0.12, 0.09);
     const bazooka = simple(0.95, '#5c6b3a', -1.17, -0.04, 0.14);
+    const flamer = simple(0.6, '#c4493d', -0.82, -0.12, 0.12);
+    const freezer = simple(0.6, '#7fd3f5', -0.82, -0.12, 0.12);
     this.guns = {
+      flamer, freezer, flash: nade, frost: nade,
       rifle, awp, knife, he: nade, smoke: nade, poison: nade, mine: nade, molotov: nade,
       carbine, smg, lmg, popper, cannon, revolver, shotgun, bazooka,
     };
@@ -189,6 +196,13 @@ export class RemotePlayer {
     shadow.position.y = 0.03;
     this.root.add(shadow);
     this.shadow = shadow;
+
+    // Donunca karakterin etrafında buz kalıbı
+    this.ice = new THREE.Mesh(G.ice, iceMat);
+    this.ice.add(new THREE.LineSegments(iceEdges, iceEdgeMat));
+    this.ice.position.y = 0.93;
+    this.ice.visible = false;
+    this.root.add(this.ice);
 
     this.tag = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthTest: false }));
     this.tag.scale.set(1.3, 0.33, 1);
@@ -271,6 +285,7 @@ export class RemotePlayer {
   update(renderT, dt) {
     if (this.alive === false) {
       this.deadT += dt;
+      this.ice.visible = false;
       const k = Math.min(1, this.deadT / 0.35);
       this.body.rotation.x = k * 1.45;
       this.shadow.visible = false;
@@ -324,6 +339,11 @@ export class RemotePlayer {
     const legScale = 1 - 0.59 * this.crouch;
     for (const leg of this.legs) leg.scale.y = legScale;
     this.tag.position.y = 2.1 - 0.46 * this.crouch;
+
+    this.ice.visible = (b.flags & FLAG.FROZEN) !== 0;
+    this.ice.scale.y = 1 - 0.24 * this.crouch;
+    this.ice.position.y = 0.93 * this.ice.scale.y;
+    if (this.ice.visible) for (const leg of this.legs) leg.rotation.x = 0;
 
     // Doğuş koruması: karakter yanıp söner (vurulamaz)
     const prot = (b.flags & FLAG.PROTECTED) !== 0;

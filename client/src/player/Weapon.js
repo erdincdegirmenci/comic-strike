@@ -69,6 +69,10 @@ export class Weapon {
     this.buildLmg();
     this.buildPopper();
     this.buildCannon();
+    this.buildSprayer("flamer", { body: "#5a3a22", tank: "#c4493d", nozzle: "#2b2b2b", tip: "#ff9f1c" });
+    this.buildSprayer("freezer", { body: "#3e6c9c", tank: "#a8e6ff", nozzle: "#dfe7ef", tip: "#e8fbff" });
+    this.buildGrenade("flash", "#e9ecef");
+    this.buildGrenade("frost", "#7fd3f5");
     this.computeAdsHeights();
     this.hand = 1; // 1 sağ el, -1 sol el
 
@@ -469,6 +473,18 @@ export class Weapon {
     this.reloadRig(m, 0.9);
   }
 
+  /** Alev silahı / dondurucu: kalın gövde, altında tüp (tank), ağzı genişleyen meme */
+  buildSprayer(id, c) {
+    const m = this.model(id);
+    this.longGun(m, { body: 0.34, barrel: 0.22, color: c.body });
+    m.add(new THREE.CylinderGeometry(0.055, 0.055, 0.26, 12), c.tank, 0.01, -0.07, -0.14, Math.PI / 2); // tank
+    m.add(new THREE.CylinderGeometry(0.058, 0.058, 0.03, 12), "#2b2d42", 0.01, -0.07, -0.14, Math.PI / 2); // kuşak
+    m.add(new THREE.CylinderGeometry(0.042, 0.022, 0.1, 12), c.nozzle, 0, 0.012, -0.39, -Math.PI / 2); // meme
+    m.add(new THREE.SphereGeometry(0.016, 8, 6), c.tip, 0, 0.012, -0.45); // pilot ucu
+    m.add(B(0.02, 0.03, 0.12), "#2b2d42", 0, 0.065, -0.02); // üst tutamak
+    m.add(B(0.06, 0.08, 0.16), c.body, 0, -0.02, 0.24); // dipçik
+  }
+
   /** Tabanca: el sabit, silah tetik noktası etrafında döner */
   pistol(id, o) {
     const m = this.model(id, [0, -0.03, 0.04]);
@@ -786,6 +802,7 @@ export class Weapon {
     }
     this.ammo[this.current]--;
     this.kick = d.KICK ?? 1;
+    if (d.SPRAY) return; // püskürtmede namlu patlaması yok (parçacıkları Effects çizer)
     if (this.current === "awp" && this.scope > 0) {
       // Atıştan sonra dürbün kapanır, kurma bitince geri açılır
       this.resumeScope = this.ammo.awp > 0 ? this.scope : 0;

@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import RAPIER from "@dimforge/rapier3d-compat";
-import { PLAYER, FLAG, ADS, PAD } from "@comic-strike/shared/constants.js";
+import { PLAYER, FLAG, ADS, PAD, HOOK } from "@comic-strike/shared/constants.js";
 
+const _to = new THREE.Vector3();
 const CENTER = PLAYER.HEIGHT / 2; // kapsül merkezi, ayak noktasından yukarı
 const HALF = PLAYER.HEIGHT / 2 - PLAYER.RADIUS;
 const C_CENTER = PLAYER.CROUCH_HEIGHT / 2;
@@ -47,6 +48,9 @@ export class LocalPlayer {
     this.padAt = 0;
     this.onPad = null; // fırlatılınca çağrılır (ses)
     this.landed = 0; // bu karede yere sert çarptıysa çarpma hızı (m/s), Game okuyup sıfırlar
+    this.hook = null; // kancayla çekiliyorsa {p, until, best, stuck}
+    this.hookFlight = false; // kancadan ayrıldı, henüz yere inmedi (düşme hasarı yok)
+    this.onHookEnd = null;
   }
 
   /**
@@ -104,10 +108,49 @@ export class LocalPlayer {
     this.velocity.set(0, 0, 0);
     this.landed = 0;
     this.padFlight = false;
+    this.hookFlight = false;
     if (yaw !== undefined) {
       this.yaw = yaw;
       this.pitch = 0;
     }
+  }
+
+  /** Kancayı point noktasına at: oyuncu oraya çekilir */
+  startHook(point) {
+    this.hook = { p: new THREE.Vector3(point.x, point.y, point.z), until: performance.now() + HOOK.MAX_TIME, best: Infinity, stuck: 0 };
+    this.grounded = false;
+    this.padFlight = false;
+  }
+
+  /** Kancayı bırak. hop: uca varınca / zıplayarak ayrılınca yukarı sıçra (çatıya çıkabilmek için) */
+  endHook(hop = false) {
+    if (!this.hook) return;
+    const up = this.hook.p.y > this.position.y + 0.8;
+    this.hook = null;
+    this.hookFlight = true;
+    const v = this.velocity;
+    const flat = Math.hypot(v.x, v.z);
+    if (flat > HOOK.RELEASE_SPEED) {
+      v.x *= HOOK.RELEASE_SPEED / flat;
+      v.z *= HOOK.RELEASE_SPEED / flat;
+    }
+    v.y = hop && up ? HOOK.HOP : Math.min(v.y, HOOK.HOP);
+    this.onHookEnd?.();
+  }
+
+  /** Kanca çekişi: hızı uca doğru çevir; varınca, süre dolunca ya da takılınca bırak */
+  updateHook(dt, input, enabled) {
+    const h = this.hook;
+    const to = _to.set(h.p.x - this.position.x, h.p.y - (this.position.y + this.center), h.p.z - this.position.z);
+    const dist = to.length();
+    if (dist < h.best - 0.15) {
+      h.best = dist;
+      h.stuck = 0;
+    } else h.stuck += dt;
+    const jump = enabled && input.pressed('Space');
+    if (jump || dist < HOOK.ARRIVE || h.stuck > 0.3 || performance.now() > h.until) return this.endHook(jump || dist < HOOK.ARRIVE || h.stuck > 0.3);
+    to.multiplyScalar(HOOK.SPEED / dist);
+    this.velocity.lerp(to, Math.min(1, dt * 12));
   }
 
   resetStamina() {
@@ -189,7 +232,7 @@ export class LocalPlayer {
     speed *= this.speedMult;
 
     const ground = this.onGround;
-    if (ground || len > 0) {
+    if (!this.hook && (ground || len > 0)) {
       // Havada az kontrol; pedden uçarken daha da az (hedefe ulaşsın)
       const k = Math.min(
         1,
@@ -201,6 +244,7 @@ export class LocalPlayer {
 
     // Zıplama pedi: üstüne basınca fırlat
     if (
+      !this.hook &&
       enabled &&
       ground &&
       this.pads.length &&
@@ -223,6 +267,7 @@ export class LocalPlayer {
     }
 
     if (
+      !this.hook &&
       enabled &&
       ground &&
       this.velocity.y <= 0.5 &&
@@ -233,7 +278,8 @@ export class LocalPlayer {
       this.velocity.y = PLAYER.JUMP_VELOCITY;
       this.grounded = false;
     }
-    this.velocity.y -= PLAYER.GRAVITY * this.gravity * dt;
+    if (this.hook) this.updateHook(dt, input, enabled);
+    if (!this.hook) this.velocity.y -= PLAYER.GRAVITY * this.gravity * dt;
 
     const wasGrounded = this.grounded;
     const fallSpeed = -this.velocity.y;
@@ -253,8 +299,8 @@ export class LocalPlayer {
     this.grounded = this.kcc.computedGrounded();
     // Yere sert iniş → düşme hasarı için bildir
     if (!wasGrounded && this.grounded && fallSpeed > 0) {
-      if (this.padFlight)
-        this.padFlight = false; // pedden inişte düşme hasarı yok
+      if (this.padFlight || this.hookFlight)
+        this.padFlight = this.hookFlight = false; // pedden / kancadan inişte düşme hasarı yok
       else this.landed = Math.max(this.landed, fallSpeed);
     }
     if (this.grounded && this.velocity.y < 0) this.velocity.y = 0;
