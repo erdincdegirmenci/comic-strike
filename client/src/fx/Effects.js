@@ -280,6 +280,43 @@ export class Effects {
     this.word(_p, 'FWOOSH!', '#ff6d00');
   }
 
+  /** Alev silahı / dondurucu püskürtmesi: from'dan dir yönünde reach metreye kadar parçacık demeti */
+  stream(from, dir, reach, ice = false) {
+    const life = 0.28;
+    for (let i = 0; i < 5; i++) {
+      const start = 0.15 + Math.random() * 0.5;
+      _p.set(from.x + dir.x * start, from.y + dir.y * start, from.z + dir.z * start);
+      // Parçacık ömrü boyunca duvarı / menzili geçmesin
+      const speed = (Math.max(0.3, reach - start) / life) * (0.55 + Math.random() * 0.45);
+      const j = speed * 0.17;
+      const vel = new THREE.Vector3(dir.x * speed + (Math.random() - 0.5) * j, dir.y * speed + (Math.random() - 0.5) * j, dir.z * speed + (Math.random() - 0.5) * j);
+      const size = 0.12 + Math.random() * 0.12;
+      this.sprite(ice ? puffTexture() : fireTexture(), _p, size, size, life, { grow: 4.5, vel, color: ice ? '#9fe4ff' : 0xffffff, order: 9 });
+    }
+  }
+
+  /** Flaş bombası patlaması: kısa, parlak yıldız */
+  flashBurst(pos) {
+    _p.set(pos.x, pos.y + 0.6, pos.z);
+    this.sprite(starTexture(), _p, 4.5, 4.5, 0.35, { grow: 1.5, color: '#ffffff', order: 12 });
+    _p.y += 1.4;
+    this.word(_p, 'FLAŞ!', '#e2b65a');
+  }
+
+  /** Dondurma bombası: alana yayılan buz bulutu ve yerde buz izi */
+  frostBurst(pos, radius) {
+    for (let i = 0; i < 36; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = Math.sqrt(Math.random()) * radius;
+      _p.set(pos.x + Math.cos(a) * d, pos.y + 0.2 + Math.random() * 1.8, pos.z + Math.sin(a) * d);
+      const vel = new THREE.Vector3(Math.cos(a) * 0.8, 0.2 + Math.random() * 0.4, Math.sin(a) * 0.8);
+      const size = 0.8 + Math.random() * 0.9;
+      this.sprite(i % 5 ? puffTexture() : starTexture(), _p, size, size, 0.7 + Math.random() * 0.8, { grow: 0.9, vel, color: '#a8e6ff', order: 9 });
+    }
+    _p.set(pos.x, pos.y + 1.8, pos.z);
+    this.word(_p, 'BRRR!', '#3e8fc4');
+  }
+
   /** Roket arkasındaki duman izi */
   trail(pos) {
     this.sprite(puffTexture(), pos, 0.35, 0.35, 0.6, { grow: 2, color: '#d8d0c4', order: 9 });

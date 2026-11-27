@@ -130,6 +130,8 @@ export class RoomManager {
     forward(MSG.SET_LIMITS, 'onSetLimits');
     forward(MSG.SET_FF, 'onSetFF');
     forward(MSG.MOVE_BOT, 'onMoveBot');
+    forward(MSG.HOOK, 'onHook');
+    forward(MSG.UNHOOK, 'onUnhook');
     forward(MSG.RESTART_REQUEST, 'onRestartRequest');
     forward(MSG.VOTE, 'onVote');
     forward(MSG.CHAT, 'onChat');

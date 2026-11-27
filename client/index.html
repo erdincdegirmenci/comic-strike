@@ -117,7 +117,7 @@
       <!-- KONTROLLER -->
       <section id="screen-controls" class="screen hidden">
         <div class="panel controls-panel">
-          <table id="controls-table"></table>
+          <div id="controls-list"></div>
           <button class="btn alt" data-action="back">BACK</button>
         </div>
       </section>
@@ -130,11 +130,15 @@
             <canvas id="lo-canvas"></canvas>
             <div class="lo-info"><b id="lo-name"></b><span id="lo-desc"></span><i id="lo-stats"></i></div>
           </div>
-          <div class="lo-row"><h3>1 · ANA SİLAH</h3><div class="lo-cards" data-cat="primary"></div></div>
-          <div class="lo-row"><h3>2 · TABANCA</h3><div class="lo-cards" data-cat="pistol"></div></div>
-          <div class="lo-row"><h3>4 · BOMBA</h3><div class="lo-cards" data-cat="nade"></div></div>
-          <p id="loadout-msg" class="small"></p>
-          <button class="btn big" data-action="loadout-done">FIGHT!</button>
+          <div class="lo-grid">
+            <div class="lo-row primary"><h3>1 · ANA SİLAH</h3><div class="lo-cards" data-cat="primary"></div></div>
+            <div class="lo-row pistol"><h3>2 · TABANCA</h3><div class="lo-cards" data-cat="pistol"></div></div>
+            <div class="lo-row nade"><h3>4 · BOMBA</h3><div class="lo-cards" data-cat="nade"></div></div>
+          </div>
+          <div class="lo-foot">
+            <p id="loadout-msg" class="small"></p>
+            <button class="btn big" data-action="loadout-done">FIGHT!</button>
+          </div>
         </div>
       </section>
 
@@ -234,6 +238,8 @@
 
     <!-- OYUN İÇİ ARAYÜZ -->
     <div id="hud" class="hidden">
+      <div id="flash-veil"></div>
+      <div id="frost-veil" class="hidden"><p>❄ DONDUN! <b id="frost-time">3</b></p></div>
       <div id="smoke-veil"></div>
       <div id="poison-veil"></div>
       <div id="scope" class="hidden"><i class="h"></i><i class="v"></i></div>
@@ -295,6 +301,8 @@
         <small id="vote-note"></small>
       </div>
       <div id="comic-pop"></div>
+      <div id="streak"><p id="streak-title"></p><small id="streak-sub"></small></div>
+      <div id="hook" class="hidden"></div>
       <div id="protect" class="hidden">
         <p>🛡 KORUMA <b id="protect-time">5</b></p>
         <small>Ateş edersen koruma biter</small>
@@ -302,6 +310,7 @@
       <div id="respawn" class="hidden">
         <p id="respawn-by"></p>
         <p id="respawn-hp"></p>
+        <p id="respawn-cam"></p>
         <p>RESPAWN <b id="respawn-time">3</b></p>
       </div>
       <div id="scoreboard" class="hidden"></div>

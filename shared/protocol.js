@@ -27,6 +27,8 @@ export const MSG = {
   FALL: 'fall', // {v} yere çarpma hızı (m/s) → düşme hasarı
   SET_LIMITS: 'set_limits', // {score, flags, time} (sadece host, lobide) maç sonu sınırları
   CHAT: 'chat', // {t: metin, team: bool}
+  HOOK: 'hook', // {p:[x,y,z]} kanca atıldı
+  UNHOOK: 'unhook', // kanca bırakıldı
   RESTART_REQUEST: 'restart_request', // host maçı baştan başlatmak için oylama açar
   VOTE: 'vote', // {yes: bool} oylamaya cevap
 
@@ -45,6 +47,9 @@ export const MSG = {
   GRENADE: 'grenade', // {g, t, id, o, v}: bomba atıldı
   BOOM: 'boom', // {g, t, p}: bomba patladı / sis açıldı
   SPRAYED: 'sprayed', // {id, c, p, n}
+  HOOKED: 'hooked', // {id, p} kanca halatı (p=null: bırakıldı)
+  BLIND: 'blind', // {ms, k: 0..1 şiddet} flaş gözünü aldı
+  FROZEN: 'frozen', // {ms} dondun
   LOADOUT: 'loadout', // {loadout, ammo, nades, now}: seçim uygulandı (now=false ise sonraki doğuşta)
   FLAG: 'flag', // {team, ev:'take'|'drop'|'return'|'capture', by, s}: bayrak olayı (CTF)
   MARKED: 'marked', // {id, p, e}: takım arkadaşının işareti

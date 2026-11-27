@@ -73,7 +73,7 @@ export const HITBOX = {
 export const DAMAGE_ZONE = { LEG: 0.7 };
 
 // Girdi bayrakları (input.f ve snapshot flags)
-export const FLAG = { MOVING: 1, RUNNING: 2, AIR: 4, CROUCH: 8, SCOPED: 16, PROTECTED: 32 };
+export const FLAG = { MOVING: 1, RUNNING: 2, AIR: 4, CROUCH: 8, SCOPED: 16, PROTECTED: 32, FROZEN: 64 };
 
 // Düşme hasarı: yere bu hızdan (m/s) hızlı çarparsan az miktarda can gider.
 // ~3 m'den yüksek düşüşler: ev çatısından ~5, apartman çatısından ~9-10 can.
@@ -102,8 +102,8 @@ export const WEAPONS = {
     DAMAGE: 85, HEADSHOT_MULT: 2, FIRE_INTERVAL: 1450, MAG_SIZE: 5, RESERVE: 20, RELOAD_TIME: 2900, RANGE: 300,
     // Dürbünsüz çok dağınık, dürbünle durunca neredeyse tam isabet
     SPREAD_BASE: 0.07, SPREAD_MOVE: 0.1, SPREAD_RUN: 0.14, SPREAD_AIR: 0.2,
-    // Dürbünle durarak bile çok az sapma var (kafaya her atış garanti olmasın); yürürken daha fazla
-    SPREAD_SCOPED: 0.0045, SPREAD_SCOPED_MOVE: 0.022, RECOIL: 0.028,
+    // Dürbünle durarak sapma yok (mermi tam nişangâha gider); yürürken çok az
+    SPREAD_SCOPED: 0, SPREAD_SCOPED_MOVE: 0.004, RECOIL: 0.028,
     AUTO: false, SPEED_MULT: 0.84,
     ZOOM_FOV: [40, 15], // dürbün seviyeleri (sağ tık)
   },
@@ -201,17 +201,65 @@ Object.assign(WEAPONS, {
     SPREAD_BASE: 0, SPREAD_MOVE: 0, SPREAD_RUN: 0, SPREAD_AIR: 0, RECOIL: 0,
   },
 });
+Object.assign(WEAPONS, {
+  flamer: {
+    id: 'flamer', cat: 'primary', NAME: 'DRAGON', kind: 'gun', DESC: 'Alev silahı: yakındakini yakar',
+    // SPRAY: mermi yerine püskürtme. RANGE metre içinde, bakış yönünden CONE radyana kadar olan herkese
+    // her atışta DAMAGE hasar (duvar arkası etkilenmez)
+    SPRAY: 'fire', CONE: 0.2, DAMAGE: 6, HEADSHOT_MULT: 1, FIRE_INTERVAL: 100, MAG_SIZE: 60, RESERVE: 120, RELOAD_TIME: 2800, RANGE: 7,
+    SPREAD_BASE: 0, SPREAD_MOVE: 0, SPREAD_RUN: 0, SPREAD_AIR: 0, RECOIL: 0.0015,
+    AUTO: true, SPEED_MULT: 0.92, KICK: 0.25,
+  },
+  freezer: {
+    id: 'freezer', cat: 'primary', NAME: 'BRRR-9', kind: 'gun', DESC: 'Dondurucu: yeterince püskürtürsen rakip donar',
+    // CHILL: bu kadar isabet (FREEZE.CHILL_WINDOW arayla) rakibi FREEZE_MS dondurur
+    SPRAY: 'ice', CONE: 0.17, DAMAGE: 3, CHILL: 8, FREEZE_MS: 2500, HEADSHOT_MULT: 1, FIRE_INTERVAL: 100, MAG_SIZE: 50, RESERVE: 100, RELOAD_TIME: 2800, RANGE: 8,
+    SPREAD_BASE: 0, SPREAD_MOVE: 0, SPREAD_RUN: 0, SPREAD_AIR: 0, RECOIL: 0.001,
+    AUTO: true, SPEED_MULT: 0.95, KICK: 0.2,
+  },
+  flash: {
+    id: 'flash', cat: 'grenade', NAME: 'FLASH', kind: 'grenade', DESC: 'Flaş bombası: gören herkesin gözü kamaşır',
+    // Patlamayı gören herkes (atan dahil) kör olur: bakıyorsa BLIND ms'ye kadar, arkası dönükse çok daha kısa
+    RADIUS: 18, FUSE: 1500, BLIND: 3500, FIRE_INTERVAL: 900, COUNT: 2, SPEED_MULT: 1, MAG_SIZE: 0,
+    SPREAD_BASE: 0, SPREAD_MOVE: 0, SPREAD_RUN: 0, SPREAD_AIR: 0, RECOIL: 0,
+  },
+  frost: {
+    id: 'frost', cat: 'grenade', NAME: 'BUZ KÜPÜ', kind: 'grenade', DESC: 'Dondurma bombası: alandaki herkesi dondurur',
+    // Alandaki herkes (rakip, takım arkadaşı ve atan) FREEZE_MS boyunca donar. Hasar vermez.
+    RADIUS: 4.5, FUSE: 1600, FREEZE_MS: 3000, FIRE_INTERVAL: 900, COUNT: 1, SPEED_MULT: 1, MAG_SIZE: 0,
+    SPREAD_BASE: 0, SPREAD_MOVE: 0, SPREAD_RUN: 0, SPREAD_AIR: 0, RECOIL: 0,
+  },
+});
+
+// ---- Donma ----
+// CHILL_WINDOW: dondurucu isabetleri arasında bundan uzun boşluk olursa sayaç sıfırlanır
+// IMMUNE: çözüldükten sonra bu süre tekrar donmazsın (sürekli kilitlenmesin)
+export const FREEZE = { CHILL_WINDOW: 700, IMMUNE: 1500 };
+
+// ---- Kanca (F) ----
+// RANGE metre içindeki bir yüzeye atılır, oyuncuyu SPEED m/s ile oraya çeker. COOLDOWN ms'de bir kullanılır.
+export const HOOK = { RANGE: 28, SPEED: 19, MAX_TIME: 1800, COOLDOWN: 5000, ARRIVE: 1.4, HOP: 8, RELEASE_SPEED: 8 };
+
+// ---- Seri öldürme duyuruları ----
+// MULTI_WINDOW içinde art arda öldürme (ikili, üçlü...) ve ölmeden yapılan seri
+export const STREAK = {
+  MULTI_WINDOW: 4000,
+  MULTI: { 2: 'İKİLİ ÖLDÜRME!', 3: 'ÜÇLÜ ÖLDÜRME!', 4: 'DÖRTLÜ ÖLDÜRME!', 5: 'KATLİAM!' }, // 5 ve üstü
+  ROW: { 3: 'ISINIYOR!', 5: 'DURDURULAMIYOR!', 7: 'ÖLÜM MAKİNESİ!', 10: 'EFSANE!' },
+  ENDED: 5, // bu kadarlık seriyi bitiren de duyurulur
+};
+
 WEAPONS.awp.KICK = 1.6;
 WEAPONS.cannon.KICK = 1.8;
 
 // Snapshot'ta silah sırası (indeks). Yeni silahlar sona eklenir.
-export const WEAPON_ORDER = ['rifle', 'awp', 'knife', 'he', 'smoke', 'carbine', 'smg', 'lmg', 'popper', 'cannon', 'poison', 'mine', 'revolver', 'shotgun', 'bazooka', 'molotov'];
+export const WEAPON_ORDER = ['rifle', 'awp', 'knife', 'he', 'smoke', 'carbine', 'smg', 'lmg', 'popper', 'cannon', 'poison', 'mine', 'revolver', 'shotgun', 'bazooka', 'molotov', 'flamer', 'freezer', 'flash', 'frost'];
 
 // Seçilebilir silahlar
 export const LOADOUT_OPTIONS = {
-  primary: ['rifle', 'carbine', 'smg', 'lmg', 'shotgun', 'bazooka', 'awp'],
+  primary: ['rifle', 'carbine', 'smg', 'lmg', 'shotgun', 'bazooka', 'awp', 'flamer', 'freezer'],
   pistol: ['cannon', 'popper', 'revolver'],
-  nade: ['he', 'smoke', 'poison', 'mine', 'molotov'],
+  nade: ['he', 'smoke', 'poison', 'mine', 'molotov', 'flash', 'frost'],
 };
 export const DEFAULT_LOADOUT = { primary: 'rifle', pistol: 'cannon', nade: 'he' };
 export const BUY_TIME = 10000; // doğduktan sonra ateş etmeden bu süre içinde silah değiştirilebilir

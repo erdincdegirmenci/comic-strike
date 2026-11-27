@@ -413,31 +413,59 @@ body.pointer-locked .fs-btn { display: none; }
 /* ---------------- Kontroller tablosu ---------------- */
 .controls-panel {
   background: #0d0d0d; color: #fff; border-color: var(--ink); padding: 18px 22px;
-  max-height: 92vh; overflow-y: auto; display: flex; flex-direction: column; align-items: stretch; gap: 14px;
+  width: 1060px; display: flex; flex-direction: column; gap: 14px;
 }
-#controls-table { border-collapse: separate; border-spacing: 6px 5px; font-size: 17px; letter-spacing: 2px; }
-#controls-table th { font-size: 30px; text-align: left; padding: 0 6px 6px; color: #fff; }
-#controls-table th:not(:first-child) { text-align: center; }
-#controls-table td.act { padding-right: 24px; white-space: nowrap; }
-#controls-table td.key {
-  background: #4a5f6e; border-radius: 4px; min-width: 190px; height: 38px; text-align: center;
-  font-size: 15px; box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.25);
+/* Geniş ekranda iki sütun: solda HAREKET + DİĞER, sağda SAVAŞ */
+#controls-list { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; gap: 12px 30px; }
+.ctl-group { display: flex; flex-direction: column; gap: 5px; }
+.ctl-group[data-group='SAVAŞ'] { grid-column: 2; grid-row: 1 / span 2; }
+.ctl-group h3 { color: var(--yellow); font-size: 20px; letter-spacing: 2px; }
+.ctl-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 17px; letter-spacing: 1.5px; }
+.ctl-act { white-space: nowrap; }
+.ctl-keys { display: flex; gap: 5px; }
+.ctl-keys kbd {
+  font-family: var(--font); font-size: 15px; letter-spacing: 1px; white-space: nowrap; text-align: center;
+  background: #4a5f6e; border-radius: 4px; min-width: 52px; padding: 5px 10px 7px;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.25);
 }
-#controls-table tr.group-row td.group { color: var(--yellow); font-size: 15px; padding-top: 10px; }
+/* Dik / dar ekran: tek sütun */
+@media (max-aspect-ratio: 1/1) {
+  .controls-panel { width: 560px; }
+  #controls-list { grid-template-columns: 1fr; grid-template-rows: none; }
+  .ctl-group[data-group='SAVAŞ'] { grid-column: auto; grid-row: auto; }
+}
 
 /* ---------------- Silah seçimi ---------------- */
-.loadout-panel { display: flex; flex-direction: column; gap: 10px; max-width: 920px; max-height: 94vh; overflow-y: auto; }
+.loadout-panel { display: flex; flex-direction: column; gap: 10px; width: 1320px; }
+/* Geniş ekran: ana silahlar tek satırda, tabanca ve bomba altında yan yana (3 + 7 kart) */
+.lo-grid { display: grid; grid-template-columns: 3fr 7fr; gap: 10px 20px; }
+.lo-row { display: flex; flex-direction: column; }
+.lo-row.primary { grid-column: 1 / -1; }
 .lo-row h3 { font-size: 18px; margin-bottom: 4px; }
-.lo-cards { display: flex; flex-wrap: wrap; gap: 8px; }
+.lo-cards { flex: 1; display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); gap: 8px; }
+.lo-cards[data-cat='primary'] { --cols: 9; }
+.lo-cards[data-cat='pistol'] { --cols: 3; }
+.lo-cards[data-cat='nade'] { --cols: 7; }
 .lo-card {
   font-family: var(--font); letter-spacing: 1px; cursor: pointer; color: var(--ink); text-align: left;
-  background: var(--paper); border: 3px solid var(--ink); border-radius: 8px; padding: 6px 10px; width: 168px;
+  background: var(--paper); border: 3px solid var(--ink); border-radius: 8px; padding: 6px 10px;
   display: flex; flex-direction: column; gap: 2px;
 }
-.lo-card b { font-size: 20px; }
+.lo-card b { font-size: 18px; overflow-wrap: anywhere; }
 .lo-card span { font-size: 13px; color: #555; letter-spacing: 0; font-family: Arial, sans-serif; }
-.lo-card i { font-style: normal; font-size: 12px; color: #777; }
+.lo-card i { font-style: normal; font-size: 12px; color: #777; margin-top: auto; }
 .lo-card.active { background: var(--yellow); box-shadow: 4px 4px 0 var(--ink); transform: rotate(-1deg); }
+.lo-foot { display: flex; align-items: center; gap: 16px; }
+.lo-foot .msg, .lo-foot p { flex: 1; }
+.lo-foot .btn { min-width: 260px; }
+/* Kareye yakın / dar ekran: panel daralır, kartlar daha çok satıra dağılır */
+@media (max-aspect-ratio: 3/2) {
+  .loadout-panel { width: 880px; }
+  .lo-grid { grid-template-columns: 1fr; }
+  .lo-cards[data-cat='primary'] { --cols: 5; }
+  .lo-cards[data-cat='pistol'] { --cols: 5; }
+  .lo-cards[data-cat='nade'] { --cols: 4; }
+}
 
 /* ---------------- Düşük can ve bomba gücü ---------------- */
 #low-hp {
@@ -457,17 +485,13 @@ body.pointer-locked .fs-btn { display: none; }
 .lo-preview {
   display: flex; align-items: center; gap: 14px; border: 3px solid var(--ink); border-radius: 10px;
   background: radial-gradient(ellipse at center, #fff3b0 0%, #ffd23f 60%, #f4a259 100%);
-  box-shadow: 4px 4px 0 var(--ink); padding: 4px 14px 4px 4px;
+  box-shadow: 4px 4px 0 var(--ink); padding: 4px 14px 4px 4px; min-height: 144px;
 }
-#lo-canvas { width: 320px; height: 170px; display: block; flex-shrink: 0; }
-.lo-info { display: flex; flex-direction: column; gap: 4px; }
+#lo-canvas { width: 260px; height: 130px; display: block; flex-shrink: 0; }
+.lo-info { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
 .lo-info b { font-size: 34px; line-height: 1; }
 .lo-info span { font-family: Arial, sans-serif; font-size: 14px; letter-spacing: 0; }
 .lo-info i { font-style: normal; font-size: 14px; color: #5a3a22; }
-@media (max-width: 700px) {
-  .lo-preview { flex-direction: column; }
-  #lo-canvas { width: 100%; }
-}
 
 /* ---------------- El çizimi görünüm ----------------
    Kutular cetvelle değil elle çizilmiş gibi: kenarlar hafif eğri, köşeler düzensiz.
@@ -609,5 +633,36 @@ body.pointer-locked .fs-btn { display: none; }
 #vote-note { font: 12px system-ui, sans-serif; color: #6d6052; }
 #btn-restart { background: #f3e1c6; }
 
-/* Lobi: ekrana sığmazsa JS (Menu.setupLobbyFit) küçültür; yine de taşarsa kaydırılabilir */
+/* Lobi: ekrana sığmazsa JS (Menu.setupPanelFit) küçültür; yine de taşarsa kaydırılabilir */
 #screen-lobby { overflow-y: auto; justify-content: safe center; padding: 8px 0; }
+
+/* ---------------- Flaş, donma, seri duyurusu, kanca, ölüm kamerası ---------------- */
+/* Flaş körlüğü her şeyin üstünde (arayüz dahil) */
+#flash-veil { position: absolute; inset: 0; background: #fffdf4; opacity: 0; pointer-events: none; z-index: 30; }
+#frost-veil {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(168, 230, 255, 0.18) 30%, rgba(150, 215, 250, 0.85) 100%);
+  box-shadow: inset 0 0 90px 30px rgba(232, 251, 255, 0.85);
+}
+#frost-veil p {
+  position: absolute; left: 50%; top: 62%; transform: translateX(-50%) rotate(-2deg); white-space: nowrap;
+  font-size: 44px; color: #e8fbff; -webkit-text-stroke: 2px var(--ink); text-shadow: 4px 4px 0 var(--ink);
+}
+#streak { position: absolute; left: 50%; top: 22%; transform: translate(-50%, -50%) rotate(-2deg); text-align: center; opacity: 0; white-space: nowrap; }
+#streak p { font-size: 52px; color: var(--paper); -webkit-text-stroke: 2.5px var(--ink); text-shadow: 4px 4px 0 var(--ink); line-height: 1; }
+#streak small { display: inline-block; margin-top: 4px; font-size: 20px; background: var(--paper); border: 3px solid var(--ink); border-radius: 8px; padding: 1px 12px; }
+#streak.mine p { color: var(--yellow); font-size: 64px; }
+#streak.show { animation: streak 2.4s ease-out; }
+@keyframes streak {
+  0% { opacity: 0; transform: translate(-50%, -50%) rotate(-2deg) scale(1.8); }
+  10% { opacity: 1; transform: translate(-50%, -50%) rotate(-2deg) scale(1); }
+  80% { opacity: 1; transform: translate(-50%, -50%) rotate(-2deg) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -65%) rotate(-2deg) scale(1); }
+}
+#hook {
+  position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%) rotate(-0.8deg); white-space: nowrap;
+  font-size: 17px; background: var(--paper); border: 3px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); border-radius: 10px; padding: 2px 12px;
+}
+#hook.wait { opacity: 0.55; }
+#respawn-cam { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 20px; color: #555; }
+#respawn-cam:empty { display: none; }

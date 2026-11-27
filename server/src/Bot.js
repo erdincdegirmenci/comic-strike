@@ -473,6 +473,14 @@ export class BotBrain {
     const room = this.room;
     if (!p.alive) return;
     const playing = room.state === "playing";
+    // Donmuş bot kıpırdamaz; flaş yemiş bot kimseyi göremez
+    if (p.frozen) {
+      p.flags = 0;
+      this.target = null;
+      p.record(now);
+      return;
+    }
+    const blind = now < p.blindUntil;
 
     // --- Hedef seçimi: görünen en yakın rakip ---
     let enemy = null;
@@ -484,7 +492,7 @@ export class BotBrain {
         o.pos[1] - p.pos[1],
         o.pos[2] - p.pos[2],
       );
-      if (d < ed && this.canSee(o)) {
+      if (!blind && d < ed && this.canSee(o)) {
         ed = d;
         enemy = o;
       }

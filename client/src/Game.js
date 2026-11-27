@@ -14,6 +14,8 @@ import {
   FLAG_STATE,
   TEAMS,
   MARK,
+  HOOK,
+  STREAK,
   playerScore,
 } from "@comic-strike/shared/constants.js";
 import { solidsOf } from "@comic-strike/shared/maps.js";
@@ -27,6 +29,7 @@ import { Trajectory } from "./fx/Trajectory.js";
 import { Flags } from "./fx/Flags.js";
 import { Drops } from "./fx/Drops.js";
 import { Marks } from "./fx/Marks.js";
+import { Ropes } from "./fx/Ropes.js";
 import { Minimap } from "./ui/Minimap.js";
 
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -40,8 +43,10 @@ const NADE_GEO = {
   mine: new THREE.CylinderGeometry(0.17, 0.19, 0.07, 16),
   molotov: new THREE.CylinderGeometry(0.06, 0.075, 0.24, 10),
   bazooka: new THREE.CylinderGeometry(0.07, 0.07, 0.5, 10), // roket (Y ekseni uçuş yönüne çevrilir)
+  flash: new THREE.CylinderGeometry(0.07, 0.07, 0.22, 10),
+  frost: new THREE.BoxGeometry(0.17, 0.17, 0.17),
 };
-const NADE_COLOR = { he: "#52b788", smoke: "#adb5bd", poison: "#7cb518", mine: "#4a4e3a", molotov: "#9c6644", bazooka: "#5c6b3a" };
+const NADE_COLOR = { he: "#52b788", smoke: "#adb5bd", poison: "#7cb518", mine: "#4a4e3a", molotov: "#9c6644", bazooka: "#5c6b3a", flash: "#e9ecef", frost: "#7fd3f5" };
 const _yAxis = new THREE.Vector3(0, 1, 0);
 // Ateş sesi: silaha göre
 const SHOT_SOUND = { awp: "awp", shotgun: "shotgun", revolver: "revolver", cannon: "revolver" };
@@ -79,6 +84,11 @@ export class Game {
     this.flags = new Flags(this.scene);
     this.drops = new Drops(this.scene);
     this.marks = new Marks(this.scene);
+    this.ropes = new Ropes(this.scene);
+    this.local.onHookEnd = () => {
+      this.ropes.remove(this.myId);
+      this.net.emit(MSG.UNHOOK);
+    };
     this.minimap = new Minimap(document.getElementById("minimap"));
     this.deathLook = new THREE.Vector3();
     this.remotes = new Map();
@@ -122,6 +132,11 @@ export class Game {
     this.killerId = null; // ölüm kamerası: bizi öldüren
     this.killerHp = 0;
     this.lastMark = 0;
+    this.frozenUntil = 0; // donma bitişi (performance.now)
+    this.blind = null; // flaş: {until, ms, k}
+    this.nextHook = 0;
+    this.lastSpraySound = 0;
+    this.deathInfo = null; // ölüm ekranı: {w, dist}
     this.chatting = false; // sohbet kutusu açık: hareket / ateş yok
   }
 
@@ -161,6 +176,16 @@ export class Game {
     on(MSG.DROP, (d) => this.drops.add(d.id, d.p));
     on(MSG.PICKUP, this.onPickup);
     on(MSG.REWARD, this.onReward);
+    on(MSG.HOOKED, this.onHooked);
+    on(MSG.FROZEN, this.onFrozen);
+    on(MSG.BLIND, (d) => {
+      if (!this.alive) return;
+      const now = performance.now();
+      // Süren daha güçlü bir körlüğü zayıfı ezmesin
+      if (this.blind && this.blind.until > now + d.ms) return;
+      this.blind = { until: now + d.ms, ms: d.ms, k: d.k };
+      this.sfx.ring(d.ms / 1000, d.k);
+    });
   }
 
   onSnapshot(s) {
@@ -222,6 +247,8 @@ export class Game {
       this.local.resetStamina();
       this.weapon.visible = true;
       this.switchBackAt = 0;
+      this.clearStatus();
+      this.nextHook = 0;
       this.protectedUntil =
         performance.now() + (d.pr ?? PLAYER.SPAWN_PROTECTION);
       const kr = this.killerId ? this.remotes.get(this.killerId) : null;
@@ -231,6 +258,63 @@ export class Game {
     } else {
       this.remotes.get(d.id)?.respawn(d.p, d.yaw);
     }
+  }
+
+  /** Donma, körlük ve kancayı temizle (doğuş / ölüm) */
+  clearStatus() {
+    this.frozenUntil = 0;
+    this.blind = null;
+    this.local.hook = null;
+    this.ropes.remove(this.myId);
+  }
+
+  onFrozen(d) {
+    if (!this.alive) return;
+    const now = performance.now();
+    if (now >= this.frozenUntil) this.sfx.ice(1);
+    this.frozenUntil = now + d.ms;
+    this.local.endHook();
+    this.chargeStart = 0;
+    const wp = this.weapon;
+    wp.charge = 0;
+    wp.scope = wp.resumeScope = 0;
+    wp.aiming = false;
+    wp.reloading = false;
+  }
+
+  /** Birinin kancası: halatı göster / kaldır. Kendi halatımız yerelde çizilir. */
+  onHooked(d) {
+    if (d.id === this.myId) {
+      if (!d.p) this.local.endHook();
+      return;
+    }
+    const r = this.remotes.get(d.id);
+    if (!d.p || !r) return this.ropes.remove(d.id);
+    this.ropes.add(d.id, d.p, (t) => {
+      t.copy(r.root.position).y += 1.2;
+      return r.alive !== false && r.visible;
+    }, HOOK.MAX_TIME);
+    const dist = r.root.position.distanceTo(this.camera.position);
+    this.sfx.hook(Math.max(0, 1 - dist / 35));
+  }
+
+  /** F: kancayı bakılan yüzeye at (çekilirken tekrar basınca bırak) */
+  throwHook(now) {
+    if (this.local.hook) return this.local.endHook();
+    if (now < this.nextHook) return;
+    this.aim();
+    const hit = this.physics.raycast(_eye, _fwd, HOOK.RANGE, this.local.collider);
+    if (!hit) return; // menzilde tutunacak yer yok: bekleme süresi harcanmaz
+    this.nextHook = now + HOOK.COOLDOWN;
+    this.protectedUntil = 0;
+    const p = [r2(hit.point.x), r2(hit.point.y), r2(hit.point.z)];
+    this.local.startHook(hit.point);
+    // Halatın bizdeki ucu: ekranın sol altı
+    this.ropes.add(this.myId, p, (t) => {
+      t.set(-0.28, -0.3, -0.5).applyQuaternion(this.camera.quaternion).add(this.camera.position);
+    }, HOOK.MAX_TIME + 200);
+    this.net.emit(MSG.HOOK, { p });
+    this.sfx.hook(1);
   }
 
   onCorrection(d) {
@@ -247,9 +331,18 @@ export class Game {
       this.sfx.knife(Math.max(0, 1 - dist / 15));
       return;
     }
-    for (const e of d.es ?? [d.e]) {
+    for (const e of WEAPONS[d.w]?.SPRAY ? [] : (d.es ?? [d.e])) {
       _end.set(e[0], e[1], e[2]);
       this.effects.tracer(_from, _end);
+    }
+    if (WEAPONS[d.w]?.SPRAY) {
+      _end.set(d.e[0], d.e[1], d.e[2]);
+      _dir.set(d.e[0] - d.o[0], d.e[1] - d.o[1], d.e[2] - d.o[2]);
+      const reach = _dir.length();
+      _dir.normalize();
+      this.effects.stream(_from, _dir, reach, WEAPONS[d.w].SPRAY === "ice");
+      this.spraySound(d.w, Math.max(0, 1 - dist / 35) * 0.8);
+      return;
     }
     this.effects.muzzle(_from);
     const loud = d.w === "awp" || d.w === "shotgun";
@@ -260,7 +353,7 @@ export class Game {
   onHit(d) {
     this.hud.hitmarker(d.k);
     this.sfx.hit();
-    if (d.pt) this.effects.splat(d.pt);
+    if (d.pt && !this.weapon.def.SPRAY) this.effects.splat(d.pt);
     // Uçuşan hasar sayısı: rakibin başının biraz üstünde
     const r = this.remotes.get(d.v);
     if (r && r.visible)
@@ -342,7 +435,8 @@ export class Game {
 
   onDamaged(d) {
     this.hp = d.hp;
-    this.shake = Math.max(this.shake, d.w === "poison" || d.w === "molotov" || d.w === "water" ? 0.08 : 0.25);
+    const soft = d.w === "poison" || d.w === "molotov" || d.w === "water" || !!WEAPONS[d.w]?.SPRAY;
+    this.shake = Math.max(this.shake, soft ? 0.08 : 0.25);
     this.sfx.hurt();
     // Hasar yönü: saldırganın bize göre açısı
     const dx = d.from[0] - this.local.position.x;
@@ -384,6 +478,10 @@ export class Game {
                   ? "KA-BOOM!"
                   : d.w === "shotgun"
                     ? "KA-CHUNK!"
+                    : d.w === "flamer"
+                      ? "KIZARDI!"
+                      : d.w === "freezer"
+                        ? "BUZ GİBİ!"
               : KILL_WORDS[Math.floor(Math.random() * KILL_WORDS.length)];
     const r = this.remotes.get(d.v);
     if (r) {
@@ -392,7 +490,12 @@ export class Game {
       _tmp.copy(r.root.position).y += 2;
       this.effects.word(_tmp, word);
     }
+    this.announceStreak(d, killer, victim);
+    this.ropes.remove(d.v);
     if (d.v === this.myId) {
+      this.clearStatus();
+      const from = this.remotes.get(d.k);
+      this.deathInfo = d.k !== d.v && from ? { w: d.w, dist: Math.round(from.root.position.distanceTo(this.local.position)) } : null;
       this.alive = false;
       this.weapon.visible = false;
       this.weapon.scope = 0;
@@ -414,6 +517,31 @@ export class Game {
       this.hud.pop(word);
       this.sfx.kill();
     }
+  }
+
+  /** Seri öldürme duyurusu: art arda (ikili, üçlü...), ölmeden seri ve biten seri */
+  announceStreak(d, killer, victim) {
+    const multi = d.mk >= 2 ? STREAK.MULTI[Math.min(d.mk, 5)] : null;
+    const row = STREAK.ROW[d.sr] ?? (d.sr > 10 && d.sr % 5 === 0 ? STREAK.ROW[10] : null);
+    const mine = d.k === this.myId;
+    const who = mine ? "SEN" : killer.name;
+    let title = multi ?? row;
+    let sub = multi && row ? `${who} · ${row} (${d.sr} SERİ)` : multi ? who : `${who} · ${d.sr} ÖLDÜRME SERİSİ`;
+    if (!title && d.se >= STREAK.ENDED && d.k !== d.v) {
+      title = "SERİ BİTTİ!";
+      sub = `${who} ➜ ${victim.name} (${d.se} SERİ)`;
+    }
+    if (!title) return;
+    this.hud.streak(title, sub, mine);
+    if (mine) this.sfx.streak(Math.max(d.mk, Math.ceil(d.sr / 2)));
+  }
+
+  spraySound(id, volume) {
+    const now = performance.now();
+    // Her atışta ses üst üste binmesin
+    if (now - this.lastSpraySound < 90) return;
+    this.lastSpraySound = now;
+    this.sfx[id === "freezer" ? "frost" : "flame"](volume);
   }
 
   onGrenade(d) {
@@ -470,6 +598,12 @@ export class Game {
     if (d.fz) {
       // Mayın söndü (süresi doldu / yeni mayın kuruldu): hasarsız küçük duman
       this.effects.poof(_tmp);
+    } else if (d.t === "flash") {
+      this.effects.flashBurst(_tmp);
+      this.sfx.flashbang(Math.max(0.05, 1 - dist / 60));
+    } else if (d.t === "frost") {
+      this.effects.frostBurst(_tmp, WEAPONS.frost.RADIUS);
+      this.sfx.ice(Math.max(0.05, 1 - dist / 45));
     } else if (d.t === "molotov") {
       // Alev halısı (d.rem: maç ortasında katılana kalan süre)
       const w = WEAPONS.molotov;
@@ -548,6 +682,7 @@ export class Game {
 
   onMatchEnd(d) {
     this.state = "ended";
+    this.clearStatus();
     this.weapon.visible = false;
     this.weapon.scope = 0;
     const names = new Map([...this.roster.values()].map((p) => [p.id, p.name]));
@@ -566,6 +701,8 @@ export class Game {
       this.trajectory.hide();
       this.drops.clear();
       this.marks.clear();
+      this.ropes.clear();
+      this.local.hook = null;
       for (const r of this.remotes.values()) r.die();
     }
     this.reset();
@@ -613,6 +750,10 @@ export class Game {
     this.flags.setup(null);
     this.drops.clear();
     this.marks.clear();
+    this.ropes.clear();
+    this.local.hook = null;
+    this.frozenUntil = 0;
+    this.blind = null;
     this.weapon.visible = false;
     this.weapon.scope = 0;
     this.hud.hide();
@@ -710,6 +851,8 @@ export class Game {
       return;
     }
 
+    if (w.SPRAY) return this.fireSpray(w);
+
     this.sfx[w.ROCKET ? "rocket" : SHOT_SOUND[w.id] ?? "shot"](1);
     const l = this.local;
     const rk = this.weapon.aiming ? 0.7 : 1;
@@ -753,6 +896,21 @@ export class Game {
     this.shotVisual(w, true);
     this.net.emit(MSG.SHOOT, { d: [r3(_dir.x), r3(_dir.y), r3(_dir.z)] });
     recoil();
+  }
+
+  /** Alev / dondurucu: parçacık demeti (kimin etkilendiğini sunucu hesaplar) */
+  fireSpray(w) {
+    const hit = this.physics.raycast(_eye, _fwd, w.RANGE, this.local.collider);
+    _from
+      .copy(_eye)
+      .addScaledVector(_right, 0.16 * this.weapon.side)
+      .addScaledVector(_up, -0.15)
+      .addScaledVector(_fwd, 0.55);
+    this.effects.stream(_from, _fwd, hit ? hit.distance : w.RANGE, w.SPRAY === "ice");
+    this.spraySound(w.id, 0.8);
+    this.local.pitch += w.RECOIL * Math.random();
+    this.local.clampPitch();
+    this.net.emit(MSG.SHOOT, { d: [r3(_fwd.x), r3(_fwd.y), r3(_fwd.z)] });
   }
 
   /** Yerel atış görseli (_dir yönünde): duvar isabeti + iz. Oyuncu isabetini sunucu söyler. */
@@ -862,6 +1020,7 @@ export class Game {
       this.switchWeapon(back, now);
     }
 
+    if (input.pressed("KeyF")) this.throwHook(now);
     if (input.pressed("KeyT")) this.spray(now);
     if (input.pressed("KeyE") || input.middleClicked) this.mark(now);
 
@@ -925,7 +1084,9 @@ export class Game {
     const now = performance.now();
     const input = this.input;
     const playing = this.state === "playing";
-    const controls = input.locked && this.alive && playing && !this.chatting;
+    const frozen = this.alive && performance.now() < this.frozenUntil;
+    const controls = input.locked && this.alive && playing && !this.chatting && !frozen;
+    if (frozen) this.local.velocity.x = this.local.velocity.z = 0;
 
     const look = input.locked
       ? input.consumeMouse()
@@ -982,12 +1143,14 @@ export class Game {
     );
     this.drops.update(dt);
     this.marks.update(this.camera);
+    this.ropes.update();
     this.effects.update(dt);
     this.updateHud(now);
     this.minimap.update(now, this);
   }
 
   removeRemote(r) {
+    this.ropes.remove(r.id);
     if (r.body3) this.physics.removeBody(r.body3);
     r.body3 = null;
     r.dispose();
@@ -1123,11 +1286,22 @@ export class Game {
         this.deathT > 0.55 &&
         this.state !== "ended"
       ) {
-        const m = Math.min(1, (this.deathT - 0.55) / 0.7);
+        const m = Math.min(1, (this.deathT - 0.55) / 1.1);
         const ease = m * m * (3 - 2 * m);
-        cam.position.y += ease * 1.5; // ruh gibi biraz yüksel
+        // Katilin omzunun arkasına uç ve onu takip et (araya duvar girerse yaklaş)
+        const yaw = killer.root.rotation.y;
         _tmp.copy(killer.root.position);
-        _tmp.y += 1.3;
+        _tmp.y += 1.5;
+        _dir.set(Math.sin(yaw) * 3 + Math.cos(yaw) * 0.7, 0.9, Math.cos(yaw) * 3 - Math.sin(yaw) * 0.7);
+        let back = _dir.length();
+        _dir.divideScalar(back);
+        const wall = this.physics.raycast(_tmp, _dir, back, this.local.collider);
+        if (wall) back = Math.max(0.4, wall.distance - 0.25);
+        _end.copy(_tmp).addScaledVector(_dir, back);
+        cam.position.lerp(_end, ease);
+        // Katilin baktığı yöne doğru: ne gördüğü anlaşılsın
+        _tmp.x -= Math.sin(yaw) * 2 * ease;
+        _tmp.z -= Math.cos(yaw) * 2 * ease;
         this.deathLook.lerp(_tmp, Math.min(1, dt * (2 + ease * 8)));
         cam.lookAt(this.deathLook);
         cam.rotation.z = 0.6 * (1 - ease);
@@ -1214,6 +1388,11 @@ export class Game {
     const scoped = this.alive && wp.scope > 0;
     hud.setScope(scoped);
     hud.setCharge(this.alive && this.chargeStart ? this.charge : 0);
+    const b = this.blind;
+    // Flaş: önce tam beyaz, sürenin son yarısında yavaşça açılır
+    hud.setBlind(this.alive && b && now < b.until ? b.k * Math.min(1, (b.until - now) / (b.ms * 0.55)) : 0);
+    hud.setFrozen(this.alive && now < this.frozenUntil ? Math.ceil((this.frozenUntil - now) / 1000) : null);
+    hud.setHook(this.alive && this.state !== "ended" ? Math.max(0, Math.ceil((this.nextHook - now) / 1000)) : null);
     hud.setLowHealth(
       this.alive &&
         this.state !== "ended" &&
@@ -1263,6 +1442,7 @@ export class Game {
         Math.max(0, Math.ceil((this.respawnAt - now) / 1000)),
         this.killedBy,
         this.killerHp,
+        this.deathInfo,
       );
     } else hud.respawn(null);
 

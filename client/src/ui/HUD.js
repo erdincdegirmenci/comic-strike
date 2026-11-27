@@ -282,14 +282,50 @@ export class HUD {
     });
   }
 
-  respawn(seconds, killer, killerHp = 0) {
+  /** Seri öldürme duyurusu (ekranın üst ortasında) */
+  streak(title, sub, mine) {
+    $('streak-title').textContent = title;
+    $('streak-sub').textContent = sub;
+    const s = $('streak');
+    s.classList.toggle('mine', mine);
+    this.restart(s, 'show');
+  }
+
+  /** Flaş körlüğü: 0..1 beyazlık */
+  setBlind(k) {
+    this.set('blind', Math.round(k * 50), (v) => ($('flash-veil').style.opacity = v / 50));
+  }
+
+  /** Donma: kalan saniye (null: donuk değil) */
+  setFrozen(seconds) {
+    this.set('frozen', seconds, () => {
+      $('frost-veil').classList.toggle('hidden', seconds === null);
+      if (seconds !== null) $('frost-time').textContent = seconds;
+    });
+  }
+
+  /** Kanca durumu: 0 hazır, >0 kalan saniye, null gizle */
+  setHook(seconds) {
+    this.set('hook', seconds, () => {
+      const h = $('hook');
+      h.classList.toggle('hidden', seconds === null);
+      h.classList.toggle('wait', seconds > 0);
+      h.textContent = seconds > 0 ? `F · KANCA ${seconds}` : 'F · KANCA HAZIR';
+    });
+  }
+
+  respawn(seconds, killer, killerHp = 0, info = null) {
     const r = $('respawn');
     if (seconds === null) {
       this.set('respawn', null, () => r.classList.add('hidden'));
       return;
     }
-    this.set('respawn', `${seconds}|${killer}|${killerHp}`, () => {
+    this.set('respawn', `${seconds}|${killer}|${killerHp}|${info?.w}`, () => {
       r.classList.remove('hidden');
+      // Ölüm kamerası bilgisi: hangi silah, kaç metreden
+      const cam = $('respawn-cam');
+      cam.replaceChildren();
+      if (killer && info) cam.append(el('span', '', '🎥 ÖLÜM KAMERASI ·'), this.weaponIcon(info.w), el('span', '', `${WEAPONS[info.w]?.NAME ?? ''} · ${info.dist} m`));
       $('respawn-by').textContent = killer ? `${killer} SENİ VURDU!` : 'ÖLDÜN!';
       $('respawn-hp').textContent = killer ? (killerHp > 0 ? `Canı kaldı: ${killerHp}` : 'O da öldü!') : '';
       $('respawn-time').textContent = seconds > 0 ? `${seconds}` : '...';
